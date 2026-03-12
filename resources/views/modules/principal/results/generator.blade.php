@@ -1,0 +1,554 @@
+<x-app-layout>
+    <x-slot name="header">
+        <div>
+            <h2 class="text-xl font-semibold text-slate-900">Result Card Generator</h2>
+            <p class="mt-1 text-sm text-slate-500">Generate, preview, print, publish, and download student result cards.</p>
+        </div>
+    </x-slot>
+
+    <div
+        class="space-y-6"
+        x-data="resultCardGenerator({
+            defaultSession: @js($defaultSession),
+            defaultExamType: @js($defaultExamType),
+            defaultClassId: @js($defaultClassId),
+            defaultStudentId: @js($defaultStudentId),
+            studentsUrl: @js(route('principal.results.students')),
+            previewUrl: @js(route('principal.results.preview')),
+            cardPreviewUrl: @js(route('principal.results.card')),
+            studentPdfUrl: @js(route('reports.pdf.student-result-card')),
+            classCardsPdfUrl: @js(route('reports.pdf.class-result-cards')),
+            publishUrl: @js(route('principal.results.publish')),
+            csrfToken: @js(csrf_token()),
+        })"
+        x-init="init()"
+    >
+        <div
+            x-show="status.message !== ''"
+            x-cloak
+            class="rounded-xl border px-4 py-3 text-sm"
+            :class="status.type === 'error' ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'"
+            x-text="status.message"
+        ></div>
+
+        @if (! $hasMarks)
+            <div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                No marks are available yet. Ask teachers to submit marks before generating result cards.
+            </div>
+        @endif
+
+        <div class="grid grid-cols-1 gap-6 xl:grid-cols-12">
+            <aside class="xl:col-span-3">
+                <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm xl:sticky xl:top-6">
+                    <h3 class="text-sm font-semibold text-slate-900">Filters</h3>
+                    <p class="mt-1 text-xs text-slate-500">Choose exam context and student.</p>
+
+                    <div class="mt-4 space-y-4">
+                        <div>
+                            <label for="session_filter" class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Session</label>
+                            <select
+                                id="session_filter"
+                                x-model="session"
+                                class="mt-1 block min-h-11 w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            >
+                                @foreach($sessions as $session)
+                                    <option value="{{ $session }}">{{ $session }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        <div>
+                            <label for="exam_type_filter" class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Exam Type</label>
+                            <select
+                                id="exam_type_filter"
+                                x-model="examType"
+                                class="mt-1 block min-h-11 w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            >
+                                @foreach($examTypes as $examType)
+                                    <option value="{{ $examType['value'] }}">{{ $examType['label'] }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        <div>
+                            <label for="class_filter" class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Class</label>
+                            <select
+                                id="class_filter"
+                                x-model.number="classId"
+                                @change="onClassChanged()"
+                                class="mt-1 block min-h-11 w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            >
+                                <option value="">Select class</option>
+                                @foreach($classes as $classRoom)
+                                    <option value="{{ $classRoom->id }}">{{ trim($classRoom->name.' '.($classRoom->section ?? '')) }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        <div>
+                            <label for="student_filter" class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Student</label>
+                            <select
+                                id="student_filter"
+                                x-model.number="studentId"
+                                @change="onStudentChanged()"
+                                class="mt-1 block min-h-11 w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                :disabled="loadingStudents || students.length === 0"
+                            >
+                                <option value="">Select student</option>
+                                <option value="0">Whole Class</option>
+                                <template x-for="student in students" :key="`student-opt-${student.id}`">
+                                    <option :value="student.id" x-text="`${student.name} (${student.student_id})`"></option>
+                                </template>
+                            </select>
+                            <p class="mt-1 text-xs text-slate-500" x-text="loadingStudents ? 'Loading students...' : `${students.length} student(s)`"></p>
+                        </div>
+                    </div>
+
+                    <div class="mt-5 space-y-2">
+                        <button
+                            type="button"
+                            @click="previewResult()"
+                            :disabled="previewLoading || !canRunStudentAction()"
+                            class="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            <span x-text="previewLoading ? 'Loading...' : (isWholeClassSelected() ? 'Generate Whole Class Result' : 'Preview Result')"></span>
+                        </button>
+                        <button
+                            type="button"
+                            @click="downloadPdf()"
+                            :disabled="!result && !isWholeClassSelected()"
+                            class="inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            Download PDF
+                        </button>
+                        <button
+                            type="button"
+                            @click="printPreview()"
+                            :disabled="!result && !isWholeClassSelected()"
+                            class="inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            Print
+                        </button>
+                    </div>
+                </section>
+            </aside>
+
+            <main class="space-y-6 xl:col-span-5">
+                <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <div class="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                            <h3 class="text-sm font-semibold text-slate-900">Class Actions</h3>
+                            <p class="mt-1 text-xs text-slate-500">Generate cards for class and publish results.</p>
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            <button
+                                type="button"
+                                @click="generateAllClassCards()"
+                                :disabled="generatingClassCards || !canRunClassAction()"
+                                class="inline-flex min-h-10 items-center rounded-xl bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-black disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                <span x-text="generatingClassCards ? 'Generating...' : 'Generate All Class Result Cards'"></span>
+                            </button>
+                            <button
+                                type="button"
+                                @click="publishResults()"
+                                :disabled="publishing || !canRunClassAction()"
+                                class="inline-flex min-h-10 items-center rounded-xl bg-amber-600 px-4 py-2 text-xs font-semibold text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                <span x-text="publishing ? 'Publishing...' : 'Publish Results'"></span>
+                            </button>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                        <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Total Marks</p>
+                        <p class="mt-2 text-2xl font-semibold text-slate-900" x-text="result?.summary?.total_marks ?? '-'"></p>
+                    </article>
+                    <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                        <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Obtained Marks</p>
+                        <p class="mt-2 text-2xl font-semibold text-slate-900" x-text="result?.summary?.obtained_marks ?? '-'"></p>
+                    </article>
+                    <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                        <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Overall Percentage</p>
+                        <p class="mt-2 text-2xl font-semibold text-slate-900" x-text="result?.summary ? `${result.summary.percentage}%` : '-'"></p>
+                    </article>
+                    <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                        <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Overall Grade</p>
+                        <p class="mt-2 text-2xl font-semibold text-slate-900" x-text="result?.summary?.grade ?? '-'"></p>
+                    </article>
+                </section>
+
+                <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                        <div>
+                            <h3 class="text-sm font-semibold text-slate-900">Result Summary</h3>
+                            <p class="mt-1 text-xs text-slate-500">
+                                <span x-text="result?.student?.name || 'No student selected'"></span>
+                                <span x-show="result?.exam?.exam_type_label"> | </span>
+                                <span x-text="result?.exam?.exam_type_label || ''"></span>
+                                <span x-show="result?.exam?.session"> (</span>
+                                <span x-text="result?.exam?.session || ''"></span>
+                                <span x-show="result?.exam?.session">)</span>
+                            </p>
+                        </div>
+                        <div class="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700" x-text="result?.student?.class || '-'"></div>
+                    </div>
+
+                    <div class="mt-4 overflow-x-auto">
+                        <table class="min-w-full divide-y divide-slate-200">
+                            <thead class="bg-slate-50">
+                                <tr>
+                                    <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Subject</th>
+                                    <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Total Marks</th>
+                                    <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Obtained</th>
+                                    <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Percentage</th>
+                                    <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Grade</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100 bg-white">
+                                <template x-if="previewLoading">
+                                    <tr>
+                                        <td colspan="5" class="px-4 py-8 text-center text-sm text-slate-500">Loading result...</td>
+                                    </tr>
+                                </template>
+                                <template x-if="!previewLoading && (!result || (result.subjects || []).length === 0)">
+                                    <tr>
+                                        <td colspan="5" class="px-4 py-8 text-center text-sm text-slate-500">Preview a student result to view subject-wise marks.</td>
+                                    </tr>
+                                </template>
+                                <template x-for="row in (result?.subjects || [])" :key="`subject-${row.subject}`">
+                                    <tr>
+                                        <td class="px-4 py-2 text-sm text-slate-700" x-text="row.subject"></td>
+                                        <td class="px-4 py-2 text-sm text-slate-700" x-text="row.total_marks"></td>
+                                        <td class="px-4 py-2 text-sm text-slate-700" x-text="row.obtained_marks"></td>
+                                        <td class="px-4 py-2 text-sm text-slate-700" x-text="`${row.percentage}%`"></td>
+                                        <td class="px-4 py-2 text-sm font-semibold text-slate-900" x-text="row.grade"></td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            </main>
+
+            <aside class="xl:col-span-4">
+                <section class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm xl:sticky xl:top-6">
+                    <div class="mb-3 flex items-center justify-between gap-3">
+                        <div>
+                            <h3 class="text-sm font-semibold text-slate-900">Result Card Preview</h3>
+                            <p class="mt-1 text-xs text-slate-500">Live card preview for selected student.</p>
+                        </div>
+                        <button
+                            type="button"
+                            @click="openPreviewInNewTab()"
+                            :disabled="!previewCardUrl"
+                            class="inline-flex min-h-9 items-center rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            Open
+                        </button>
+                    </div>
+
+                    <div class="h-[640px] overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+                        <template x-if="!previewCardUrl">
+                            <div class="flex h-full items-center justify-center px-6 text-center text-sm text-slate-500">
+                                <span x-show="!isWholeClassSelected()">Select filters and click <span class="mx-1 font-semibold text-slate-700">Preview Result</span> to load result card preview.</span>
+                                <span x-show="isWholeClassSelected()">Whole class selected. Use <span class="mx-1 font-semibold text-slate-700">Generate Whole Class Result</span> to download class result cards.</span>
+                            </div>
+                        </template>
+                        <iframe
+                            x-show="previewCardUrl"
+                            x-ref="previewFrame"
+                            :src="previewCardUrl"
+                            class="h-full w-full bg-white"
+                            title="Result Card Preview"
+                        ></iframe>
+                    </div>
+                </section>
+            </aside>
+        </div>
+    </div>
+
+    <script>
+        function resultCardGenerator(config) {
+            return {
+                session: config.defaultSession || '',
+                examType: config.defaultExamType || '',
+                classId: config.defaultClassId ? Number(config.defaultClassId) : null,
+                studentId: config.defaultStudentId ? Number(config.defaultStudentId) : null,
+                students: [],
+                loadingStudents: false,
+                previewLoading: false,
+                generatingClassCards: false,
+                publishing: false,
+                result: null,
+                previewCardUrl: '',
+                studentPdfUrl: '',
+                status: {
+                    message: '',
+                    type: 'success',
+                },
+
+                async init() {
+                    if (this.classId) {
+                        await this.loadStudents();
+                        if (this.studentId) {
+                            await this.previewResult();
+                        }
+                    }
+                },
+
+                clearStatus() {
+                    this.status.message = '';
+                    this.status.type = 'success';
+                },
+
+                setStatus(message, type = 'success') {
+                    this.status.message = message;
+                    this.status.type = type;
+                },
+
+                canRunClassAction() {
+                    return Boolean(this.classId && this.session && this.examType);
+                },
+
+                canRunStudentAction() {
+                    const selectedStudent = this.studentId;
+                    const wholeClassSelected = String(selectedStudent) === '0';
+                    const singleStudentSelected = Number(selectedStudent) > 0;
+                    const hasSelection = wholeClassSelected || singleStudentSelected;
+                    return Boolean(this.classId && this.session && this.examType && hasSelection);
+                },
+
+                isWholeClassSelected() {
+                    return String(this.studentId) === '0';
+                },
+
+                onClassChanged() {
+                    this.studentId = null;
+                    this.result = null;
+                    this.previewCardUrl = '';
+                    this.studentPdfUrl = '';
+                    if (this.classId) {
+                        this.loadStudents();
+                    } else {
+                        this.students = [];
+                    }
+                },
+
+                onStudentChanged() {
+                    this.result = null;
+                    this.previewCardUrl = '';
+                    this.studentPdfUrl = '';
+                },
+
+                async loadStudents() {
+                    this.clearStatus();
+                    if (!this.classId) {
+                        this.students = [];
+                        return;
+                    }
+
+                    this.loadingStudents = true;
+                    try {
+                        const params = new URLSearchParams({
+                            class_id: String(this.classId),
+                        });
+                        const response = await fetch(`${config.studentsUrl}?${params.toString()}`, {
+                            headers: { Accept: 'application/json' },
+                        });
+                        const result = await response.json();
+
+                        if (!response.ok) {
+                            this.students = [];
+                            this.setStatus(result.message || 'Failed to load students.', 'error');
+                            return;
+                        }
+
+                        this.students = (result.students || []).map((student) => ({
+                            id: Number(student.id),
+                            student_id: student.student_id || '',
+                            name: student.name || '',
+                        }));
+
+                        if (this.students.length === 0) {
+                            this.studentId = null;
+                            return;
+                        }
+
+                        const wholeClassSelected = String(this.studentId) === '0';
+                        if (wholeClassSelected) {
+                            return;
+                        }
+
+                        const hasSelected = this.studentId && this.students.some((student) => student.id === Number(this.studentId));
+                        if (!hasSelected) {
+                            this.studentId = this.students[0].id;
+                        }
+                    } catch (error) {
+                        this.students = [];
+                        this.setStatus('Unexpected error while loading students.', 'error');
+                    } finally {
+                        this.loadingStudents = false;
+                    }
+                },
+
+                queryParamsForStudent() {
+                    return new URLSearchParams({
+                        student_id: String(this.studentId),
+                        session: String(this.session),
+                        exam_type: String(this.examType),
+                    });
+                },
+
+                queryParamsForClass() {
+                    return new URLSearchParams({
+                        class_id: String(this.classId),
+                        session: String(this.session),
+                        exam_type: String(this.examType),
+                    });
+                },
+
+                async previewResult() {
+                    this.clearStatus();
+                    if (!this.canRunStudentAction()) {
+                        this.setStatus('Session, exam type, class, and student are required.', 'error');
+                        return;
+                    }
+
+                    if (this.isWholeClassSelected()) {
+                        this.result = null;
+                        this.previewCardUrl = '';
+                        this.studentPdfUrl = '';
+                        this.generateAllClassCards();
+                        return;
+                    }
+
+                    this.previewLoading = true;
+                    try {
+                        const params = this.queryParamsForStudent();
+                        const response = await fetch(`${config.previewUrl}?${params.toString()}`, {
+                            headers: { Accept: 'application/json' },
+                        });
+                        const result = await response.json();
+
+                        if (!response.ok) {
+                            this.result = null;
+                            this.previewCardUrl = '';
+                            this.studentPdfUrl = '';
+                            this.setStatus(result.message || 'Failed to preview result.', 'error');
+                            return;
+                        }
+
+                        this.result = result;
+                        this.previewCardUrl = `${config.cardPreviewUrl}?${params.toString()}`;
+                        this.studentPdfUrl = `${config.studentPdfUrl}?${params.toString()}`;
+                        this.setStatus('Result preview loaded.');
+                    } catch (error) {
+                        this.result = null;
+                        this.previewCardUrl = '';
+                        this.studentPdfUrl = '';
+                        this.setStatus('Unexpected error while loading result preview.', 'error');
+                    } finally {
+                        this.previewLoading = false;
+                    }
+                },
+
+                openPreviewInNewTab() {
+                    if (!this.previewCardUrl) {
+                        return;
+                    }
+                    window.open(this.previewCardUrl, '_blank');
+                },
+
+                downloadPdf() {
+                    if (this.isWholeClassSelected() && this.canRunClassAction()) {
+                        window.open(`${config.classCardsPdfUrl}?${this.queryParamsForClass().toString()}`, '_blank');
+                        return;
+                    }
+
+                    if (!this.studentPdfUrl) {
+                        return;
+                    }
+                    window.open(this.studentPdfUrl, '_blank');
+                },
+
+                printPreview() {
+                    if (this.isWholeClassSelected() && this.canRunClassAction()) {
+                        window.open(`${config.classCardsPdfUrl}?${this.queryParamsForClass().toString()}`, '_blank');
+                        return;
+                    }
+
+                    if (!this.previewCardUrl) {
+                        return;
+                    }
+
+                    const frame = this.$refs.previewFrame;
+                    if (frame && frame.contentWindow) {
+                        frame.contentWindow.focus();
+                        frame.contentWindow.print();
+                        return;
+                    }
+
+                    window.open(this.previewCardUrl, '_blank');
+                },
+
+                generateAllClassCards() {
+                    this.clearStatus();
+                    if (!this.canRunClassAction()) {
+                        this.setStatus('Class, session, and exam type are required.', 'error');
+                        return;
+                    }
+
+                    this.generatingClassCards = true;
+                    try {
+                        const params = this.queryParamsForClass();
+                        window.open(`${config.classCardsPdfUrl}?${params.toString()}`, '_blank');
+                        this.setStatus('Generating class result cards PDF.');
+                    } finally {
+                        this.generatingClassCards = false;
+                    }
+                },
+
+                async publishResults() {
+                    this.clearStatus();
+                    if (!this.canRunClassAction()) {
+                        this.setStatus('Class, session, and exam type are required.', 'error');
+                        return;
+                    }
+
+                    this.publishing = true;
+                    try {
+                        const response = await fetch(config.publishUrl, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                Accept: 'application/json',
+                                'X-CSRF-TOKEN': config.csrfToken,
+                            },
+                            body: JSON.stringify({
+                                class_id: Number(this.classId),
+                                session: this.session,
+                                exam_type: this.examType,
+                            }),
+                        });
+
+                        const result = await response.json();
+                        if (!response.ok) {
+                            this.setStatus(result.message || 'Failed to publish results.', 'error');
+                            return;
+                        }
+
+                        const notified = Number(result.summary?.notified_users || 0);
+                        this.setStatus(`Results published successfully. Notifications sent to ${notified} user(s).`);
+                    } catch (error) {
+                        this.setStatus('Unexpected error while publishing results.', 'error');
+                    } finally {
+                        this.publishing = false;
+                    }
+                },
+            };
+        }
+    </script>
+</x-app-layout>

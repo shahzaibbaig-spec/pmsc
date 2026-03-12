@@ -1,0 +1,115 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
+
+class Student extends Model
+{
+    use SoftDeletes;
+
+    protected $fillable = [
+        'student_id',
+        'name',
+        'father_name',
+        'class_id',
+        'date_of_birth',
+        'age',
+        'contact',
+        'address',
+        'status',
+    ];
+
+    protected function casts(): array
+    {
+        return [
+            'date_of_birth' => 'date',
+        ];
+    }
+
+    public function classRoom(): BelongsTo
+    {
+        return $this->belongsTo(SchoolClass::class, 'class_id');
+    }
+
+    public function subjects(): BelongsToMany
+    {
+        return $this->belongsToMany(Subject::class, 'student_subject');
+    }
+
+    public function sessionSubjects(): BelongsToMany
+    {
+        return $this->belongsToMany(Subject::class, 'student_subjects')
+            ->withPivot('session')
+            ->withTimestamps();
+    }
+
+    public function attendanceRecords(): HasMany
+    {
+        return $this->hasMany(StudentAttendance::class);
+    }
+
+    public function dailyAttendance(): HasMany
+    {
+        return $this->hasMany(Attendance::class);
+    }
+
+    public function results(): HasMany
+    {
+        return $this->hasMany(StudentResult::class);
+    }
+
+    public function marks(): HasMany
+    {
+        return $this->hasMany(Mark::class);
+    }
+
+    public function medicalHistories(): HasMany
+    {
+        return $this->hasMany(MedicalHistory::class);
+    }
+
+    public function medicalReferrals(): HasMany
+    {
+        return $this->hasMany(MedicalReferral::class);
+    }
+
+    public function disciplineComplaints(): HasMany
+    {
+        return $this->hasMany(DisciplineComplaint::class);
+    }
+
+    public function subjectAssignments(): HasMany
+    {
+        return $this->hasMany(StudentSubject::class);
+    }
+
+    public function subjectMatrixAssignments(): HasMany
+    {
+        return $this->hasMany(StudentSubjectAssignment::class);
+    }
+
+    public function performanceFeatures(): HasMany
+    {
+        return $this->hasMany(StudentPerformanceFeature::class);
+    }
+
+    public function riskPredictions(): HasMany
+    {
+        return $this->hasMany(StudentRiskPrediction::class);
+    }
+
+    public function feeAssignments(): HasMany
+    {
+        return $this->hasMany(StudentFeeAssignment::class);
+    }
+
+    public function feeChallans(): HasMany
+    {
+        return $this->hasMany(FeeChallan::class);
+    }
+}
