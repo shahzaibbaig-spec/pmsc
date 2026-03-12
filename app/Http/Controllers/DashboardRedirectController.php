@@ -14,6 +14,7 @@ class DashboardRedirectController extends Controller
         return match (true) {
             $user->hasRole('Admin') => redirect()->route('admin.dashboard'),
             $user->hasRole('Principal') => redirect()->route('principal.dashboard'),
+            $user->hasRole('Accountant') => redirect()->route('accountant.dashboard'),
             $user->hasRole('Teacher') => redirect()->route('teacher.dashboard'),
             $user->hasRole('Doctor') => redirect()->route('doctor.dashboard'),
             $user->hasRole('Student') => redirect()->route('student.dashboard'),
@@ -21,4 +22,3 @@ class DashboardRedirectController extends Controller
         };
     }
 }
-

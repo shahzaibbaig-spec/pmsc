@@ -10,7 +10,8 @@ class UpdatePayrollProfileRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->can('edit_salary_structure') ?? false;
+        return ($this->user()?->can('manage_payroll_profiles') ?? false)
+            || ($this->user()?->can('edit_salary_structure') ?? false);
     }
 
     public function rules(): array

@@ -17,6 +17,7 @@ class RbacMatrixController extends Controller
     private const MATRIX_ROLES = [
         'Admin',
         'Principal',
+        'Accountant',
         'Teacher',
         'Doctor',
         'Student',
@@ -54,6 +55,9 @@ class RbacMatrixController extends Controller
         'generate_salary_sheet',
         'view_salary_slips',
         'edit_salary_structure',
+        'manage_payroll_profiles',
+        'generate_payroll',
+        'view_payroll_reports',
     ];
 
     public function index(): View

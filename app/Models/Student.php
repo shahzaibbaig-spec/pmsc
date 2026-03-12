@@ -103,6 +103,16 @@ class Student extends Model
         return $this->hasMany(StudentRiskPrediction::class);
     }
 
+    public function learningProfiles(): HasMany
+    {
+        return $this->hasMany(StudentLearningProfile::class);
+    }
+
+    public function reportComments(): HasMany
+    {
+        return $this->hasMany(ReportComment::class);
+    }
+
     public function feeAssignments(): HasMany
     {
         return $this->hasMany(StudentFeeAssignment::class);

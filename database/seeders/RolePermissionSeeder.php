@@ -46,6 +46,9 @@ class RolePermissionSeeder extends Seeder
             'generate_salary_sheet',
             'view_salary_slips',
             'edit_salary_structure',
+            'manage_payroll_profiles',
+            'generate_payroll',
+            'view_payroll_reports',
         ];
 
         foreach ($permissions as $permission) {
@@ -57,6 +60,7 @@ class RolePermissionSeeder extends Seeder
         $teacher = Role::firstOrCreate(['name' => 'Teacher', 'guard_name' => 'web']);
         $doctor = Role::firstOrCreate(['name' => 'Doctor', 'guard_name' => 'web']);
         $student = Role::firstOrCreate(['name' => 'Student', 'guard_name' => 'web']);
+        $accountant = Role::firstOrCreate(['name' => 'Accountant', 'guard_name' => 'web']);
 
         $admin->syncPermissions($permissions);
         $principal->syncPermissions([
@@ -83,6 +87,9 @@ class RolePermissionSeeder extends Seeder
             'generate_salary_sheet',
             'view_salary_slips',
             'edit_salary_structure',
+            'manage_payroll_profiles',
+            'generate_payroll',
+            'view_payroll_reports',
         ]);
         $teacher->syncPermissions([
             'view_attendance',
@@ -94,12 +101,28 @@ class RolePermissionSeeder extends Seeder
         ]);
         $doctor->syncPermissions(['view_medical_requests']);
         $student->syncPermissions([]);
+        $accountant->syncPermissions([
+            'view_fee_structure',
+            'create_fee_structure',
+            'edit_fee_structure',
+            'delete_fee_structure',
+            'generate_fee_challans',
+            'view_fee_challans',
+            'record_fee_payment',
+            'view_fee_reports',
+            'view_payroll',
+            'manage_payroll_profiles',
+            'generate_payroll',
+            'view_salary_slips',
+            'view_payroll_reports',
+        ]);
 
         $this->createUserWithRole('System Admin', 'admin@school.test', 'Admin');
         $this->createUserWithRole('School Principal', 'principal@school.test', 'Principal');
         $this->createUserWithRole('Class Teacher', 'teacher@school.test', 'Teacher');
         $this->createUserWithRole('School Doctor', 'doctor@school.test', 'Doctor');
         $this->createUserWithRole('Student User', 'student@school.test', 'Student');
+        $this->createUserWithRole('School Accountant', 'accountant@school.test', 'Accountant');
     }
 
     private function createUserWithRole(string $name, string $email, string $role): void

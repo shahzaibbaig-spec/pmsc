@@ -9,7 +9,8 @@ class StorePayrollProfileRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->can('manage_payroll') ?? false;
+        return ($this->user()?->can('manage_payroll_profiles') ?? false)
+            || ($this->user()?->can('manage_payroll') ?? false);
     }
 
     public function rules(): array

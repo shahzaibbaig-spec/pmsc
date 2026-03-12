@@ -56,6 +56,11 @@ class User extends Authenticatable
         return $this->hasOne(Teacher::class);
     }
 
+    public function teacher(): HasOne
+    {
+        return $this->hasOne(Teacher::class);
+    }
+
     public function principalMedicalReferrals(): HasMany
     {
         return $this->hasMany(MedicalReferral::class, 'principal_id');

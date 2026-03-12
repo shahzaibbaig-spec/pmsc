@@ -52,8 +52,10 @@ class PayrollProfileController extends Controller
                 'status' => $filters['status'] ?? '',
                 'search' => $filters['search'] ?? '',
             ],
-            'canManage' => $request->user()?->can('manage_payroll') ?? false,
-            'canEdit' => $request->user()?->can('edit_salary_structure') ?? false,
+            'canManage' => ($request->user()?->can('manage_payroll_profiles') ?? false)
+                || ($request->user()?->can('manage_payroll') ?? false),
+            'canEdit' => ($request->user()?->can('manage_payroll_profiles') ?? false)
+                || ($request->user()?->can('edit_salary_structure') ?? false),
         ]);
     }
 

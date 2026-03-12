@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\DashboardRedirectController;
 use App\Http\Controllers\NotificationController;
+use App\Modules\Accountant\Controllers\AccountantDashboardController;
 use App\Modules\Admin\Controllers\AdminDashboardController;
 use App\Modules\Admin\Controllers\RbacMatrixController;
 use App\Modules\Admin\Controllers\SchoolSettingController;
@@ -26,6 +27,10 @@ use App\Modules\Payroll\Controllers\PayrollDashboardController;
 use App\Modules\Reports\Controllers\ReportPdfController;
 use App\Modules\Results\Controllers\PrincipalResultController;
 use App\Modules\Results\Controllers\StudentResultController;
+use App\Modules\Results\Controllers\TeacherResultController;
+use App\Modules\Results\Controllers\ClassResultAnalyzerController;
+use App\Modules\Results\Controllers\LearningProfileController;
+use App\Modules\Results\Controllers\PromotionAnalyzerController;
 use App\Modules\Search\Controllers\StudentSearchController;
 use App\Modules\Students\Controllers\StudentDashboardController;
 use App\Modules\Students\Controllers\PrincipalStudentListController;
@@ -76,6 +81,10 @@ Route::middleware('auth')->group(function () {
     Route::get('/admin/dashboard', AdminDashboardController::class)
         ->middleware(['role:Admin', 'permission:manage_users'])
         ->name('admin.dashboard');
+
+    Route::get('/accountant/dashboard', AccountantDashboardController::class)
+        ->middleware(['role:Accountant'])
+        ->name('accountant.dashboard');
 
     Route::get('/admin/rbac-matrix', [RbacMatrixController::class, 'index'])
         ->middleware(['role:Admin', 'permission:assign_roles'])
@@ -447,6 +456,26 @@ Route::middleware('auth')->group(function () {
         ->middleware(['role:Admin|Principal', 'permission:generate_results'])
         ->name('principal.results.card');
 
+    Route::get('/results/analyzer', [ClassResultAnalyzerController::class, 'index'])
+        ->middleware(['role:Principal,Teacher'])
+        ->name('results.analyzer');
+
+    Route::get('/results/promotion-analyzer', [PromotionAnalyzerController::class, 'index'])
+        ->middleware(['role:Principal,Teacher'])
+        ->name('results.promotion-analyzer');
+
+    Route::get('/results/learning-profiles', [LearningProfileController::class, 'index'])
+        ->middleware(['role:Principal,Teacher'])
+        ->name('results.learning-profiles');
+
+    Route::post('/results/learning-profiles/generate', [LearningProfileController::class, 'generate'])
+        ->middleware(['role:Principal,Teacher'])
+        ->name('results.learning-profiles.generate');
+
+    Route::post('/results/learning-profiles/comment', [LearningProfileController::class, 'saveComment'])
+        ->middleware(['role:Principal,Teacher'])
+        ->name('results.learning-profiles.comment');
+
     Route::get('/principal/fees/structures', [FeeStructureController::class, 'index'])
         ->middleware(['permission:view_fee_structure'])
         ->name('principal.fees.structures.index');
@@ -488,7 +517,7 @@ Route::middleware('auth')->group(function () {
         ->name('principal.fees.challans.data');
 
     Route::get('/principal/fees/challans/fee-structure-preview', [FeeChallanController::class, 'feeStructurePreview'])
-        ->middleware(['permission:view_fee_challans|generate_fee_challans'])
+        ->middleware(['permission:view_fee_challans,generate_fee_challans'])
         ->name('principal.fees.challans.fee-structure-preview');
 
     Route::get('/principal/fees/challans/{feeChallan}', [FeeChallanController::class, 'show'])
@@ -520,43 +549,43 @@ Route::middleware('auth')->group(function () {
         ->name('principal.payroll.profiles.index');
 
     Route::get('/principal/payroll', [PayrollDashboardController::class, 'index'])
-        ->middleware(['permission:view_payroll|manage_payroll|generate_salary_sheet|view_salary_slips|edit_salary_structure'])
+        ->middleware(['permission:view_payroll,manage_payroll_profiles,manage_payroll,generate_payroll,generate_salary_sheet,view_salary_slips,edit_salary_structure,view_payroll_reports'])
         ->name('principal.payroll.dashboard');
 
     Route::get('/principal/payroll/data', [PayrollDashboardController::class, 'data'])
-        ->middleware(['permission:view_payroll|manage_payroll|generate_salary_sheet|view_salary_slips|edit_salary_structure'])
+        ->middleware(['permission:view_payroll,manage_payroll_profiles,manage_payroll,generate_payroll,generate_salary_sheet,view_salary_slips,edit_salary_structure,view_payroll_reports'])
         ->name('principal.payroll.dashboard.data');
 
     Route::get('/principal/payroll/items/{payrollItem}', [PayrollDashboardController::class, 'item'])
-        ->middleware(['permission:view_payroll|manage_payroll|generate_salary_sheet|view_salary_slips|edit_salary_structure'])
+        ->middleware(['permission:view_payroll,manage_payroll_profiles,manage_payroll,generate_payroll,generate_salary_sheet,view_salary_slips,edit_salary_structure,view_payroll_reports'])
         ->name('principal.payroll.dashboard.item');
 
     Route::get('/principal/payroll/profiles/{payrollProfile}/detail', [PayrollDashboardController::class, 'profile'])
-        ->middleware(['permission:view_payroll|manage_payroll|generate_salary_sheet|view_salary_slips|edit_salary_structure'])
+        ->middleware(['permission:view_payroll,manage_payroll_profiles,manage_payroll,generate_payroll,generate_salary_sheet,view_salary_slips,edit_salary_structure,view_payroll_reports'])
         ->name('principal.payroll.dashboard.profile');
 
     Route::post('/principal/payroll/profiles', [PayrollProfileController::class, 'store'])
-        ->middleware(['permission:manage_payroll'])
+        ->middleware(['permission:manage_payroll_profiles,manage_payroll'])
         ->name('principal.payroll.profiles.store');
 
     Route::get('/principal/payroll/profiles/{payrollProfile}/edit', [PayrollProfileController::class, 'edit'])
-        ->middleware(['permission:edit_salary_structure'])
+        ->middleware(['permission:manage_payroll_profiles,edit_salary_structure'])
         ->name('principal.payroll.profiles.edit');
 
     Route::put('/principal/payroll/profiles/{payrollProfile}', [PayrollProfileController::class, 'update'])
-        ->middleware(['permission:edit_salary_structure'])
+        ->middleware(['permission:manage_payroll_profiles,edit_salary_structure'])
         ->name('principal.payroll.profiles.update');
 
     Route::get('/principal/payroll/generate', [PayrollRunController::class, 'generateForm'])
-        ->middleware(['permission:generate_salary_sheet'])
+        ->middleware(['permission:generate_payroll,generate_salary_sheet'])
         ->name('principal.payroll.generate.index');
 
     Route::post('/principal/payroll/generate', [PayrollRunController::class, 'generate'])
-        ->middleware(['permission:generate_salary_sheet'])
+        ->middleware(['permission:generate_payroll,generate_salary_sheet'])
         ->name('principal.payroll.generate.run');
 
     Route::get('/principal/payroll/salary-sheet', [PayrollRunController::class, 'salarySheet'])
-        ->middleware(['permission:generate_salary_sheet'])
+        ->middleware(['permission:generate_payroll,generate_salary_sheet'])
         ->name('principal.payroll.sheet.index');
 
     Route::get('/principal/payroll/salary-slips', [PayrollRunController::class, 'salarySlips'])
@@ -568,7 +597,7 @@ Route::middleware('auth')->group(function () {
         ->name('principal.payroll.slips.pdf');
 
     Route::get('/principal/payroll/reports', [PayrollRunController::class, 'reports'])
-        ->middleware(['permission:view_payroll'])
+        ->middleware(['permission:view_payroll_reports,view_payroll'])
         ->name('principal.payroll.reports.index');
 
     Route::get('/principal/reports', [ReportPdfController::class, 'index'])
@@ -674,6 +703,10 @@ Route::middleware('auth')->group(function () {
     Route::post('/teacher/exams/save', [TeacherExamController::class, 'save'])
         ->middleware(['role:Teacher', 'permission:enter_marks'])
         ->name('teacher.exams.save');
+
+    Route::get('/teacher/results/class', [TeacherResultController::class, 'classResults'])
+        ->middleware(['role:Teacher', 'permission:enter_marks'])
+        ->name('teacher.results.class');
 
     Route::get('/teacher/my-mark-entries', [TeacherMarkEntryController::class, 'index'])
         ->middleware(['role:Teacher', 'permission:view_own_mark_entries'])

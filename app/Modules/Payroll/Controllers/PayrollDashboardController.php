@@ -44,12 +44,17 @@ class PayrollDashboardController extends Controller
             'yearOptions' => $yearOptions,
             'defaultMonth' => $defaultMonth,
             'defaultYear' => $defaultYear,
-            'canGenerate' => $request->user()?->can('generate_salary_sheet') ?? false,
+            'canGenerate' => ($request->user()?->can('generate_payroll') ?? false)
+                || ($request->user()?->can('generate_salary_sheet') ?? false),
             'canViewSlips' => $request->user()?->can('view_salary_slips') ?? false,
-            'canEditProfiles' => $request->user()?->can('edit_salary_structure') ?? false,
-            'canViewSheet' => $request->user()?->can('generate_salary_sheet') ?? false,
-            'canViewReports' => $request->user()?->can('view_payroll') ?? false,
-            'canViewProfiles' => $request->user()?->can('view_payroll') ?? false,
+            'canEditProfiles' => ($request->user()?->can('manage_payroll_profiles') ?? false)
+                || ($request->user()?->can('edit_salary_structure') ?? false),
+            'canViewSheet' => ($request->user()?->can('generate_payroll') ?? false)
+                || ($request->user()?->can('generate_salary_sheet') ?? false),
+            'canViewReports' => ($request->user()?->can('view_payroll_reports') ?? false)
+                || ($request->user()?->can('view_payroll') ?? false),
+            'canViewProfiles' => ($request->user()?->can('manage_payroll_profiles') ?? false)
+                || ($request->user()?->can('view_payroll') ?? false),
         ]);
     }
 

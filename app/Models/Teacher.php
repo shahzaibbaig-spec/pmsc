@@ -50,6 +50,11 @@ class Teacher extends Model
         return $this->hasMany(SchoolClass::class, 'class_teacher_id');
     }
 
+    public function classesAsClassTeacher(): HasMany
+    {
+        return $this->hasMany(SchoolClass::class, 'class_teacher_id');
+    }
+
     public function subjectAssignments(): HasMany
     {
         return $this->hasMany(TeacherSubjectAssignment::class);

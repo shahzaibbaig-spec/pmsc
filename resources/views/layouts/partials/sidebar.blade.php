@@ -20,6 +20,9 @@
             ['route' => 'principal.teacher-assignments.index', 'label' => 'Assignments'],
             ['route' => 'principal.timetable.import.index', 'label' => 'Timetable Import'],
             ['route' => 'principal.results.generator', 'label' => 'Results'],
+            ['route' => 'results.analyzer', 'label' => 'Result Analyzer'],
+            ['route' => 'results.promotion-analyzer', 'label' => 'Promotion Analyzer'],
+            ['route' => 'results.learning-profiles', 'label' => 'Learning Profiles'],
             ['route' => 'principal.analytics.teachers.index', 'label' => 'Teacher Analytics'],
             ['route' => 'principal.medical.referrals.index', 'label' => 'Medical Referrals'],
             ['route' => 'notifications.index', 'label' => 'Notifications'],
@@ -45,25 +48,59 @@
         }
         $hasPayrollAccess = $sidebarUser?->can('view_payroll')
             || $sidebarUser?->can('manage_payroll')
+            || $sidebarUser?->can('manage_payroll_profiles')
             || $sidebarUser?->can('generate_salary_sheet')
+            || $sidebarUser?->can('generate_payroll')
             || $sidebarUser?->can('view_salary_slips')
-            || $sidebarUser?->can('edit_salary_structure');
+            || $sidebarUser?->can('edit_salary_structure')
+            || $sidebarUser?->can('view_payroll_reports');
         if ($hasPayrollAccess) {
             $menuItems[] = ['route' => 'principal.payroll.dashboard', 'label' => 'Payroll Dashboard'];
         }
-        if ($sidebarUser?->can('view_payroll')) {
+        if ($sidebarUser?->can('view_payroll') || $sidebarUser?->can('manage_payroll_profiles')) {
             $menuItems[] = ['route' => 'principal.payroll.profiles.index', 'label' => 'Payroll Profiles'];
         }
-        if ($sidebarUser?->can('generate_salary_sheet')) {
+        if ($sidebarUser?->can('generate_salary_sheet') || $sidebarUser?->can('generate_payroll')) {
             $menuItems[] = ['route' => 'principal.payroll.generate.index', 'label' => 'Generate Payroll'];
             $menuItems[] = ['route' => 'principal.payroll.sheet.index', 'label' => 'Salary Sheet'];
         }
         if ($sidebarUser?->can('view_salary_slips')) {
             $menuItems[] = ['route' => 'principal.payroll.slips.index', 'label' => 'Salary Slip'];
         }
-        if ($sidebarUser?->can('view_payroll')) {
+        if ($sidebarUser?->can('view_payroll') || $sidebarUser?->can('view_payroll_reports')) {
             $menuItems[] = ['route' => 'principal.payroll.reports.index', 'label' => 'Payroll Reports'];
         }
+    } elseif ($sidebarUser?->hasRole('Accountant')) {
+        $menuItems = [
+            ['route' => 'accountant.dashboard', 'label' => 'Dashboard'],
+        ];
+
+        if ($sidebarUser?->can('view_fee_structure')) {
+            $menuItems[] = ['route' => 'principal.fees.structures.index', 'label' => 'Fee Structure'];
+        }
+        if ($sidebarUser?->can('generate_fee_challans')) {
+            $menuItems[] = ['route' => 'principal.fees.challans.generate', 'label' => 'Generate Challans'];
+        }
+        if ($sidebarUser?->can('record_fee_payment')) {
+            $menuItems[] = ['route' => 'principal.fees.payments.index', 'label' => 'Record Fee Payments'];
+        }
+        if ($sidebarUser?->can('view_fee_reports')) {
+            $menuItems[] = ['route' => 'principal.fees.reports.index', 'label' => 'Fee Reports'];
+        }
+        if ($sidebarUser?->can('view_payroll') || $sidebarUser?->can('manage_payroll_profiles')) {
+            $menuItems[] = ['route' => 'principal.payroll.profiles.index', 'label' => 'Payroll Profiles'];
+        }
+        if ($sidebarUser?->can('generate_payroll') || $sidebarUser?->can('generate_salary_sheet')) {
+            $menuItems[] = ['route' => 'principal.payroll.generate.index', 'label' => 'Generate Payroll'];
+        }
+        if ($sidebarUser?->can('view_salary_slips')) {
+            $menuItems[] = ['route' => 'principal.payroll.slips.index', 'label' => 'Salary Slips'];
+        }
+        if ($sidebarUser?->can('view_payroll_reports') || $sidebarUser?->can('view_payroll')) {
+            $menuItems[] = ['route' => 'principal.payroll.reports.index', 'label' => 'Payroll Reports'];
+        }
+
+        $menuItems[] = ['route' => 'notifications.index', 'label' => 'Notifications'];
     } elseif ($sidebarUser?->hasRole('Teacher')) {
         $menuItems = [
             ['route' => 'teacher.dashboard', 'label' => 'Dashboard'],
@@ -74,6 +111,9 @@
         }
         if ($sidebarUser?->can('enter_marks')) {
             $menuItems[] = ['route' => 'teacher.exams.index', 'label' => 'Marks Entry'];
+            $menuItems[] = ['route' => 'teacher.results.class', 'label' => 'Class Results'];
+            $menuItems[] = ['route' => 'results.promotion-analyzer', 'label' => 'Promotion Analyzer'];
+            $menuItems[] = ['route' => 'results.learning-profiles', 'label' => 'Learning Profiles'];
         }
         if ($sidebarUser?->can('view_own_mark_entries')) {
             $menuItems[] = ['route' => 'teacher.marks.entries.index', 'label' => 'My Mark Entries'];
