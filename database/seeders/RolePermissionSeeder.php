@@ -74,22 +74,6 @@ class RolePermissionSeeder extends Seeder
             'view_medical_requests',
             'create_medical_requests',
             'view_teacher_performance',
-            'view_fee_structure',
-            'create_fee_structure',
-            'edit_fee_structure',
-            'delete_fee_structure',
-            'generate_fee_challans',
-            'view_fee_challans',
-            'record_fee_payment',
-            'view_fee_reports',
-            'view_payroll',
-            'manage_payroll',
-            'generate_salary_sheet',
-            'view_salary_slips',
-            'edit_salary_structure',
-            'manage_payroll_profiles',
-            'generate_payroll',
-            'view_payroll_reports',
         ]);
         $teacher->syncPermissions([
             'view_attendance',
@@ -117,12 +101,12 @@ class RolePermissionSeeder extends Seeder
             'view_payroll_reports',
         ]);
 
-        $this->createUserWithRole('System Admin', 'admin@school.test', 'Admin');
-        $this->createUserWithRole('School Principal', 'principal@school.test', 'Principal');
-        $this->createUserWithRole('Class Teacher', 'teacher@school.test', 'Teacher');
-        $this->createUserWithRole('School Doctor', 'doctor@school.test', 'Doctor');
-        $this->createUserWithRole('Student User', 'student@school.test', 'Student');
-        $this->createUserWithRole('School Accountant', 'accountant@school.test', 'Accountant');
+        $this->createUserWithRole('System Admin', 'admin@pmsc.edu.pk', 'Admin');
+        $this->createUserWithRole('School Principal', 'principal@pmsc.edu.pk', 'Principal');
+        $this->createUserWithRole('Class Teacher', 'teacher@pmsc.edu.pk', 'Teacher');
+        $this->createUserWithRole('School Doctor', 'doctor@pmsc.edu.pk', 'Doctor');
+        $this->createUserWithRole('Student User', 'student@pmsc.edu.pk', 'Student');
+        $this->createUserWithRole('School Accountant', 'accountant@pmsc.edu.pk', 'Accountant');
     }
 
     private function createUserWithRole(string $name, string $email, string $role): void
@@ -133,8 +117,17 @@ class RolePermissionSeeder extends Seeder
                 'name' => $name,
                 'password' => Hash::make('password'),
                 'email_verified_at' => now(),
+                'must_change_password' => $role === 'Teacher',
+                'password_changed_at' => $role === 'Teacher' ? null : now(),
             ]
         );
+
+        if ($role === 'Teacher' && ! $user->must_change_password) {
+            $user->forceFill([
+                'must_change_password' => true,
+                'password_changed_at' => null,
+            ])->save();
+        }
 
         if (! $user->hasRole($role)) {
             $user->assignRole($role);

@@ -63,6 +63,8 @@ class StudentSubjectAssignmentMatrixService
         $students = $studentsPaginator->getCollection();
 
         $subjects = $classRoom->subjects()
+            ->where('subjects.is_default', true)
+            ->where('subjects.status', 'active')
             ->orderByDesc('is_default')
             ->orderBy('name')
             ->get(['subjects.id', 'subjects.name', 'subjects.code', 'subjects.is_default']);
@@ -152,7 +154,12 @@ class StudentSubjectAssignmentMatrixService
         $student = Student::query()->findOrFail($studentId);
 
         $allowedSubjectIds = $student->classRoom
-            ? $student->classRoom->subjects()->pluck('subjects.id')->map(fn ($id) => (int) $id)->all()
+            ? $student->classRoom->subjects()
+                ->where('subjects.is_default', true)
+                ->where('subjects.status', 'active')
+                ->pluck('subjects.id')
+                ->map(fn ($id) => (int) $id)
+                ->all()
             : [];
 
         $normalized = $this->normalizeSubjectIds($subjectIds, $allowedSubjectIds);
@@ -214,6 +221,8 @@ class StudentSubjectAssignmentMatrixService
             ->get(['id', 'class_id', 'student_id']);
 
         $allowedSubjectIds = $classRoom->subjects()
+            ->where('subjects.is_default', true)
+            ->where('subjects.status', 'active')
             ->pluck('subjects.id')
             ->map(fn ($id) => (int) $id)
             ->all();
@@ -321,6 +330,8 @@ class StudentSubjectAssignmentMatrixService
     ): array {
         $classRoom = SchoolClass::query()->findOrFail($classId);
         $allowedSubjectIds = $classRoom->subjects()
+            ->where('subjects.is_default', true)
+            ->where('subjects.status', 'active')
             ->pluck('subjects.id')
             ->map(fn ($id): int => (int) $id)
             ->all();

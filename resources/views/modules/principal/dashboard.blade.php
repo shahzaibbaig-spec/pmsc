@@ -33,18 +33,6 @@
             <x-ui.button href="{{ route('principal.teacher-assignments.index') }}" variant="outline">Teacher Assignments</x-ui.button>
             <x-ui.button href="{{ route('principal.results.generator') }}" variant="outline">Results Module</x-ui.button>
             <x-ui.button href="{{ route('principal.analytics.teachers.index') }}" variant="outline">Teacher Analytics</x-ui.button>
-            @can('view_fee_structure')
-                <x-ui.button href="{{ route('principal.fees.structures.index') }}" variant="outline">Fee Structures</x-ui.button>
-            @endcan
-            @can('view_fee_reports')
-                <x-ui.button href="{{ route('principal.fees.reports.index') }}" variant="outline">Fee Reports</x-ui.button>
-            @endcan
-            @can('view_payroll')
-                <x-ui.button href="{{ route('principal.payroll.profiles.index') }}" variant="outline">Payroll Profiles</x-ui.button>
-            @endcan
-            @can('generate_salary_sheet')
-                <x-ui.button href="{{ route('principal.payroll.generate.index') }}" variant="outline">Generate Payroll</x-ui.button>
-            @endcan
         </div>
     </x-ui.card>
 </x-app-layout>

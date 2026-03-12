@@ -1,11 +1,17 @@
 <section>
+    @php
+        $mustChangePassword = (bool) (auth()->user()?->must_change_password ?? false);
+    @endphp
+
     <header>
         <h2 class="text-lg font-medium text-gray-900">
             {{ __('Update Password') }}
         </h2>
 
         <p class="mt-1 text-sm text-gray-600">
-            {{ __('Ensure your account is using a long, random password to stay secure.') }}
+            {{ $mustChangePassword
+                ? __('Password change is required for first login.')
+                : __('Ensure your account is using a long, random password to stay secure.') }}
         </p>
     </header>
 

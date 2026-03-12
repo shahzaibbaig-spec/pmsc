@@ -8,8 +8,13 @@ class GeneratePayrollRunRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return ($this->user()?->can('generate_payroll') ?? false)
-            || ($this->user()?->can('generate_salary_sheet') ?? false);
+        $user = $this->user();
+        $hasFinanceRole = $user?->hasAnyRole(['Admin', 'Accountant']) ?? false;
+
+        return $hasFinanceRole && (
+            ($user?->can('generate_payroll') ?? false)
+            || ($user?->can('generate_salary_sheet') ?? false)
+        );
     }
 
     public function rules(): array

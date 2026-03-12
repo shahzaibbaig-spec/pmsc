@@ -56,10 +56,10 @@ Route::get('/', function () {
 });
 
 Route::get('/dashboard', DashboardRedirectController::class)
-    ->middleware(['auth', 'verified'])
+    ->middleware(['auth', 'verified', 'force-password-change'])
     ->name('dashboard');
 
-Route::middleware('auth')->group(function () {
+Route::middleware(['auth', 'force-password-change'])->group(function () {
     Route::get('/notifications', [NotificationController::class, 'index'])
         ->name('notifications.index');
 
@@ -83,7 +83,7 @@ Route::middleware('auth')->group(function () {
         ->name('admin.dashboard');
 
     Route::get('/accountant/dashboard', AccountantDashboardController::class)
-        ->middleware(['role:Accountant'])
+        ->middleware(['role:Admin,Accountant'])
         ->name('accountant.dashboard');
 
     Route::get('/admin/rbac-matrix', [RbacMatrixController::class, 'index'])
@@ -477,127 +477,135 @@ Route::middleware('auth')->group(function () {
         ->name('results.learning-profiles.comment');
 
     Route::get('/principal/fees/structures', [FeeStructureController::class, 'index'])
-        ->middleware(['permission:view_fee_structure'])
+        ->middleware(['role:Admin,Accountant', 'permission:view_fee_structure'])
         ->name('principal.fees.structures.index');
 
     Route::get('/principal/fees/structures/create', [FeeStructureController::class, 'create'])
-        ->middleware(['permission:create_fee_structure'])
+        ->middleware(['role:Admin,Accountant', 'permission:create_fee_structure'])
         ->name('principal.fees.structures.create');
 
     Route::post('/principal/fees/structures', [FeeStructureController::class, 'store'])
-        ->middleware(['permission:create_fee_structure'])
+        ->middleware(['role:Admin,Accountant', 'permission:create_fee_structure'])
         ->name('principal.fees.structures.store');
 
     Route::get('/principal/fees/structures/{feeStructure}/edit', [FeeStructureController::class, 'edit'])
-        ->middleware(['permission:edit_fee_structure'])
+        ->middleware(['role:Admin,Accountant', 'permission:edit_fee_structure'])
         ->name('principal.fees.structures.edit');
 
     Route::put('/principal/fees/structures/{feeStructure}', [FeeStructureController::class, 'update'])
-        ->middleware(['permission:edit_fee_structure'])
+        ->middleware(['role:Admin,Accountant', 'permission:edit_fee_structure'])
         ->name('principal.fees.structures.update');
 
     Route::delete('/principal/fees/structures/{feeStructure}', [FeeStructureController::class, 'destroy'])
-        ->middleware(['permission:delete_fee_structure'])
+        ->middleware(['role:Admin,Accountant', 'permission:delete_fee_structure'])
         ->name('principal.fees.structures.destroy');
 
     Route::get('/principal/fees/challans/generate', [FeeChallanController::class, 'create'])
-        ->middleware(['permission:generate_fee_challans'])
+        ->middleware(['role:Admin,Accountant', 'permission:generate_fee_challans'])
         ->name('principal.fees.challans.generate');
 
     Route::post('/principal/fees/challans/generate', [FeeChallanController::class, 'store'])
-        ->middleware(['permission:generate_fee_challans'])
+        ->middleware(['role:Admin,Accountant', 'permission:generate_fee_challans'])
         ->name('principal.fees.challans.store');
 
     Route::get('/principal/fees/challans', [FeeChallanController::class, 'index'])
-        ->middleware(['permission:view_fee_challans'])
+        ->middleware(['role:Admin,Accountant', 'permission:view_fee_challans'])
         ->name('principal.fees.challans.index');
 
     Route::get('/principal/fees/challans/data', [FeeChallanController::class, 'data'])
-        ->middleware(['permission:view_fee_challans'])
+        ->middleware(['role:Admin,Accountant', 'permission:view_fee_challans'])
         ->name('principal.fees.challans.data');
 
     Route::get('/principal/fees/challans/fee-structure-preview', [FeeChallanController::class, 'feeStructurePreview'])
-        ->middleware(['permission:view_fee_challans,generate_fee_challans'])
+        ->middleware(['role:Admin,Accountant', 'permission:view_fee_challans,generate_fee_challans'])
         ->name('principal.fees.challans.fee-structure-preview');
 
     Route::get('/principal/fees/challans/{feeChallan}', [FeeChallanController::class, 'show'])
-        ->middleware(['permission:view_fee_challans'])
+        ->middleware(['role:Admin,Accountant', 'permission:view_fee_challans'])
         ->name('principal.fees.challans.show');
 
     Route::get('/principal/fees/challans/{feeChallan}/pdf', [FeeChallanController::class, 'pdf'])
-        ->middleware(['permission:view_fee_challans'])
+        ->middleware(['role:Admin,Accountant', 'permission:view_fee_challans'])
         ->name('principal.fees.challans.pdf');
 
     Route::post('/principal/fees/challans/{feeChallan}/mark-paid', [FeeChallanController::class, 'markPaid'])
-        ->middleware(['permission:record_fee_payment'])
+        ->middleware(['role:Admin,Accountant', 'permission:record_fee_payment'])
         ->name('principal.fees.challans.mark-paid');
 
+    Route::post('/principal/fees/challans/{feeChallan}/waive-late-fee', [FeeChallanController::class, 'waiveLateFee'])
+        ->middleware(['role:Admin,Accountant', 'permission:record_fee_payment'])
+        ->name('principal.fees.challans.waive-late-fee');
+
     Route::get('/principal/fees/payments', [FeePaymentController::class, 'index'])
-        ->middleware(['permission:record_fee_payment'])
+        ->middleware(['role:Admin,Accountant', 'permission:record_fee_payment'])
         ->name('principal.fees.payments.index');
 
     Route::post('/principal/fees/payments', [FeePaymentController::class, 'store'])
-        ->middleware(['permission:record_fee_payment'])
+        ->middleware(['role:Admin,Accountant', 'permission:record_fee_payment'])
         ->name('principal.fees.payments.store');
 
     Route::get('/principal/fees/reports', [FeeReportController::class, 'index'])
-        ->middleware(['permission:view_fee_reports'])
+        ->middleware(['role:Admin,Accountant', 'permission:view_fee_reports'])
         ->name('principal.fees.reports.index');
 
+    Route::get('/principal/fees/reports/arrears', [FeeReportController::class, 'arrears'])
+        ->middleware(['role:Admin,Accountant', 'permission:view_fee_reports'])
+        ->name('principal.fees.reports.arrears');
+
     Route::get('/principal/payroll/profiles', [PayrollProfileController::class, 'index'])
-        ->middleware(['permission:view_payroll'])
+        ->middleware(['role:Admin,Accountant', 'permission:view_payroll'])
         ->name('principal.payroll.profiles.index');
 
     Route::get('/principal/payroll', [PayrollDashboardController::class, 'index'])
-        ->middleware(['permission:view_payroll,manage_payroll_profiles,manage_payroll,generate_payroll,generate_salary_sheet,view_salary_slips,edit_salary_structure,view_payroll_reports'])
+        ->middleware(['role:Admin,Accountant', 'permission:view_payroll,manage_payroll_profiles,manage_payroll,generate_payroll,generate_salary_sheet,view_salary_slips,edit_salary_structure,view_payroll_reports'])
         ->name('principal.payroll.dashboard');
 
     Route::get('/principal/payroll/data', [PayrollDashboardController::class, 'data'])
-        ->middleware(['permission:view_payroll,manage_payroll_profiles,manage_payroll,generate_payroll,generate_salary_sheet,view_salary_slips,edit_salary_structure,view_payroll_reports'])
+        ->middleware(['role:Admin,Accountant', 'permission:view_payroll,manage_payroll_profiles,manage_payroll,generate_payroll,generate_salary_sheet,view_salary_slips,edit_salary_structure,view_payroll_reports'])
         ->name('principal.payroll.dashboard.data');
 
     Route::get('/principal/payroll/items/{payrollItem}', [PayrollDashboardController::class, 'item'])
-        ->middleware(['permission:view_payroll,manage_payroll_profiles,manage_payroll,generate_payroll,generate_salary_sheet,view_salary_slips,edit_salary_structure,view_payroll_reports'])
+        ->middleware(['role:Admin,Accountant', 'permission:view_payroll,manage_payroll_profiles,manage_payroll,generate_payroll,generate_salary_sheet,view_salary_slips,edit_salary_structure,view_payroll_reports'])
         ->name('principal.payroll.dashboard.item');
 
     Route::get('/principal/payroll/profiles/{payrollProfile}/detail', [PayrollDashboardController::class, 'profile'])
-        ->middleware(['permission:view_payroll,manage_payroll_profiles,manage_payroll,generate_payroll,generate_salary_sheet,view_salary_slips,edit_salary_structure,view_payroll_reports'])
+        ->middleware(['role:Admin,Accountant', 'permission:view_payroll,manage_payroll_profiles,manage_payroll,generate_payroll,generate_salary_sheet,view_salary_slips,edit_salary_structure,view_payroll_reports'])
         ->name('principal.payroll.dashboard.profile');
 
     Route::post('/principal/payroll/profiles', [PayrollProfileController::class, 'store'])
-        ->middleware(['permission:manage_payroll_profiles,manage_payroll'])
+        ->middleware(['role:Admin,Accountant', 'permission:manage_payroll_profiles,manage_payroll'])
         ->name('principal.payroll.profiles.store');
 
     Route::get('/principal/payroll/profiles/{payrollProfile}/edit', [PayrollProfileController::class, 'edit'])
-        ->middleware(['permission:manage_payroll_profiles,edit_salary_structure'])
+        ->middleware(['role:Admin,Accountant', 'permission:manage_payroll_profiles,edit_salary_structure'])
         ->name('principal.payroll.profiles.edit');
 
     Route::put('/principal/payroll/profiles/{payrollProfile}', [PayrollProfileController::class, 'update'])
-        ->middleware(['permission:manage_payroll_profiles,edit_salary_structure'])
+        ->middleware(['role:Admin,Accountant', 'permission:manage_payroll_profiles,edit_salary_structure'])
         ->name('principal.payroll.profiles.update');
 
     Route::get('/principal/payroll/generate', [PayrollRunController::class, 'generateForm'])
-        ->middleware(['permission:generate_payroll,generate_salary_sheet'])
+        ->middleware(['role:Admin,Accountant', 'permission:generate_payroll,generate_salary_sheet'])
         ->name('principal.payroll.generate.index');
 
     Route::post('/principal/payroll/generate', [PayrollRunController::class, 'generate'])
-        ->middleware(['permission:generate_payroll,generate_salary_sheet'])
+        ->middleware(['role:Admin,Accountant', 'permission:generate_payroll,generate_salary_sheet'])
         ->name('principal.payroll.generate.run');
 
     Route::get('/principal/payroll/salary-sheet', [PayrollRunController::class, 'salarySheet'])
-        ->middleware(['permission:generate_payroll,generate_salary_sheet'])
+        ->middleware(['role:Admin,Accountant', 'permission:generate_payroll,generate_salary_sheet'])
         ->name('principal.payroll.sheet.index');
 
     Route::get('/principal/payroll/salary-slips', [PayrollRunController::class, 'salarySlips'])
-        ->middleware(['permission:view_salary_slips'])
+        ->middleware(['role:Admin,Accountant', 'permission:view_salary_slips'])
         ->name('principal.payroll.slips.index');
 
     Route::get('/principal/payroll/salary-slips/{payrollItem}/pdf', [PayrollRunController::class, 'salarySlipPdf'])
-        ->middleware(['permission:view_salary_slips'])
+        ->middleware(['role:Admin,Accountant', 'permission:view_salary_slips'])
         ->name('principal.payroll.slips.pdf');
 
     Route::get('/principal/payroll/reports', [PayrollRunController::class, 'reports'])
-        ->middleware(['permission:view_payroll_reports,view_payroll'])
+        ->middleware(['role:Admin,Accountant', 'permission:view_payroll_reports,view_payroll'])
         ->name('principal.payroll.reports.index');
 
     Route::get('/principal/reports', [ReportPdfController::class, 'index'])

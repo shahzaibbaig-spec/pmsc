@@ -13,10 +13,17 @@ use App\Models\StudentFeeAssignment;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 class FeeManagementService
 {
+    public const STATUS_UNPAID = 'unpaid';
+
+    public const STATUS_PARTIAL = 'partial';
+
+    public const STATUS_PAID = 'paid';
+
     public function sessionOptions(int $backward = 1, int $forward = 3): array
     {
         $now = now();
@@ -39,6 +46,142 @@ class FeeManagementService
         }
     }
 
+    public function pendingStatuses(): array
+    {
+        return [
+            self::STATUS_UNPAID,
+            self::STATUS_PARTIAL,
+            'partially_paid',
+        ];
+    }
+
+    public function normalizeStatus(?string $status): string
+    {
+        $value = strtolower(trim((string) $status));
+
+        return match ($value) {
+            self::STATUS_PAID => self::STATUS_PAID,
+            self::STATUS_PARTIAL, 'partially_paid' => self::STATUS_PARTIAL,
+            default => self::STATUS_UNPAID,
+        };
+    }
+
+    public function lateFeeAmount(): float
+    {
+        return round(max((float) config('fees.late_fee_amount', 200), 0), 2);
+    }
+
+    public function graceDays(): int
+    {
+        return max((int) config('fees.grace_days', 3), 0);
+    }
+
+    public function processLateFees(?Carbon $asOf = null): array
+    {
+        $asOfDate = ($asOf?->copy() ?? now())->startOfDay();
+        $lateFeeAmount = $this->lateFeeAmount();
+        $graceDays = $this->graceDays();
+
+        if ($lateFeeAmount <= 0) {
+            return [
+                'as_of' => $asOfDate->toDateString(),
+                'scanned' => 0,
+                'applied' => 0,
+                'skipped' => 0,
+                'late_fee_amount' => $lateFeeAmount,
+                'grace_days' => $graceDays,
+            ];
+        }
+
+        $lastAllowedDueDate = $asOfDate->copy()->subDays($graceDays)->toDateString();
+        $candidates = FeeChallan::query()
+            ->withSum('payments as paid_amount', 'amount_paid')
+            ->whereIn('status', $this->pendingStatuses())
+            ->whereDate('due_date', '<=', $lastAllowedDueDate)
+            ->where(function ($query): void {
+                $query->whereNull('late_fee')
+                    ->orWhere('late_fee', '<=', 0);
+            })
+            ->whereNull('late_fee_waived_at')
+            ->orderBy('id')
+            ->get([
+                'id',
+                'due_date',
+                'status',
+                'total_amount',
+                'late_fee',
+                'late_fee_waived_at',
+            ]);
+
+        $applied = 0;
+        $skipped = 0;
+
+        DB::transaction(function () use (
+            $candidates,
+            $asOfDate,
+            $graceDays,
+            $lateFeeAmount,
+            &$applied,
+            &$skipped
+        ): void {
+            foreach ($candidates as $candidate) {
+                $locked = FeeChallan::query()
+                    ->withSum('payments as paid_amount', 'amount_paid')
+                    ->lockForUpdate()
+                    ->find($candidate->id, [
+                        'id',
+                        'status',
+                        'due_date',
+                        'total_amount',
+                        'late_fee',
+                        'late_fee_waived_at',
+                    ]);
+
+                if (! $locked) {
+                    $skipped++;
+                    continue;
+                }
+
+                $paidAmount = (float) ($locked->paid_amount ?? 0);
+                if (! $this->isEligibleForLateFee($locked, $paidAmount, $asOfDate, $graceDays, $lateFeeAmount)) {
+                    $skipped++;
+                    continue;
+                }
+
+                $previousLateFee = round((float) ($locked->late_fee ?? 0), 2);
+                $newLateFee = round($previousLateFee + $lateFeeAmount, 2);
+                $newTotal = round((float) $locked->total_amount + $lateFeeAmount, 2);
+
+                $locked->forceFill([
+                    'late_fee' => $newLateFee,
+                    'total_amount' => $newTotal,
+                    'status' => $this->normalizeStatus($locked->status),
+                ])->save();
+
+                Log::info('Late fee applied to challan.', [
+                    'challan_id' => $locked->id,
+                    'due_date' => optional($locked->due_date)->toDateString(),
+                    'late_fee_added' => $lateFeeAmount,
+                    'late_fee_before' => $previousLateFee,
+                    'late_fee_after' => $newLateFee,
+                    'total_amount_after' => $newTotal,
+                    'as_of' => $asOfDate->toDateString(),
+                ]);
+
+                $applied++;
+            }
+        });
+
+        return [
+            'as_of' => $asOfDate->toDateString(),
+            'scanned' => $candidates->count(),
+            'applied' => $applied,
+            'skipped' => $skipped,
+            'late_fee_amount' => $lateFeeAmount,
+            'grace_days' => $graceDays,
+        ];
+    }
+
     public function generateClassChallans(
         string $session,
         int $classId,
@@ -46,6 +189,9 @@ class FeeManagementService
         string $dueDate,
         int $generatedBy
     ): array {
+        // Keep overdue balances current before computing arrears for the new run.
+        $this->processLateFees();
+
         $classRoom = SchoolClass::query()->find($classId, ['id', 'name', 'section']);
         if (! $classRoom) {
             throw new RuntimeException('Class not found.');
@@ -100,9 +246,33 @@ class FeeManagementService
                 $challan->student_id.'|'.$challan->session.'|'.$challan->month => true,
             ]);
 
+        $arrearsByStudent = FeeChallan::query()
+            ->withSum('payments as paid_amount', 'amount_paid')
+            ->whereIn('student_id', $studentIds)
+            ->whereIn('status', $this->pendingStatuses())
+            ->where(function ($query) use ($session, $month): void {
+                $query->where('session', '!=', $session)
+                    ->orWhere('month', '!=', $month);
+            })
+            ->get([
+                'id',
+                'student_id',
+                'session',
+                'month',
+                'total_amount',
+            ])
+            ->groupBy('student_id')
+            ->map(fn (Collection $rows): float => round((float) $rows->sum(function (FeeChallan $challan): float {
+                $total = (float) $challan->total_amount;
+                $paid = (float) ($challan->paid_amount ?? 0);
+
+                return $this->remainingFromTotals($total, $paid);
+            }), 2));
+
         $createdCount = 0;
         $skippedExistingCount = 0;
         $skippedNoItemsCount = 0;
+        $totalArrearsAdded = 0.0;
 
         DB::transaction(function () use (
             $students,
@@ -114,9 +284,11 @@ class FeeManagementService
             $classId,
             $alreadyBilledOneTime,
             $existingChallanKeys,
+            $arrearsByStudent,
             &$createdCount,
             &$skippedExistingCount,
-            &$skippedNoItemsCount
+            &$skippedNoItemsCount,
+            &$totalArrearsAdded
         ): void {
             foreach ($students as $student) {
                 $challanKey = $student->id.'|'.$session.'|'.$month;
@@ -171,7 +343,11 @@ class FeeManagementService
                     $totalAmount += $lineAmount;
                 }
 
-                if (empty($items)) {
+                $baseFeeAmount = round($totalAmount, 2);
+                $arrearsAmount = round((float) ($arrearsByStudent->get($student->id, 0) ?? 0), 2);
+                $finalTotalAmount = round($baseFeeAmount + $arrearsAmount, 2);
+
+                if (empty($items) && $arrearsAmount <= 0) {
                     $skippedNoItemsCount++;
                     continue;
                 }
@@ -184,8 +360,11 @@ class FeeManagementService
                     'month' => $month,
                     'issue_date' => now()->toDateString(),
                     'due_date' => $dueDate,
-                    'total_amount' => round($totalAmount, 2),
-                    'status' => 'unpaid',
+                    'arrears' => $arrearsAmount,
+                    'late_fee' => 0,
+                    'late_fee_waived_at' => null,
+                    'total_amount' => $finalTotalAmount,
+                    'status' => self::STATUS_UNPAID,
                     'generated_by' => $generatedBy,
                 ]);
 
@@ -194,6 +373,7 @@ class FeeManagementService
                 }
 
                 $createdCount++;
+                $totalArrearsAdded += $arrearsAmount;
             }
         });
 
@@ -206,6 +386,7 @@ class FeeManagementService
             'created' => $createdCount,
             'skipped_existing' => $skippedExistingCount,
             'skipped_no_items' => $skippedNoItemsCount,
+            'total_arrears_added' => round($totalArrearsAdded, 2),
             'due_date' => Carbon::parse($dueDate)->toDateString(),
         ];
     }
@@ -237,12 +418,19 @@ class FeeManagementService
                 throw new RuntimeException('Challan not found.');
             }
 
+            $normalizedStatus = $this->normalizeStatus($locked->status);
+            if ($normalizedStatus !== $locked->status) {
+                $locked->forceFill(['status' => $normalizedStatus])->save();
+            }
+
             $paidBefore = (float) FeePayment::query()
                 ->where('fee_challan_id', $locked->id)
                 ->sum('amount_paid');
 
+            $this->applyLateFeeIfEligibleToLockedChallan($locked, $paidBefore);
+
             $total = (float) $locked->total_amount;
-            $remaining = round($total - $paidBefore, 2);
+            $remaining = $this->remainingFromTotals($total, $paidBefore);
 
             if ($remaining <= 0) {
                 throw new RuntimeException('This challan is already fully paid.');
@@ -263,14 +451,55 @@ class FeeManagementService
             ]);
 
             $paidAfter = round($paidBefore + $amountPaid, 2);
-            $isPaid = $paidAfter >= $total;
+            $status = $this->statusFromPaidAndTotal($paidAfter, $total);
+            $isPaid = $status === self::STATUS_PAID;
 
             $locked->forceFill([
-                'status' => $isPaid ? 'paid' : 'partially_paid',
+                'status' => $status,
                 'paid_at' => $isPaid ? now() : null,
             ])->save();
 
             return $payment;
+        });
+    }
+
+    public function waiveLateFee(FeeChallan $challan, int $waivedBy): FeeChallan
+    {
+        return DB::transaction(function () use ($challan, $waivedBy): FeeChallan {
+            $locked = FeeChallan::query()->lockForUpdate()->find($challan->id);
+            if (! $locked) {
+                throw new RuntimeException('Challan not found.');
+            }
+
+            $lateFee = round((float) ($locked->late_fee ?? 0), 2);
+            if ($lateFee <= 0) {
+                throw new RuntimeException('No late fee is available to waive for this challan.');
+            }
+
+            $paidAmount = (float) FeePayment::query()
+                ->where('fee_challan_id', $locked->id)
+                ->sum('amount_paid');
+
+            $newTotal = round(max((float) $locked->total_amount - $lateFee, 0), 2);
+            $status = $this->statusFromPaidAndTotal($paidAmount, $newTotal);
+
+            $locked->forceFill([
+                'late_fee' => 0,
+                'late_fee_waived_at' => now(),
+                'total_amount' => $newTotal,
+                'status' => $status,
+                'paid_at' => $status === self::STATUS_PAID ? ($locked->paid_at ?? now()) : null,
+            ])->save();
+
+            Log::info('Late fee waived for challan.', [
+                'challan_id' => $locked->id,
+                'late_fee_removed' => $lateFee,
+                'waived_by' => $waivedBy,
+                'status_after' => $status,
+                'total_after' => $newTotal,
+            ]);
+
+            return $locked;
         });
     }
 
@@ -303,6 +532,9 @@ class FeeManagementService
 
         $paid = (float) $challan->payments->sum('amount_paid');
         $total = (float) $challan->total_amount;
+        $arrears = round((float) ($challan->arrears ?? 0), 2);
+        $lateFee = round((float) ($challan->late_fee ?? 0), 2);
+        $baseFee = $this->baseFeeAmount($challan);
 
         return [
             'school' => $this->schoolMeta(),
@@ -313,7 +545,8 @@ class FeeManagementService
                 'month_label' => $this->monthLabel($challan->month),
                 'issue_date' => optional($challan->issue_date)->format('Y-m-d'),
                 'due_date' => optional($challan->due_date)->format('Y-m-d'),
-                'status' => $challan->status,
+                'status' => $this->normalizeStatus($challan->status),
+                'late_fee_waived_at' => optional($challan->late_fee_waived_at)->format('Y-m-d H:i:s'),
             ],
             'student' => [
                 'name' => $challan->student?->name ?? 'Student',
@@ -326,11 +559,108 @@ class FeeManagementService
                 'amount' => (float) $item->amount,
             ])->values()->all(),
             'summary' => [
+                'fee_amount' => $baseFee,
+                'arrears' => $arrears,
+                'late_fee' => $lateFee,
                 'total_amount' => $total,
                 'paid_amount' => $paid,
-                'remaining_amount' => round(max($total - $paid, 0), 2),
+                'remaining_amount' => $this->remainingFromTotals($total, $paid),
             ],
         ];
+    }
+
+    private function applyLateFeeIfEligibleToLockedChallan(FeeChallan $challan, float $paidAmount): void
+    {
+        $lateFeeAmount = $this->lateFeeAmount();
+        $graceDays = $this->graceDays();
+        $asOfDate = now()->startOfDay();
+
+        if (! $this->isEligibleForLateFee($challan, $paidAmount, $asOfDate, $graceDays, $lateFeeAmount)) {
+            return;
+        }
+
+        $currentLateFee = round((float) ($challan->late_fee ?? 0), 2);
+        $newLateFee = round($currentLateFee + $lateFeeAmount, 2);
+        $newTotal = round((float) $challan->total_amount + $lateFeeAmount, 2);
+
+        $challan->forceFill([
+            'late_fee' => $newLateFee,
+            'total_amount' => $newTotal,
+            'status' => $this->normalizeStatus($challan->status),
+        ])->save();
+
+        Log::info('Late fee auto-applied during payment attempt.', [
+            'challan_id' => $challan->id,
+            'late_fee_added' => $lateFeeAmount,
+            'late_fee_after' => $newLateFee,
+            'total_after' => $newTotal,
+        ]);
+    }
+
+    private function isEligibleForLateFee(
+        FeeChallan $challan,
+        float $paidAmount,
+        Carbon $asOfDate,
+        int $graceDays,
+        float $lateFeeAmount
+    ): bool {
+        if ($lateFeeAmount <= 0) {
+            return false;
+        }
+
+        if ($challan->due_date === null) {
+            return false;
+        }
+
+        if ($challan->late_fee_waived_at !== null) {
+            return false;
+        }
+
+        if (round((float) ($challan->late_fee ?? 0), 2) > 0) {
+            return false;
+        }
+
+        $status = $this->normalizeStatus($challan->status);
+        if (! in_array($status, [self::STATUS_UNPAID, self::STATUS_PARTIAL], true)) {
+            return false;
+        }
+
+        $eligibleAfter = $challan->due_date->copy()->addDays($graceDays)->startOfDay();
+        if ($asOfDate->lessThanOrEqualTo($eligibleAfter)) {
+            return false;
+        }
+
+        return $this->remainingFromTotals((float) $challan->total_amount, $paidAmount) > 0;
+    }
+
+    private function statusFromPaidAndTotal(float $paidAmount, float $totalAmount): string
+    {
+        $paid = round($paidAmount, 2);
+        $total = round($totalAmount, 2);
+
+        if ($paid >= $total && $total > 0) {
+            return self::STATUS_PAID;
+        }
+
+        if ($paid > 0) {
+            return self::STATUS_PARTIAL;
+        }
+
+        return self::STATUS_UNPAID;
+    }
+
+    private function remainingFromTotals(float $totalAmount, float $paidAmount): float
+    {
+        return round(max(round($totalAmount, 2) - round($paidAmount, 2), 0), 2);
+    }
+
+    private function baseFeeAmount(FeeChallan $challan): float
+    {
+        $base = round((float) $challan->total_amount, 2)
+            - round((float) ($challan->arrears ?? 0), 2)
+            - round((float) ($challan->late_fee ?? 0), 2);
+
+        return round(max($base, 0), 2);
     }
 
     private function challanNumber(string $session, string $month, int $studentId): string

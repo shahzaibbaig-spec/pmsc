@@ -12,21 +12,6 @@
             ['route' => 'principal.results.generator', 'label' => 'Results'],
             ['route' => 'notifications.index', 'label' => 'Notifications'],
         ];
-    } elseif ($sidebarUser?->hasRole('Principal')) {
-        $menuItems = [
-            ['route' => 'principal.dashboard', 'label' => 'Dashboard'],
-            ['route' => 'principal.students.index', 'label' => 'Students'],
-            ['route' => 'principal.teachers.index', 'label' => 'Teachers'],
-            ['route' => 'principal.teacher-assignments.index', 'label' => 'Assignments'],
-            ['route' => 'principal.timetable.import.index', 'label' => 'Timetable Import'],
-            ['route' => 'principal.results.generator', 'label' => 'Results'],
-            ['route' => 'results.analyzer', 'label' => 'Result Analyzer'],
-            ['route' => 'results.promotion-analyzer', 'label' => 'Promotion Analyzer'],
-            ['route' => 'results.learning-profiles', 'label' => 'Learning Profiles'],
-            ['route' => 'principal.analytics.teachers.index', 'label' => 'Teacher Analytics'],
-            ['route' => 'principal.medical.referrals.index', 'label' => 'Medical Referrals'],
-            ['route' => 'notifications.index', 'label' => 'Notifications'],
-        ];
 
         if ($sidebarUser?->can('view_fee_structure')) {
             $menuItems[] = ['route' => 'principal.fees.structures.index', 'label' => 'Fee Structures'];
@@ -42,9 +27,7 @@
         }
         if ($sidebarUser?->can('view_fee_reports')) {
             $menuItems[] = ['route' => 'principal.fees.reports.index', 'label' => 'Fee Reports'];
-        }
-        if ($sidebarUser?->can('manage_subject_assignments')) {
-            $menuItems[] = ['route' => 'principal.subject-matrix.index', 'label' => 'Subject Matrix'];
+            $menuItems[] = ['route' => 'principal.fees.reports.arrears', 'label' => 'Arrears Report'];
         }
         $hasPayrollAccess = $sidebarUser?->can('view_payroll')
             || $sidebarUser?->can('manage_payroll')
@@ -70,6 +53,24 @@
         if ($sidebarUser?->can('view_payroll') || $sidebarUser?->can('view_payroll_reports')) {
             $menuItems[] = ['route' => 'principal.payroll.reports.index', 'label' => 'Payroll Reports'];
         }
+    } elseif ($sidebarUser?->hasRole('Principal')) {
+        $menuItems = [
+            ['route' => 'principal.dashboard', 'label' => 'Dashboard'],
+            ['route' => 'principal.students.index', 'label' => 'Students'],
+            ['route' => 'principal.teachers.index', 'label' => 'Teachers'],
+            ['route' => 'principal.teacher-assignments.index', 'label' => 'Assignments'],
+            ['route' => 'principal.timetable.import.index', 'label' => 'Timetable Import'],
+            ['route' => 'principal.results.generator', 'label' => 'Results'],
+            ['route' => 'results.analyzer', 'label' => 'Result Analyzer'],
+            ['route' => 'results.promotion-analyzer', 'label' => 'Promotion Analyzer'],
+            ['route' => 'results.learning-profiles', 'label' => 'Learning Profiles'],
+            ['route' => 'principal.analytics.teachers.index', 'label' => 'Teacher Analytics'],
+            ['route' => 'principal.medical.referrals.index', 'label' => 'Medical Referrals'],
+            ['route' => 'notifications.index', 'label' => 'Notifications'],
+        ];
+        if ($sidebarUser?->can('manage_subject_assignments')) {
+            $menuItems[] = ['route' => 'principal.subject-matrix.index', 'label' => 'Subject Matrix'];
+        }
     } elseif ($sidebarUser?->hasRole('Accountant')) {
         $menuItems = [
             ['route' => 'accountant.dashboard', 'label' => 'Dashboard'],
@@ -81,11 +82,15 @@
         if ($sidebarUser?->can('generate_fee_challans')) {
             $menuItems[] = ['route' => 'principal.fees.challans.generate', 'label' => 'Generate Challans'];
         }
+        if ($sidebarUser?->can('view_fee_challans')) {
+            $menuItems[] = ['route' => 'principal.fees.challans.index', 'label' => 'Fee Challans'];
+        }
         if ($sidebarUser?->can('record_fee_payment')) {
             $menuItems[] = ['route' => 'principal.fees.payments.index', 'label' => 'Record Fee Payments'];
         }
         if ($sidebarUser?->can('view_fee_reports')) {
             $menuItems[] = ['route' => 'principal.fees.reports.index', 'label' => 'Fee Reports'];
+            $menuItems[] = ['route' => 'principal.fees.reports.arrears', 'label' => 'Arrears Report'];
         }
         if ($sidebarUser?->can('view_payroll') || $sidebarUser?->can('manage_payroll_profiles')) {
             $menuItems[] = ['route' => 'principal.payroll.profiles.index', 'label' => 'Payroll Profiles'];

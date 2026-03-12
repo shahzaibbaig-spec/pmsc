@@ -8,6 +8,12 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class FeeChallan extends Model
 {
+    public const STATUS_UNPAID = 'unpaid';
+
+    public const STATUS_PARTIAL = 'partial';
+
+    public const STATUS_PAID = 'paid';
+
     protected $fillable = [
         'challan_number',
         'student_id',
@@ -16,6 +22,9 @@ class FeeChallan extends Model
         'month',
         'issue_date',
         'due_date',
+        'arrears',
+        'late_fee',
+        'late_fee_waived_at',
         'total_amount',
         'status',
         'generated_by',
@@ -27,7 +36,10 @@ class FeeChallan extends Model
         return [
             'issue_date' => 'date',
             'due_date' => 'date',
+            'arrears' => 'decimal:2',
+            'late_fee' => 'decimal:2',
             'total_amount' => 'decimal:2',
+            'late_fee_waived_at' => 'datetime',
             'paid_at' => 'datetime',
         ];
     }

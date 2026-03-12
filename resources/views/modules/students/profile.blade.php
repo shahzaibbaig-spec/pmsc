@@ -13,9 +13,11 @@
             ->map(fn ($part) => strtoupper(substr((string) $part, 0, 1)))
             ->implode('');
 
-        $isAdmin = auth()->user()?->hasRole('Admin') ?? false;
-        $canGenerateResults = auth()->user()?->can('generate_results') ?? false;
-        $canGenerateChallans = auth()->user()?->can('generate_fee_challans') ?? false;
+        $profileUser = auth()->user();
+        $isAdmin = $profileUser?->hasRole('Admin') ?? false;
+        $canGenerateResults = $profileUser?->can('generate_results') ?? false;
+        $hasFinanceRole = $profileUser?->hasAnyRole(['Admin', 'Accountant']) ?? false;
+        $canGenerateChallans = $hasFinanceRole && ($profileUser?->can('generate_fee_challans') ?? false);
     @endphp
 
     <x-slot name="header">

@@ -18,9 +18,11 @@
             challanDetailUrlTemplate: @js(route('principal.fees.challans.show', ['feeChallan' => '__ID__'])),
             challanPdfUrlTemplate: @js(route('principal.fees.challans.pdf', ['feeChallan' => '__ID__'])),
             markPaidUrlTemplate: @js(route('principal.fees.challans.mark-paid', ['feeChallan' => '__ID__'])),
+            waiveLateFeeUrlTemplate: @js(route('principal.fees.challans.waive-late-fee', ['feeChallan' => '__ID__'])),
             csrfToken: @js(csrf_token()),
             canGenerate: @js($canGenerateChallans),
             canRecord: @js($canRecordPayment),
+            canWaive: @js($canWaiveLateFee),
         })"
         x-init="init()"
     >
@@ -147,7 +149,7 @@
                     <select id="status_filter" x-model="statusFilter" @change="loadTable(true)" class="mt-1 block min-h-11 w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                         <option value="">All</option>
                         <option value="unpaid">Unpaid</option>
-                        <option value="partially_paid">Partially Paid</option>
+                        <option value="partial">Partial</option>
                         <option value="paid">Paid</option>
                     </select>
                 </div>
@@ -162,13 +164,16 @@
             </div>
 
             <div class="mt-5 overflow-x-auto">
-                <table class="min-w-[1200px] divide-y divide-slate-200">
+                <table class="min-w-[1460px] divide-y divide-slate-200">
                     <thead class="bg-slate-50">
                         <tr>
                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Challan #</th>
                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Student</th>
                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Class</th>
                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Session / Month</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Fee</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Arrears</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Late Fee</th>
                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Total</th>
                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Paid</th>
                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Remaining</th>
@@ -180,12 +185,12 @@
                     <tbody class="divide-y divide-slate-100 bg-white">
                         <template x-if="loadingTable">
                             <tr>
-                                <td colspan="10" class="px-4 py-8 text-center text-sm text-slate-500">Loading challans...</td>
+                                <td colspan="13" class="px-4 py-8 text-center text-sm text-slate-500">Loading challans...</td>
                             </tr>
                         </template>
                         <template x-if="!loadingTable && rows.length === 0">
                             <tr>
-                                <td colspan="10" class="px-4 py-8 text-center text-sm text-slate-500">No challans found for selected filters.</td>
+                                <td colspan="13" class="px-4 py-8 text-center text-sm text-slate-500">No challans found for selected filters.</td>
                             </tr>
                         </template>
                         <template x-for="row in rows" :key="`challan-row-${row.id}`">
@@ -200,6 +205,9 @@
                                     <div x-text="row.session"></div>
                                     <div class="text-xs text-slate-500" x-text="row.month_label"></div>
                                 </td>
+                                <td class="px-4 py-3 text-sm text-slate-700" x-text="money(row.fee_amount)"></td>
+                                <td class="px-4 py-3 text-sm text-slate-700" x-text="money(row.arrears)"></td>
+                                <td class="px-4 py-3 text-sm text-slate-700" x-text="money(row.late_fee)"></td>
                                 <td class="px-4 py-3 text-sm text-slate-700" x-text="money(row.total_amount)"></td>
                                 <td class="px-4 py-3 text-sm text-slate-700" x-text="money(row.paid_amount)"></td>
                                 <td class="px-4 py-3 text-sm font-semibold text-slate-800" x-text="money(row.remaining_amount)"></td>
@@ -212,6 +220,14 @@
                                         <button type="button" @click="openDrawer(row.id)" class="inline-flex min-h-9 items-center rounded-lg border border-slate-300 px-3 text-xs font-medium text-slate-700 hover:bg-slate-50">View</button>
                                         <button type="button" @click="downloadPdf(row.id)" class="inline-flex min-h-9 items-center rounded-lg border border-indigo-300 px-3 text-xs font-medium text-indigo-700 hover:bg-indigo-50">Download PDF</button>
                                         <button type="button" @click="printChallan(row.id)" class="inline-flex min-h-9 items-center rounded-lg border border-slate-300 px-3 text-xs font-medium text-slate-700 hover:bg-slate-50">Print</button>
+                                        <button
+                                            x-show="canWaive && Number(row.late_fee || 0) > 0"
+                                            type="button"
+                                            @click="waiveLateFee(row.id)"
+                                            class="inline-flex min-h-9 items-center rounded-lg border border-amber-300 px-3 text-xs font-medium text-amber-700 hover:bg-amber-50"
+                                        >
+                                            Waive Late Fee
+                                        </button>
                                         <button
                                             x-show="canRecord && row.status !== 'paid'"
                                             type="button"
@@ -275,6 +291,14 @@
                                 <div class="mt-3 flex flex-wrap gap-2">
                                     <button type="button" @click="downloadPdf(drawer.data.challan_id)" class="inline-flex min-h-9 items-center rounded-lg border border-indigo-300 px-3 text-xs font-medium text-indigo-700 hover:bg-indigo-50">Download PDF</button>
                                     <button type="button" @click="printChallan(drawer.data.challan_id)" class="inline-flex min-h-9 items-center rounded-lg border border-slate-300 px-3 text-xs font-medium text-slate-700 hover:bg-slate-50">Print Challan</button>
+                                    <button
+                                        x-show="canWaive && Number(drawer.data.payload.summary.late_fee || 0) > 0"
+                                        type="button"
+                                        @click="waiveLateFee(drawer.data.challan_id)"
+                                        class="inline-flex min-h-9 items-center rounded-lg border border-amber-300 px-3 text-xs font-medium text-amber-700 hover:bg-amber-50"
+                                    >
+                                        Waive Late Fee
+                                    </button>
                                 </div>
                             </section>
 
@@ -301,6 +325,9 @@
                                     </table>
                                 </div>
                                 <div class="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                                    <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">Fee: <span class="font-semibold" x-text="money(drawer.data.payload.summary.fee_amount)"></span></div>
+                                    <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">Arrears: <span class="font-semibold" x-text="money(drawer.data.payload.summary.arrears)"></span></div>
+                                    <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">Late Fee: <span class="font-semibold" x-text="money(drawer.data.payload.summary.late_fee)"></span></div>
                                     <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">Total: <span class="font-semibold" x-text="money(drawer.data.payload.summary.total_amount)"></span></div>
                                     <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">Paid: <span class="font-semibold" x-text="money(drawer.data.payload.summary.paid_amount)"></span></div>
                                     <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">Remaining: <span class="font-semibold" x-text="money(drawer.data.payload.summary.remaining_amount)"></span></div>
@@ -385,6 +412,7 @@
                 },
                 canGenerate: Boolean(config.canGenerate),
                 canRecord: Boolean(config.canRecord),
+                canWaive: Boolean(config.canWaive),
                 drawer: {
                     open: false,
                     loading: false,
@@ -421,14 +449,17 @@
                 },
 
                 statusLabel(status) {
-                    return String(status || '').replace('_', ' ').replace(/\b\w/g, (ch) => ch.toUpperCase());
+                    const normalized = String(status || '').toLowerCase() === 'partially_paid'
+                        ? 'partial'
+                        : String(status || '');
+                    return normalized.replace('_', ' ').replace(/\b\w/g, (ch) => ch.toUpperCase());
                 },
 
                 statusBadgeClass(status) {
                     if (status === 'paid') {
                         return 'bg-emerald-100 text-emerald-700';
                     }
-                    if (status === 'partially_paid') {
+                    if (status === 'partial' || status === 'partially_paid') {
                         return 'bg-amber-100 text-amber-700';
                     }
                     return 'bg-rose-100 text-rose-700';
@@ -602,6 +633,38 @@
                     const windowRef = window.open(this.challanUrl(config.challanPdfUrlTemplate, id), '_blank');
                     if (windowRef) {
                         windowRef.focus();
+                    }
+                },
+
+                async waiveLateFee(challanId) {
+                    if (!this.canWaive) {
+                        this.setStatus('You do not have permission to waive late fee.', 'error');
+                        return;
+                    }
+
+                    this.clearStatus();
+                    try {
+                        const response = await fetch(this.challanUrl(config.waiveLateFeeUrlTemplate, challanId), {
+                            method: 'POST',
+                            headers: {
+                                Accept: 'application/json',
+                                'X-CSRF-TOKEN': config.csrfToken,
+                            },
+                        });
+
+                        const result = await response.json();
+                        if (!response.ok) {
+                            this.setStatus(result.message || 'Failed to waive late fee.', 'error');
+                            return;
+                        }
+
+                        this.setStatus(result.message || 'Late fee waived successfully.');
+                        await this.loadTable(false, this.meta.current_page);
+                        if (this.drawer.open && Number(this.drawer.data?.challan_id || 0) === Number(challanId)) {
+                            await this.openDrawer(challanId);
+                        }
+                    } catch (error) {
+                        this.setStatus('Unexpected error while waiving late fee.', 'error');
                     }
                 },
 

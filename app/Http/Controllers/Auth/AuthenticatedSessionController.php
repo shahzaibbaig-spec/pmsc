@@ -28,6 +28,13 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerate();
 
+        $user = $request->user();
+        if ($user && $user->hasRole('Teacher') && (bool) $user->must_change_password) {
+            return redirect()
+                ->route('profile.edit')
+                ->with('force_password_change', 'Please change your password to continue.');
+        }
+
         return redirect()->intended(route('dashboard', absolute: false));
     }
 

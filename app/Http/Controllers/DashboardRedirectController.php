@@ -11,6 +11,12 @@ class DashboardRedirectController extends Controller
     {
         $user = $request->user();
 
+        if ($user->hasRole('Teacher') && (bool) $user->must_change_password) {
+            return redirect()
+                ->route('profile.edit')
+                ->with('force_password_change', 'You must change your password before continuing.');
+        }
+
         return match (true) {
             $user->hasRole('Admin') => redirect()->route('admin.dashboard'),
             $user->hasRole('Principal') => redirect()->route('principal.dashboard'),

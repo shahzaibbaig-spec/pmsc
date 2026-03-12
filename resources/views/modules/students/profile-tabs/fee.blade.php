@@ -40,7 +40,7 @@
                             $status = strtolower((string) ($challan['status'] ?? 'pending'));
                             $statusClass = match ($status) {
                                 'paid' => 'bg-emerald-100 text-emerald-700',
-                                'partial' => 'bg-amber-100 text-amber-700',
+                                'partial', 'partially_paid' => 'bg-amber-100 text-amber-700',
                                 'overdue' => 'bg-rose-100 text-rose-700',
                                 default => 'bg-slate-100 text-slate-700',
                             };
@@ -58,7 +58,7 @@
                                 </span>
                             </td>
                             <td class="px-3 py-2 text-sm">
-                                @can('view_fee_challans')
+                                @if((auth()->user()?->hasAnyRole(['Admin', 'Accountant']) ?? false) && (auth()->user()?->can('view_fee_challans') ?? false))
                                     <a
                                         href="{{ route('principal.fees.challans.pdf', $challan['id']) }}"
                                         target="_blank"
@@ -68,7 +68,7 @@
                                     </a>
                                 @else
                                     <span class="text-xs text-slate-400">No access</span>
-                                @endcan
+                                @endif
                             </td>
                         </tr>
                     @empty
@@ -81,4 +81,3 @@
         </div>
     </div>
 </div>
-

@@ -494,24 +494,46 @@ function normalizeSubjectName(string $raw): string
         $name = trim(explode('/', $name)[0]);
     }
 
-    $map = [
-        'g. math' => 'General Math',
-        'g math' => 'General Math',
-        'b.math' => 'Business Math',
-        'b math' => 'Business Math',
-        'b.state' => 'Business Statistics',
+    $directMap = [
+        'bio' => 'Biology',
+        'biology' => 'Biology',
+        'math' => 'Mathematics',
+        'maths' => 'Mathematics',
+        'comp' => 'Computer Science',
+        'computer' => 'Computer Science',
+        'quran' => 'Nazra Quran',
+        'nazra' => 'Nazra Quran',
+        'islamyat' => 'Islamiat',
+        'islamiyat' => 'Islamiat',
+        'civis' => 'Civics',
+        'geo' => 'Geography',
+        'trading' => 'Principles of Commerce',
+        'banking' => 'Principles of Commerce',
+    ];
+
+    $containsMap = [
+        'g. math' => 'General Mathematics',
+        'g math' => 'General Mathematics',
+        'general math' => 'General Mathematics',
+        'b.math' => 'Business Mathematics',
+        'b math' => 'Business Mathematics',
+        'business math' => 'Business Mathematics',
+        'b.state' => 'Statistics',
+        'business statistics' => 'Statistics',
         'pak study' => 'Pakistan Studies',
         'pak. study' => 'Pakistan Studies',
         'islamyat study' => 'Islamiat',
         'islamic studies' => 'Islamiat',
-        'civis' => 'Civics',
-        'comp' => 'Computer',
-        'geo' => 'Geography',
-        'nzara' => 'Nazra',
     ];
 
     $lower = Str::lower($name);
-    foreach ($map as $from => $to) {
+    $compact = preg_replace('/[^a-z0-9]+/', '', $lower) ?? '';
+
+    if (isset($directMap[$compact])) {
+        return $directMap[$compact];
+    }
+
+    foreach ($containsMap as $from => $to) {
         if (str_contains($lower, $from)) {
             return $to;
         }

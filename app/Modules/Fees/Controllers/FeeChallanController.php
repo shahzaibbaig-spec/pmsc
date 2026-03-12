@@ -60,16 +60,19 @@ class FeeChallanController extends Controller
             'defaultDueDate' => now()->addDays(10)->toDateString(),
             'canGenerateChallans' => $request->user()?->can('generate_fee_challans') ?? false,
             'canRecordPayment' => $request->user()?->can('record_fee_payment') ?? false,
+            'canWaiveLateFee' => $request->user()?->can('record_fee_payment') ?? false,
         ]);
     }
 
     public function data(Request $request): JsonResponse
     {
+        $this->service->processLateFees();
+
         $filters = $request->validate([
             'session' => ['nullable', 'string', 'max:20'],
             'class_id' => ['nullable', 'integer', 'exists:school_classes,id'],
             'month' => ['nullable', 'regex:/^\d{4}-(0[1-9]|1[0-2])$/'],
-            'status' => ['nullable', 'in:unpaid,partially_paid,paid'],
+            'status' => ['nullable', 'in:unpaid,partial,partially_paid,paid'],
             'search' => ['nullable', 'string', 'max:150'],
             'page' => ['nullable', 'integer', 'min:1'],
             'per_page' => ['nullable', 'integer', 'min:5', 'max:100'],
@@ -84,7 +87,16 @@ class FeeChallanController extends Controller
             ->when(($filters['session'] ?? null) !== null && $filters['session'] !== '', fn ($builder) => $builder->where('session', (string) $filters['session']))
             ->when(($filters['class_id'] ?? null) !== null && $filters['class_id'] !== '', fn ($builder) => $builder->where('class_id', (int) $filters['class_id']))
             ->when(($filters['month'] ?? null) !== null && $filters['month'] !== '', fn ($builder) => $builder->where('month', (string) $filters['month']))
-            ->when(($filters['status'] ?? null) !== null && $filters['status'] !== '', fn ($builder) => $builder->where('status', (string) $filters['status']))
+            ->when(($filters['status'] ?? null) !== null && $filters['status'] !== '', function ($builder) use ($filters): void {
+                $status = (string) $filters['status'];
+                if (in_array($status, [FeeManagementService::STATUS_PARTIAL, 'partially_paid'], true)) {
+                    $builder->whereIn('status', [FeeManagementService::STATUS_PARTIAL, 'partially_paid']);
+
+                    return;
+                }
+
+                $builder->where('status', $status);
+            })
             ->when(($filters['search'] ?? null) !== null && trim((string) $filters['search']) !== '', function ($builder) use ($filters): void {
                 $search = trim((string) $filters['search']);
                 $builder->where(function ($nested) use ($search): void {
@@ -205,10 +217,11 @@ class FeeChallanController extends Controller
         if ($request->expectsJson()) {
             return response()->json([
                 'message' => sprintf(
-                    'Challans generated. Created: %d, Existing skipped: %d, No billable heads: %d.',
+                    'Challans generated. Created: %d, Existing skipped: %d, No billable heads: %d, Arrears added: %.2f.',
                     $summary['created'],
                     $summary['skipped_existing'],
-                    $summary['skipped_no_items']
+                    $summary['skipped_no_items'],
+                    (float) ($summary['total_arrears_added'] ?? 0)
                 ),
                 'summary' => $summary,
             ]);
@@ -217,10 +230,11 @@ class FeeChallanController extends Controller
         return redirect()
             ->route('principal.fees.challans.generate')
             ->with('status', sprintf(
-                'Challans generated. Created: %d, Existing skipped: %d, No billable heads: %d.',
+                'Challans generated. Created: %d, Existing skipped: %d, No billable heads: %d, Arrears added: %.2f.',
                 $summary['created'],
                 $summary['skipped_existing'],
-                $summary['skipped_no_items']
+                $summary['skipped_no_items'],
+                (float) ($summary['total_arrears_added'] ?? 0)
             ))
             ->with('latest_generation_summary', $summary);
     }
@@ -257,6 +271,27 @@ class FeeChallanController extends Controller
 
         return response()->json([
             'message' => 'Payment recorded successfully.',
+            'row' => $this->mapChallanRow($fresh),
+        ]);
+    }
+
+    public function waiveLateFee(Request $request, FeeChallan $feeChallan): JsonResponse
+    {
+        try {
+            $this->service->waiveLateFee($feeChallan, (int) $request->user()->id);
+        } catch (RuntimeException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+            ], 422);
+        }
+
+        $fresh = FeeChallan::query()
+            ->with(['student:id,name,student_id', 'classRoom:id,name,section'])
+            ->withSum('payments as paid_amount', 'amount_paid')
+            ->findOrFail($feeChallan->id);
+
+        return response()->json([
+            'message' => 'Late fee waived successfully.',
             'row' => $this->mapChallanRow($fresh),
         ]);
     }
@@ -299,6 +334,10 @@ class FeeChallanController extends Controller
         $paid = round((float) ($challan->paid_amount ?? 0), 2);
         $total = round((float) $challan->total_amount, 2);
         $remaining = round(max($total - $paid, 0), 2);
+        $arrears = round((float) ($challan->arrears ?? 0), 2);
+        $lateFee = round((float) ($challan->late_fee ?? 0), 2);
+        $feeAmount = round(max($total - $arrears - $lateFee, 0), 2);
+        $status = $this->service->normalizeStatus((string) $challan->status);
 
         return [
             'id' => (int) $challan->id,
@@ -311,10 +350,14 @@ class FeeChallanController extends Controller
             'month_label' => $this->service->monthLabel((string) $challan->month),
             'issue_date' => optional($challan->issue_date)->format('Y-m-d'),
             'due_date' => optional($challan->due_date)->format('Y-m-d'),
+            'fee_amount' => $feeAmount,
+            'arrears' => $arrears,
+            'late_fee' => $lateFee,
             'total_amount' => $total,
             'paid_amount' => $paid,
             'remaining_amount' => $remaining,
-            'status' => $challan->status,
+            'status' => $status,
+            'late_fee_waived_at' => optional($challan->late_fee_waived_at)->format('Y-m-d H:i:s'),
             'pdf_url' => route('principal.fees.challans.pdf', $challan),
         ];
     }

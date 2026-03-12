@@ -9,7 +9,10 @@ class UpdateFeeStructureRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->can('edit_fee_structure') ?? false;
+        $user = $this->user();
+
+        return ($user?->hasAnyRole(['Admin', 'Accountant']) ?? false)
+            && ($user?->can('edit_fee_structure') ?? false);
     }
 
     public function rules(): array

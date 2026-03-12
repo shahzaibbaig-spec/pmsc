@@ -264,12 +264,17 @@
         </div>
     </div>
 
+    @php
+        $subjectDifficultyChart = $analysis['charts']['subject_difficulty'] ?? ['labels' => [], 'values' => [], 'colors' => []];
+        $studentRiskChart = $analysis['charts']['student_risk'] ?? ['labels' => ['Low', 'Medium', 'High'], 'values' => [0, 0, 0]];
+        $performanceTrendChart = $analysis['charts']['student_performance_trend'] ?? ['labels' => ['Class Test', 'Bimonthly', 'First Term', 'Final'], 'values' => [0, 0, 0, 0]];
+    @endphp
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script>
         (function initAnalyzerCharts() {
-            const subjectDifficulty = @json($analysis['charts']['subject_difficulty'] ?? ['labels' => [], 'values' => [], 'colors' => []]);
-            const studentRisk = @json($analysis['charts']['student_risk'] ?? ['labels' => ['Low', 'Medium', 'High'], 'values' => [0, 0, 0]]);
-            const performanceTrend = @json($analysis['charts']['student_performance_trend'] ?? ['labels' => ['Class Test', 'Bimonthly', 'First Term', 'Final'], 'values' => [0, 0, 0, 0]]);
+            const subjectDifficulty = {{ \Illuminate\Support\Js::from($subjectDifficultyChart) }};
+            const studentRisk = {{ \Illuminate\Support\Js::from($studentRiskChart) }};
+            const performanceTrend = {{ \Illuminate\Support\Js::from($performanceTrendChart) }};
 
             const difficultyCtx = document.getElementById('subjectDifficultyChart');
             if (difficultyCtx) {

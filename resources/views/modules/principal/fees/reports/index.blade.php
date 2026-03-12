@@ -9,7 +9,12 @@
         <div class="mx-auto max-w-7xl space-y-6 px-4 sm:px-6 lg:px-8">
             <div class="overflow-hidden rounded-lg bg-white shadow-sm">
                 <div class="p-5 sm:p-6">
-                    <h3 class="text-lg font-medium text-gray-900">Filters</h3>
+                    <div class="flex flex-wrap items-center justify-between gap-3">
+                        <h3 class="text-lg font-medium text-gray-900">Filters</h3>
+                        <a href="{{ route('principal.fees.reports.arrears') }}" class="inline-flex min-h-10 items-center rounded-md border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                            View Arrears Report
+                        </a>
+                    </div>
                     <form method="GET" action="{{ route('principal.fees.reports.index') }}" class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-4">
                         <div>
                             <x-input-label for="session" value="Session" />

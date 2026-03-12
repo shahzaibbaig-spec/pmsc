@@ -9,7 +9,10 @@ class RecordFeePaymentRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->can('record_fee_payment') ?? false;
+        $user = $this->user();
+
+        return ($user?->hasAnyRole(['Admin', 'Accountant']) ?? false)
+            && ($user?->can('record_fee_payment') ?? false);
     }
 
     public function rules(): array

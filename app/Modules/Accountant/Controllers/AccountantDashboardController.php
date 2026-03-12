@@ -7,13 +7,16 @@ use App\Models\FeeChallan;
 use App\Models\FeePayment;
 use App\Models\PayrollItem;
 use App\Models\Student;
+use App\Modules\Fees\Services\FeeManagementService;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class AccountantDashboardController extends Controller
 {
-    public function __invoke(Request $request): View
+    public function __invoke(Request $request, FeeManagementService $feeManagementService): View
     {
+        $feeManagementService->processLateFees();
+
         $currentMonth = now()->format('Y-m');
         $startOfMonth = now()->startOfMonth()->toDateString();
         $endOfMonth = now()->endOfMonth()->toDateString();
@@ -26,8 +29,15 @@ class AccountantDashboardController extends Controller
             ->count();
 
         $pendingFees = round((float) FeeChallan::query()
-            ->whereIn('status', ['unpaid', 'partially_paid'])
-            ->sum('total_amount'), 2);
+            ->withSum('payments as paid_amount', 'amount_paid')
+            ->whereIn('status', ['unpaid', 'partial', 'partially_paid'])
+            ->get(['id', 'total_amount'])
+            ->sum(function (FeeChallan $challan): float {
+                $total = (float) $challan->total_amount;
+                $paid = (float) ($challan->paid_amount ?? 0);
+
+                return max($total - $paid, 0);
+            }), 2);
 
         $monthlyPayroll = round((float) PayrollItem::query()
             ->whereHas('payrollRun', function ($query) use ($currentMonth): void {
@@ -58,4 +68,3 @@ class AccountantDashboardController extends Controller
         ]);
     }
 }
-

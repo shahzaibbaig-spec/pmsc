@@ -106,6 +106,18 @@
 
         <table class="summary">
             <tr>
+                <td class="label">Fee Amount</td>
+                <td class="text-right">{{ number_format((float) ($data['summary']['fee_amount'] ?? 0), 2) }}</td>
+            </tr>
+            <tr>
+                <td class="label">Arrears</td>
+                <td class="text-right">{{ number_format((float) ($data['summary']['arrears'] ?? 0), 2) }}</td>
+            </tr>
+            <tr>
+                <td class="label">Late Fee</td>
+                <td class="text-right">{{ number_format((float) ($data['summary']['late_fee'] ?? 0), 2) }}</td>
+            </tr>
+            <tr>
                 <td class="label">Total Amount</td>
                 <td class="text-right">{{ number_format((float) $data['summary']['total_amount'], 2) }}</td>
             </tr>

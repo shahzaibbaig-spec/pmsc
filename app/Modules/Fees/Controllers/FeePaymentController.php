@@ -21,6 +21,8 @@ class FeePaymentController extends Controller
 
     public function index(Request $request): View
     {
+        $this->service->processLateFees();
+
         $filters = $request->validate([
             'session' => ['nullable', 'string', 'max:20'],
             'class_id' => ['nullable', 'integer', 'exists:school_classes,id'],
@@ -48,7 +50,7 @@ class FeePaymentController extends Controller
                 $builder->where('month', (string) $filters['month']);
             })
             ->when($status === 'pending', function ($builder): void {
-                $builder->whereIn('status', ['unpaid', 'partially_paid']);
+                $builder->whereIn('status', ['unpaid', 'partial', 'partially_paid']);
             })
             ->when($status === 'paid', function ($builder): void {
                 $builder->where('status', 'paid');

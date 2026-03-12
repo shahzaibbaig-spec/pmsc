@@ -403,3 +403,7 @@ Schedule::command('notifications:attendance-cutoff-reminder --cutoff=13:00')
     ->weekdays()
     ->dailyAt('13:10')
     ->withoutOverlapping();
+
+Schedule::command('fees:process-late-fees')
+    ->dailyAt('00:30')
+    ->withoutOverlapping();

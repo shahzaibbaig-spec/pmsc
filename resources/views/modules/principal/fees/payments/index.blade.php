@@ -103,10 +103,13 @@
                                 @php
                                     $statusClass = match ($challan->status) {
                                         'paid' => 'bg-emerald-100 text-emerald-700',
-                                        'partially_paid' => 'bg-amber-100 text-amber-700',
+                                        'partial', 'partially_paid' => 'bg-amber-100 text-amber-700',
                                         default => 'bg-rose-100 text-rose-700',
                                     };
                                     $remainingAmount = (float) $challan->remaining_amount;
+                                    $arrearsAmount = (float) ($challan->arrears ?? 0);
+                                    $lateFeeAmount = (float) ($challan->late_fee ?? 0);
+                                    $baseFeeAmount = max((float) $challan->total_amount - $arrearsAmount - $lateFeeAmount, 0);
                                 @endphp
                                 <tr>
                                     <td class="px-4 py-3 text-sm text-gray-800">
@@ -123,6 +126,9 @@
                                         <div class="text-xs text-gray-500">{{ $challan->month_label }}</div>
                                     </td>
                                     <td class="px-4 py-3 text-sm text-gray-800">
+                                        <div>Fee: {{ number_format($baseFeeAmount, 2) }}</div>
+                                        <div>Arrears: {{ number_format($arrearsAmount, 2) }}</div>
+                                        <div>Late Fee: {{ number_format($lateFeeAmount, 2) }}</div>
                                         <div>Total: {{ number_format((float) $challan->total_amount, 2) }}</div>
                                         <div>Paid: {{ number_format((float) $challan->paid_amount, 2) }}</div>
                                         <div class="font-medium">Remaining: {{ number_format($remainingAmount, 2) }}</div>

@@ -9,7 +9,10 @@ class GenerateFeeChallansRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->can('generate_fee_challans') ?? false;
+        $user = $this->user();
+
+        return ($user?->hasAnyRole(['Admin', 'Accountant']) ?? false)
+            && ($user?->can('generate_fee_challans') ?? false);
     }
 
     public function rules(): array

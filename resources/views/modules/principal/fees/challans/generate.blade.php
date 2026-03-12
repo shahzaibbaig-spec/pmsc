@@ -109,6 +109,10 @@
                                 <p class="text-xs uppercase tracking-wider text-slate-500">No Billable Heads</p>
                                 <p class="mt-1 text-xl font-semibold text-slate-900">{{ $latestSummary['skipped_no_items'] }}</p>
                             </div>
+                            <div class="rounded-md border border-indigo-200 bg-indigo-50 p-4">
+                                <p class="text-xs uppercase tracking-wider text-indigo-700">Arrears Added</p>
+                                <p class="mt-1 text-xl font-semibold text-indigo-800">{{ number_format((float) ($latestSummary['total_arrears_added'] ?? 0), 2) }}</p>
+                            </div>
                         </div>
                     </div>
                 </div>

@@ -9,8 +9,13 @@ class StorePayrollProfileRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return ($this->user()?->can('manage_payroll_profiles') ?? false)
-            || ($this->user()?->can('manage_payroll') ?? false);
+        $user = $this->user();
+        $hasFinanceRole = $user?->hasAnyRole(['Admin', 'Accountant']) ?? false;
+
+        return $hasFinanceRole && (
+            ($user?->can('manage_payroll_profiles') ?? false)
+            || ($user?->can('manage_payroll') ?? false)
+        );
     }
 
     public function rules(): array
