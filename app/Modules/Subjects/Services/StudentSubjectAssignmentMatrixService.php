@@ -6,6 +6,7 @@ use App\Models\SchoolClass;
 use App\Models\Student;
 use App\Models\StudentSubjectAssignment;
 use App\Models\SubjectGroup;
+use App\Models\User;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -152,6 +153,7 @@ class StudentSubjectAssignmentMatrixService
     public function replaceStudentAssignments(int $studentId, string $session, array $subjectIds, int $assignedBy): int
     {
         $student = Student::query()->findOrFail($studentId);
+        $resolvedAssignedBy = $this->resolveAssignedBy($assignedBy);
 
         $allowedSubjectIds = $student->classRoom
             ? $student->classRoom->subjects()
@@ -164,7 +166,7 @@ class StudentSubjectAssignmentMatrixService
 
         $normalized = $this->normalizeSubjectIds($subjectIds, $allowedSubjectIds);
 
-        return DB::transaction(function () use ($student, $session, $normalized, $assignedBy): int {
+        return DB::transaction(function () use ($student, $session, $normalized, $resolvedAssignedBy): int {
             $groupBasedSubjectIds = StudentSubjectAssignment::query()
                 ->where('session', $session)
                 ->where('student_id', (int) $student->id)
@@ -196,7 +198,7 @@ class StudentSubjectAssignmentMatrixService
                 'class_id' => (int) $student->class_id,
                 'subject_id' => $subjectId,
                 'subject_group_id' => null,
-                'assigned_by' => $assignedBy,
+                'assigned_by' => $resolvedAssignedBy,
                 'created_at' => $now,
                 'updated_at' => $now,
             ])->all();
@@ -213,6 +215,7 @@ class StudentSubjectAssignmentMatrixService
     public function replaceClassAssignments(int $classId, string $session, array $subjectIds, int $assignedBy): array
     {
         $classRoom = SchoolClass::query()->findOrFail($classId);
+        $resolvedAssignedBy = $this->resolveAssignedBy($assignedBy);
         $students = Student::query()
             ->where('class_id', $classRoom->id)
             ->where('status', 'active')
@@ -238,7 +241,7 @@ class StudentSubjectAssignmentMatrixService
             'subject_ids' => $normalized,
         ]);
 
-        return DB::transaction(function () use ($students, $session, $normalized, $assignedBy): array {
+        return DB::transaction(function () use ($students, $session, $normalized, $resolvedAssignedBy): array {
             $studentsCount = $students->count();
             $subjectsCount = count($normalized);
             $assignmentsCreated = 0;
@@ -262,7 +265,7 @@ class StudentSubjectAssignmentMatrixService
                         [
                             'class_id' => (int) $student->class_id,
                             'subject_group_id' => null,
-                            'assigned_by' => $assignedBy,
+                            'assigned_by' => $resolvedAssignedBy,
                         ]
                     );
 
@@ -274,13 +277,13 @@ class StudentSubjectAssignmentMatrixService
                     // Ensure existing assignment behaves as common-subject assignment in matrix.
                     $needsUpdate = $assignment->subject_group_id !== null
                         || (int) $assignment->class_id !== (int) $student->class_id
-                        || (int) ($assignment->assigned_by ?? 0) !== (int) $assignedBy;
+                        || (int) ($assignment->assigned_by ?? 0) !== (int) ($resolvedAssignedBy ?? 0);
 
                     if ($needsUpdate) {
                         $assignment->forceFill([
                             'class_id' => (int) $student->class_id,
                             'subject_group_id' => null,
-                            'assigned_by' => $assignedBy,
+                            'assigned_by' => $resolvedAssignedBy,
                         ])->save();
                     }
                 }
@@ -352,13 +355,14 @@ class StudentSubjectAssignmentMatrixService
         }
 
         try {
+            $resolvedCreatedBy = $createdBy !== null ? $this->resolveAssignedBy($createdBy) : null;
             $group = DB::transaction(function () use (
                 $session,
                 $classRoom,
                 $cleanName,
                 $cleanDescription,
                 $normalized,
-                $createdBy,
+                $resolvedCreatedBy,
                 $isActive
             ): SubjectGroup {
                 /** @var SubjectGroup $group */
@@ -368,7 +372,7 @@ class StudentSubjectAssignmentMatrixService
                     'name' => $cleanName,
                     'description' => $cleanDescription,
                     'is_active' => $isActive,
-                    'created_by' => $createdBy,
+                    'created_by' => $resolvedCreatedBy,
                 ]);
 
                 $group->subjects()->sync($normalized);
@@ -399,6 +403,7 @@ class StudentSubjectAssignmentMatrixService
         int $assignedBy
     ): array {
         $student = Student::query()->findOrFail($studentId);
+        $resolvedAssignedBy = $this->resolveAssignedBy($assignedBy);
         $subjectGroup = null;
         $groupSubjectIds = [];
 
@@ -426,7 +431,7 @@ class StudentSubjectAssignmentMatrixService
             $session,
             $subjectGroup,
             $groupSubjectIds,
-            $assignedBy
+            $resolvedAssignedBy
         ): array {
             $commonSubjectIds = StudentSubjectAssignment::query()
                 ->where('session', $session)
@@ -454,7 +459,7 @@ class StudentSubjectAssignmentMatrixService
                     'class_id' => (int) $student->class_id,
                     'subject_id' => $subjectId,
                     'subject_group_id' => (int) $subjectGroup->id,
-                    'assigned_by' => $assignedBy,
+                    'assigned_by' => $resolvedAssignedBy,
                     'created_at' => $now,
                     'updated_at' => $now,
                 ])->all();
@@ -535,5 +540,16 @@ class StudentSubjectAssignmentMatrixService
         return str_contains($message, 'unique')
             || str_contains($message, 'duplicate')
             || str_contains($message, 'subject_groups_session_class_name_unique');
+    }
+
+    private function resolveAssignedBy(?int $assignedBy): ?int
+    {
+        if ($assignedBy === null || $assignedBy <= 0) {
+            return null;
+        }
+
+        return User::query()->whereKey($assignedBy)->exists()
+            ? $assignedBy
+            : null;
     }
 }
