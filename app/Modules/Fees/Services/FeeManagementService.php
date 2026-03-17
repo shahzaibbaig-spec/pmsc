@@ -10,6 +10,7 @@ use App\Models\SchoolClass;
 use App\Models\SchoolSetting;
 use App\Models\Student;
 use App\Models\StudentFeeAssignment;
+use App\Models\StudentFeeStructure;
 use App\Models\User;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Carbon;
@@ -25,6 +26,12 @@ class FeeManagementService
     public const STATUS_PARTIAL = 'partial';
 
     public const STATUS_PAID = 'paid';
+
+    public const STUDENT_CUSTOM_FEE_TUITION = 'tuition_fee';
+
+    public const STUDENT_CUSTOM_FEE_COMPUTER = 'computer_fee';
+
+    public const STUDENT_CUSTOM_FEE_EXAM = 'exam_fee';
 
     public function sessionOptions(int $backward = 1, int $forward = 3): array
     {
@@ -103,6 +110,118 @@ class FeeManagementService
                 ]);
             }
         );
+    }
+
+    /**
+     * @param array{
+     *   student_id:int,
+     *   session:string,
+     *   tuition_fee:float|int|string,
+     *   computer_fee:float|int|string,
+     *   exam_fee:float|int|string,
+     *   is_active?:bool
+     * } $attributes
+     */
+    public function upsertStudentCustomFee(array $attributes, ?int $createdBy): StudentFeeStructure
+    {
+        $resolvedCreatedBy = $this->resolveUserId($createdBy);
+
+        return $this->executeWithUserForeignKeyFallback(
+            $resolvedCreatedBy,
+            function (?int $safeCreatedBy) use ($attributes): StudentFeeStructure {
+                return DB::transaction(function () use ($attributes, $safeCreatedBy): StudentFeeStructure {
+                    $record = StudentFeeStructure::query()->firstOrNew([
+                        'student_id' => (int) $attributes['student_id'],
+                        'session' => (string) $attributes['session'],
+                    ]);
+
+                    if (! $record->exists) {
+                        $record->created_by = $safeCreatedBy;
+                    } elseif ($record->created_by === null && $safeCreatedBy !== null) {
+                        $record->created_by = $safeCreatedBy;
+                    }
+
+                    $record->forceFill([
+                        'tuition_fee' => round((float) $attributes['tuition_fee'], 2),
+                        'computer_fee' => round((float) $attributes['computer_fee'], 2),
+                        'exam_fee' => round((float) $attributes['exam_fee'], 2),
+                        'is_active' => (bool) ($attributes['is_active'] ?? true),
+                    ])->save();
+
+                    return $record->fresh() ?? $record;
+                });
+            }
+        );
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function studentCustomFeeFields(): array
+    {
+        return [
+            self::STUDENT_CUSTOM_FEE_TUITION,
+            self::STUDENT_CUSTOM_FEE_COMPUTER,
+            self::STUDENT_CUSTOM_FEE_EXAM,
+        ];
+    }
+
+    /**
+     * @param Collection<int, FeeStructure> $structures
+     * @return array{tuition_fee:float,computer_fee:float,exam_fee:float}
+     */
+    public function customFeeBreakdownFromStructures(Collection $structures): array
+    {
+        $breakdown = [
+            self::STUDENT_CUSTOM_FEE_TUITION => 0.0,
+            self::STUDENT_CUSTOM_FEE_COMPUTER => 0.0,
+            self::STUDENT_CUSTOM_FEE_EXAM => 0.0,
+        ];
+
+        foreach ($structures as $structure) {
+            $field = $this->customFeeFieldFromFeeHead((string) $structure->fee_type, (string) $structure->title);
+            if ($field === null) {
+                continue;
+            }
+
+            $breakdown[$field] = round($breakdown[$field] + (float) $structure->amount, 2);
+        }
+
+        return $breakdown;
+    }
+
+    public function customFeeFieldFromFeeHead(?string $feeType, ?string $title = null): ?string
+    {
+        $normalizedFeeType = strtolower(trim((string) $feeType));
+        $normalizedTitle = strtolower(trim((string) $title));
+
+        if (
+            $this->matchesCustomFeeKeyword($normalizedFeeType, ['tuition'])
+            || $this->matchesCustomFeeKeyword($normalizedTitle, ['tuition'])
+        ) {
+            return self::STUDENT_CUSTOM_FEE_TUITION;
+        }
+
+        if (
+            $this->matchesCustomFeeKeyword($normalizedFeeType, ['computer'])
+            || $this->matchesCustomFeeKeyword($normalizedTitle, ['computer'])
+        ) {
+            return self::STUDENT_CUSTOM_FEE_COMPUTER;
+        }
+
+        if (
+            $this->matchesCustomFeeKeyword($normalizedFeeType, ['exam', 'examination'])
+            || $this->matchesCustomFeeKeyword($normalizedTitle, ['exam', 'examination'])
+        ) {
+            return self::STUDENT_CUSTOM_FEE_EXAM;
+        }
+
+        return null;
+    }
+
+    public function customFeeTotal(float|int|string $tuitionFee, float|int|string $computerFee, float|int|string $examFee): float
+    {
+        return round((float) $tuitionFee + (float) $computerFee + (float) $examFee, 2);
     }
 
     public function graceDays(): int
@@ -255,6 +374,12 @@ class FeeManagementService
 
         $studentIds = $students->pluck('id');
         $oneTimeStructureIds = $feeStructures->where('is_monthly', false)->pluck('id');
+        $studentCustomFeeByStudent = StudentFeeStructure::query()
+            ->where('session', $session)
+            ->where('is_active', true)
+            ->whereIn('student_id', $studentIds)
+            ->get(['student_id', 'tuition_fee', 'computer_fee', 'exam_fee', 'is_active'])
+            ->keyBy('student_id');
 
         $alreadyBilledOneTime = collect();
         if ($oneTimeStructureIds->isNotEmpty()) {
@@ -321,6 +446,7 @@ class FeeManagementService
                 $alreadyBilledOneTime,
                 $existingChallanKeys,
                 $arrearsByStudent,
+                $studentCustomFeeByStudent,
                 &$createdCount,
                 &$skippedExistingCount,
                 &$skippedNoItemsCount,
@@ -337,6 +463,7 @@ class FeeManagementService
                     $alreadyBilledOneTime,
                     $existingChallanKeys,
                     $arrearsByStudent,
+                    $studentCustomFeeByStudent,
                     &$createdCount,
                     &$skippedExistingCount,
                     &$skippedNoItemsCount,
@@ -355,6 +482,7 @@ class FeeManagementService
 
                         $items = [];
                         $totalAmount = 0.0;
+                        $studentCustomFee = $studentCustomFeeByStudent->get($student->id);
 
                         foreach ($feeStructures as $structure) {
                             $assignment = StudentFeeAssignment::query()->firstOrCreate(
@@ -378,9 +506,10 @@ class FeeManagementService
                                 continue;
                             }
 
-                            $lineAmount = $assignment->custom_amount !== null
+                            $customFeeAmount = $this->lineAmountFromStudentCustomFee($studentCustomFee, $structure);
+                            $lineAmount = $customFeeAmount ?? ($assignment->custom_amount !== null
                                 ? (float) $assignment->custom_amount
-                                : (float) $structure->amount;
+                                : (float) $structure->amount);
 
                             if ($lineAmount <= 0) {
                                 continue;
@@ -677,6 +806,7 @@ class FeeManagementService
         }
 
         return (str_contains($message, 'fee_structures') && str_contains($message, 'created_by'))
+            || (str_contains($message, 'student_fee_structures') && str_contains($message, 'created_by'))
             || (str_contains($message, 'student_fee_assignments') && str_contains($message, 'assigned_by'))
             || (str_contains($message, 'fee_challans') && str_contains($message, 'generated_by'))
             || (str_contains($message, 'fee_payments') && str_contains($message, 'received_by'));
@@ -691,6 +821,38 @@ class FeeManagementService
         return User::query()->useWritePdo()->whereKey($userId)->exists()
             ? $userId
             : null;
+    }
+
+    private function lineAmountFromStudentCustomFee(?StudentFeeStructure $studentCustomFee, FeeStructure $structure): ?float
+    {
+        if (! $studentCustomFee || ! $studentCustomFee->is_active) {
+            return null;
+        }
+
+        $field = $this->customFeeFieldFromFeeHead((string) $structure->fee_type, (string) $structure->title);
+        if ($field === null) {
+            return null;
+        }
+
+        return round((float) ($studentCustomFee->{$field} ?? 0), 2);
+    }
+
+    /**
+     * @param array<int, string> $keywords
+     */
+    private function matchesCustomFeeKeyword(string $value, array $keywords): bool
+    {
+        if ($value === '') {
+            return false;
+        }
+
+        foreach ($keywords as $keyword) {
+            if (str_contains($value, $keyword)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function applyLateFeeIfEligibleToLockedChallan(FeeChallan $challan, float $paidAmount): void

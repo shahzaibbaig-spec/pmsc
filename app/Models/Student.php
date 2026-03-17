@@ -118,6 +118,11 @@ class Student extends Model
         return $this->hasMany(StudentFeeAssignment::class);
     }
 
+    public function customFeeStructures(): HasMany
+    {
+        return $this->hasMany(StudentFeeStructure::class);
+    }
+
     public function feeChallans(): HasMany
     {
         return $this->hasMany(FeeChallan::class);

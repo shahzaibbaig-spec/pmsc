@@ -80,6 +80,11 @@ class User extends Authenticatable
         return $this->hasMany(FeeStructure::class, 'created_by');
     }
 
+    public function createdStudentFeeStructures(): HasMany
+    {
+        return $this->hasMany(StudentFeeStructure::class, 'created_by');
+    }
+
     public function generatedFeeChallans(): HasMany
     {
         return $this->hasMany(FeeChallan::class, 'generated_by');

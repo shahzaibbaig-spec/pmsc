@@ -28,6 +28,7 @@
     <x-ui.card class="mt-6" title="Finance Shortcuts">
         <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <x-ui.button href="{{ route('principal.fees.structures.index') }}" variant="outline">Fee Structure</x-ui.button>
+            <x-ui.button href="{{ route('principal.fees.student-custom-fees.index') }}" variant="outline">Student Custom Fee</x-ui.button>
             <x-ui.button href="{{ route('principal.fees.challans.generate') }}" variant="outline">Generate Challans</x-ui.button>
             <x-ui.button href="{{ route('principal.fees.payments.index') }}" variant="outline">Record Fee Payments</x-ui.button>
             <x-ui.button href="{{ route('principal.fees.reports.index') }}" variant="outline">Fee Reports</x-ui.button>

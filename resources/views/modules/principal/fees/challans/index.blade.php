@@ -17,6 +17,7 @@
             feeStructureUrl: @js(route('principal.fees.challans.fee-structure-preview')),
             challanDetailUrlTemplate: @js(route('principal.fees.challans.show', ['feeChallan' => '__ID__'])),
             challanPdfUrlTemplate: @js(route('principal.fees.challans.pdf', ['feeChallan' => '__ID__'])),
+            classPdfUrl: @js(route('principal.fees.challans.class-pdf')),
             markPaidUrlTemplate: @js(route('principal.fees.challans.mark-paid', ['feeChallan' => '__ID__'])),
             waiveLateFeeUrlTemplate: @js(route('principal.fees.challans.waive-late-fee', ['feeChallan' => '__ID__'])),
             csrfToken: @js(csrf_token()),
@@ -73,6 +74,14 @@
                         class="inline-flex min-h-11 flex-1 items-center justify-center rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                         <span x-text="generating ? 'Generating...' : 'Generate Challans'"></span>
+                    </button>
+                    <button
+                        type="button"
+                        @click="printClassChallans()"
+                        :disabled="!session || !classId || !month"
+                        class="inline-flex min-h-11 items-center rounded-xl border border-indigo-300 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                        Print Whole Class
                     </button>
                     <button
                         type="button"
@@ -219,7 +228,7 @@
                                     <div class="flex flex-wrap gap-2">
                                         <button type="button" @click="openDrawer(row.id)" class="inline-flex min-h-9 items-center rounded-lg border border-slate-300 px-3 text-xs font-medium text-slate-700 hover:bg-slate-50">View</button>
                                         <button type="button" @click="downloadPdf(row.id)" class="inline-flex min-h-9 items-center rounded-lg border border-indigo-300 px-3 text-xs font-medium text-indigo-700 hover:bg-indigo-50">Download PDF</button>
-                                        <button type="button" @click="printChallan(row.id)" class="inline-flex min-h-9 items-center rounded-lg border border-slate-300 px-3 text-xs font-medium text-slate-700 hover:bg-slate-50">Print</button>
+                                        <button type="button" @click="printChallan(row.id)" class="inline-flex min-h-9 items-center rounded-lg border border-slate-300 px-3 text-xs font-medium text-slate-700 hover:bg-slate-50">Print Student</button>
                                         <button
                                             x-show="canWaive && Number(row.late_fee || 0) > 0"
                                             type="button"
@@ -627,6 +636,25 @@
 
                 downloadPdf(id) {
                     window.open(this.challanUrl(config.challanPdfUrlTemplate, id), '_blank');
+                },
+
+                printClassChallans() {
+                    this.clearStatus();
+                    if (!this.session || !this.classId || !this.month) {
+                        this.setStatus('Select session, class, and month to print class challans.', 'error');
+                        return;
+                    }
+
+                    const params = new URLSearchParams({
+                        session: this.session,
+                        class_id: String(this.classId),
+                        month: this.month,
+                    });
+
+                    const windowRef = window.open(`${config.classPdfUrl}?${params.toString()}`, '_blank');
+                    if (windowRef) {
+                        windowRef.focus();
+                    }
                 },
 
                 printChallan(id) {

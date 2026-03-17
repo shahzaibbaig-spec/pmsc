@@ -18,6 +18,7 @@ use App\Modules\Fees\Controllers\FeeChallanController;
 use App\Modules\Fees\Controllers\FeePaymentController;
 use App\Modules\Fees\Controllers\FeeReportController;
 use App\Modules\Fees\Controllers\FeeStructureController;
+use App\Modules\Fees\Controllers\StudentCustomFeeController;
 use App\Modules\Medical\Controllers\DoctorDashboardController;
 use App\Modules\Medical\Controllers\DoctorMedicalRequestListController;
 use App\Modules\Medical\Controllers\MedicalReferralController;
@@ -508,6 +509,18 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
         ->middleware(['role:Admin,Accountant', 'permission:delete_fee_structure'])
         ->name('principal.fees.structures.destroy');
 
+    Route::get('/principal/fees/student-custom-fees', [StudentCustomFeeController::class, 'index'])
+        ->middleware(['role:Admin,Accountant', 'permission:edit_fee_structure'])
+        ->name('principal.fees.student-custom-fees.index');
+
+    Route::post('/principal/fees/student-custom-fees', [StudentCustomFeeController::class, 'store'])
+        ->middleware(['role:Admin,Accountant', 'permission:edit_fee_structure'])
+        ->name('principal.fees.student-custom-fees.store');
+
+    Route::delete('/principal/fees/student-custom-fees/{studentFeeStructure}', [StudentCustomFeeController::class, 'reset'])
+        ->middleware(['role:Admin,Accountant', 'permission:edit_fee_structure'])
+        ->name('principal.fees.student-custom-fees.reset');
+
     Route::get('/principal/fees/challans/generate', [FeeChallanController::class, 'create'])
         ->middleware(['role:Admin,Accountant', 'permission:generate_fee_challans'])
         ->name('principal.fees.challans.generate');
@@ -527,6 +540,10 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
     Route::get('/principal/fees/challans/fee-structure-preview', [FeeChallanController::class, 'feeStructurePreview'])
         ->middleware(['role:Admin,Accountant', 'permission:view_fee_challans,generate_fee_challans'])
         ->name('principal.fees.challans.fee-structure-preview');
+
+    Route::get('/principal/fees/challans/class-pdf', [FeeChallanController::class, 'classPdf'])
+        ->middleware(['role:Admin,Accountant', 'permission:view_fee_challans'])
+        ->name('principal.fees.challans.class-pdf');
 
     Route::get('/principal/fees/challans/{feeChallan}', [FeeChallanController::class, 'show'])
         ->middleware(['role:Admin,Accountant', 'permission:view_fee_challans'])

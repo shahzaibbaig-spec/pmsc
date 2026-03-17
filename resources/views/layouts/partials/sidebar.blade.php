@@ -16,6 +16,9 @@
         if ($sidebarUser?->can('view_fee_structure')) {
             $menuItems[] = ['route' => 'principal.fees.structures.index', 'label' => 'Fee Structures'];
         }
+        if ($sidebarUser?->can('edit_fee_structure')) {
+            $menuItems[] = ['route' => 'principal.fees.student-custom-fees.index', 'label' => 'Student Custom Fee'];
+        }
         if ($sidebarUser?->can('generate_fee_challans')) {
             $menuItems[] = ['route' => 'principal.fees.challans.generate', 'label' => 'Generate Challans'];
         }
@@ -78,6 +81,9 @@
 
         if ($sidebarUser?->can('view_fee_structure')) {
             $menuItems[] = ['route' => 'principal.fees.structures.index', 'label' => 'Fee Structure'];
+        }
+        if ($sidebarUser?->can('edit_fee_structure')) {
+            $menuItems[] = ['route' => 'principal.fees.student-custom-fees.index', 'label' => 'Student Custom Fee'];
         }
         if ($sidebarUser?->can('generate_fee_challans')) {
             $menuItems[] = ['route' => 'principal.fees.challans.generate', 'label' => 'Generate Challans'];

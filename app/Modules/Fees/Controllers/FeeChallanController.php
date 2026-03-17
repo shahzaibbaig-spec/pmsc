@@ -307,6 +307,58 @@ class FeeChallanController extends Controller
         return $pdf->stream('fee_challan_'.$feeChallan->challan_number.'.pdf');
     }
 
+    public function classPdf(Request $request): Response
+    {
+        $validated = $request->validate([
+            'session' => ['required', 'string', 'max:20'],
+            'class_id' => ['required', 'integer', 'exists:school_classes,id'],
+            'month' => ['required', 'regex:/^\d{4}-(0[1-9]|1[0-2])$/'],
+        ]);
+
+        $challans = FeeChallan::query()
+            ->with([
+                'student:id,name,student_id,class_id',
+                'classRoom:id,name,section',
+                'items:id,fee_challan_id,title,fee_type,amount',
+                'payments:id,fee_challan_id,amount_paid,payment_date',
+            ])
+            ->where('session', (string) $validated['session'])
+            ->where('class_id', (int) $validated['class_id'])
+            ->where('month', (string) $validated['month'])
+            ->orderBy('student_id')
+            ->orderBy('id')
+            ->get();
+
+        if ($challans->isEmpty()) {
+            abort(404, 'No challans found for selected class, session, and month.');
+        }
+
+        $payloads = $challans
+            ->map(fn (FeeChallan $challan): array => $this->service->challanPayload($challan))
+            ->values();
+
+        $first = $challans->first();
+        $className = trim(($first?->classRoom?->name ?? 'Class').' '.($first?->classRoom?->section ?? ''));
+
+        $pdf = Pdf::loadView('modules.reports.fee-challans-class', [
+            'payloads' => $payloads,
+            'meta' => [
+                'class_name' => $className,
+                'session' => (string) $validated['session'],
+                'month' => (string) $validated['month'],
+                'month_label' => $this->service->monthLabel((string) $validated['month']),
+                'total_challans' => $challans->count(),
+            ],
+        ])->setPaper('a4', 'portrait');
+
+        return $pdf->stream(sprintf(
+            'fee_challans_%s_%s_%s.pdf',
+            str_replace(' ', '_', strtolower($className)),
+            str_replace('-', '', (string) $validated['session']),
+            str_replace('-', '', (string) $validated['month'])
+        ));
+    }
+
     private function availableSessions(): array
     {
         $sessions = FeeChallan::query()
