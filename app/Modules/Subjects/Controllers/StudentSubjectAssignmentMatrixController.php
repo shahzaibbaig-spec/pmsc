@@ -4,12 +4,14 @@ namespace App\Modules\Subjects\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Models\SchoolClass;
+use App\Models\SubjectGroup;
 use App\Modules\Subjects\Requests\AssignStudentSubjectGroupRequest;
 use App\Modules\Subjects\Requests\AssignClassStudentSubjectsRequest;
 use App\Modules\Subjects\Requests\StoreClassCustomSubjectRequest;
 use App\Modules\Subjects\Requests\StoreSubjectGroupRequest;
 use App\Modules\Subjects\Requests\StudentSubjectAssignmentMatrixQueryRequest;
 use App\Modules\Subjects\Requests\SubjectGroupQueryRequest;
+use App\Modules\Subjects\Requests\UpdateSubjectGroupRequest;
 use App\Modules\Subjects\Requests\UpdateStudentSubjectAssignmentsRequest;
 use App\Modules\Subjects\Services\StudentSubjectAssignmentMatrixService;
 use Illuminate\Http\JsonResponse;
@@ -117,10 +119,10 @@ class StudentSubjectAssignmentMatrixController extends Controller
         }
 
         $message = ($result['already_attached'] ?? false)
-            ? 'Subject already exists for this class and was selected.'
+            ? 'Subject already exists and is available for all classes.'
             : (($result['was_created'] ?? false)
-                ? 'Custom subject added and attached to this class.'
-                : 'Subject attached to this class.');
+                ? 'Custom subject added and made available for all classes.'
+                : 'Subject made available for all classes.');
 
         return response()->json([
             'message' => $message,
@@ -158,6 +160,26 @@ class StudentSubjectAssignmentMatrixController extends Controller
 
         return response()->json([
             'message' => 'Subject group created successfully.',
+            'group' => $group,
+        ]);
+    }
+
+    public function updateSubjectGroup(UpdateSubjectGroupRequest $request, SubjectGroup $subjectGroup): JsonResponse
+    {
+        try {
+            $group = $this->service->updateSubjectGroup(
+                $subjectGroup,
+                trim((string) $request->input('name')),
+                $request->input('description'),
+                $request->input('subjects', []),
+                $request->has('is_active') ? $request->boolean('is_active') : null
+            );
+        } catch (RuntimeException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 422);
+        }
+
+        return response()->json([
+            'message' => 'Subject group updated successfully.',
             'group' => $group,
         ]);
     }

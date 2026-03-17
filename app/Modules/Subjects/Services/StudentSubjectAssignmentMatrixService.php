@@ -415,15 +415,79 @@ class StudentSubjectAssignmentMatrixService
         return $this->buildGroupPayload($group);
     }
 
+    /**
+     * @param array<int, int|string> $subjectIds
+     */
+    public function updateSubjectGroup(
+        SubjectGroup $subjectGroup,
+        string $name,
+        ?string $description,
+        array $subjectIds,
+        ?bool $isActive = null
+    ): array {
+        $classRoom = SchoolClass::query()->findOrFail((int) $subjectGroup->class_id);
+        $allowedSubjectIds = $classRoom->subjects()
+            ->where('subjects.status', 'active')
+            ->pluck('subjects.id')
+            ->map(fn ($id): int => (int) $id)
+            ->all();
+
+        $normalized = $this->normalizeSubjectIds($subjectIds, $allowedSubjectIds);
+        if (empty($normalized)) {
+            throw new RuntimeException('Please select at least one subject for the group.');
+        }
+
+        $cleanName = trim($name);
+        if ($cleanName === '') {
+            throw new RuntimeException('Group name is required.');
+        }
+
+        $cleanDescription = $description !== null ? trim($description) : null;
+        if ($cleanDescription === '') {
+            $cleanDescription = null;
+        }
+
+        try {
+            DB::transaction(function () use ($subjectGroup, $cleanName, $cleanDescription, $normalized, $isActive): void {
+                $updates = [
+                    'name' => $cleanName,
+                    'description' => $cleanDescription,
+                ];
+
+                if ($isActive !== null) {
+                    $updates['is_active'] = $isActive;
+                }
+
+                $subjectGroup->forceFill($updates)->save();
+                $subjectGroup->subjects()->sync($normalized);
+            });
+        } catch (QueryException $exception) {
+            if ($this->isUniqueConstraintViolation($exception)) {
+                throw new RuntimeException('A subject group with this name already exists for the selected class and session.');
+            }
+
+            throw $exception;
+        }
+
+        $subjectGroup->refresh()->load(['subjects' => function ($query): void {
+            $query
+                ->select('subjects.id', 'subjects.name', 'subjects.code')
+                ->orderBy('subjects.name');
+        }]);
+
+        return $this->buildGroupPayload($subjectGroup);
+    }
+
     public function createCustomSubjectForClass(int $classId, string $subjectName): array
     {
-        $classRoom = SchoolClass::query()->findOrFail($classId);
+        // Keep class validation because the UI action is class-scoped.
+        SchoolClass::query()->findOrFail($classId);
         $normalizedName = preg_replace('/\s+/', ' ', trim($subjectName));
         if ($normalizedName === null || $normalizedName === '') {
             throw new RuntimeException('Please enter a custom subject name.');
         }
 
-        return DB::transaction(function () use ($classRoom, $normalizedName): array {
+        return DB::transaction(function () use ($normalizedName): array {
             $lowerName = mb_strtolower($normalizedName, 'UTF-8');
             /** @var Subject|null $subject */
             $subject = Subject::query()
@@ -446,12 +510,22 @@ class StudentSubjectAssignmentMatrixService
                 $subject->save();
             }
 
-            $alreadyAttached = $classRoom->subjects()
-                ->where('subjects.id', (int) $subject->id)
-                ->exists();
+            $allClassIds = SchoolClass::query()
+                ->pluck('id')
+                ->map(fn ($id): int => (int) $id)
+                ->values()
+                ->all();
 
-            if (! $alreadyAttached) {
-                $classRoom->subjects()->syncWithoutDetaching([(int) $subject->id]);
+            $attachedClassIds = $subject->classRooms()
+                ->pluck('school_classes.id')
+                ->map(fn ($id): int => (int) $id)
+                ->values()
+                ->all();
+
+            $alreadyAttached = empty(array_diff($allClassIds, $attachedClassIds));
+
+            if (! $alreadyAttached && $allClassIds !== []) {
+                $subject->classRooms()->syncWithoutDetaching($allClassIds);
             }
 
             return [

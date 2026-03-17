@@ -21,6 +21,7 @@
             storeCustomSubjectUrl: @js(route('principal.student-subjects.custom-subject')),
             subjectGroupsUrl: @js(route('principal.subject-groups.index')),
             storeGroupUrl: @js(route('principal.subject-groups.store')),
+            updateGroupUrlTemplate: @js(route('principal.subject-groups.update', ['subjectGroup' => '__GROUP_ID__'])),
             assignGroupUrl: @js(route('principal.student-subjects.assign-group')),
             csrfToken: @js(csrf_token()),
         })"
@@ -182,8 +183,25 @@
                                     <div>
                                         <h4 class="text-sm font-semibold text-slate-900" x-text="group.name"></h4>
                                         <p class="mt-1 text-xs text-slate-500" x-text="group.description || 'No description'"></p>
+                                        <div class="mt-2 flex items-center gap-2">
+                                            <span
+                                                class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium"
+                                                :class="group.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-700'"
+                                                x-text="group.is_active ? 'Active' : 'Inactive'"
+                                            ></span>
+                                        </div>
                                     </div>
-                                    <span class="inline-flex items-center rounded-full bg-indigo-50 px-2 py-1 text-[10px] font-medium text-indigo-700" x-text="`${group.subjects_count} subjects`"></span>
+                                    <div class="flex flex-col items-end gap-2">
+                                        <span class="inline-flex items-center rounded-full bg-indigo-50 px-2 py-1 text-[10px] font-medium text-indigo-700" x-text="`${group.subjects_count} subjects`"></span>
+                                        <button
+                                            type="button"
+                                            @click="openEditGroupModal(group)"
+                                            :disabled="creatingGroup"
+                                            class="inline-flex min-h-8 items-center rounded-md border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                        >
+                                            Edit
+                                        </button>
+                                    </div>
                                 </div>
                                 <div class="mt-3 flex flex-wrap gap-1">
                                     <template x-for="subject in group.subjects" :key="'group-sub-'+group.id+'-'+subject.id">
@@ -489,12 +507,12 @@
                 x-cloak
                 class="fixed inset-0 z-50 flex items-center justify-center p-4"
             >
-                <div class="absolute inset-0 bg-slate-900/50" @click="closeCreateGroupModal()"></div>
+                <div class="absolute inset-0 bg-slate-900/50" @click="closeGroupModal()"></div>
 
                 <div class="relative z-10 w-full max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-2xl">
                     <div class="border-b border-slate-100 p-5">
-                        <h3 class="text-base font-semibold text-slate-900">Create Subject Group</h3>
-                        <p class="mt-1 text-xs text-slate-500">Create a class/session-specific elective group and assign subjects to it.</p>
+                        <h3 class="text-base font-semibold text-slate-900" x-text="isEditingGroup() ? 'Edit Subject Group' : 'Create Subject Group'"></h3>
+                        <p class="mt-1 text-xs text-slate-500" x-text="isEditingGroup() ? 'Update group details and subject selections.' : 'Create a class/session-specific elective group and assign subjects to it.'"></p>
                     </div>
 
                     <div class="space-y-4 p-5">
@@ -503,6 +521,7 @@
                                 <x-input-label value="Session" />
                                 <select
                                     x-model="groupForm.session"
+                                    :disabled="creatingGroup || isEditingGroup()"
                                     class="mt-1 block min-h-10 w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                                 >
                                     @foreach($sessions as $session)
@@ -515,6 +534,7 @@
                                 <x-input-label value="Class" />
                                 <select
                                     x-model.number="groupForm.class_id"
+                                    :disabled="creatingGroup || isEditingGroup()"
                                     class="mt-1 block min-h-10 w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                                 >
                                     <option value="">Select class</option>
@@ -546,6 +566,14 @@
                                     placeholder="Optional details"
                                     class="mt-1 block min-h-10 w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                                 >
+                                <label class="mt-3 inline-flex items-center gap-2 text-xs text-slate-700">
+                                    <input
+                                        type="checkbox"
+                                        class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                        x-model="groupForm.is_active"
+                                    >
+                                    <span>Group is active</span>
+                                </label>
                             </div>
                         </div>
 
@@ -594,7 +622,7 @@
                     <div class="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 p-5">
                         <button
                             type="button"
-                            @click="closeCreateGroupModal()"
+                            @click="closeGroupModal()"
                             :disabled="creatingGroup"
                             class="inline-flex min-h-10 items-center rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                         >
@@ -602,11 +630,11 @@
                         </button>
                         <button
                             type="button"
-                            @click="createSubjectGroup()"
+                            @click="saveSubjectGroup()"
                             :disabled="creatingGroup"
                             class="inline-flex min-h-10 items-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                            <span x-text="creatingGroup ? 'Saving...' : 'Save Group'"></span>
+                            <span x-text="creatingGroup ? 'Saving...' : (isEditingGroup() ? 'Update Group' : 'Save Group')"></span>
                         </button>
                     </div>
                 </div>
@@ -646,11 +674,13 @@
                 groupModalOpen: false,
                 groupFormSearch: '',
                 groupForm: {
+                    id: null,
                     session: '',
                     class_id: '',
                     name: '',
                     description: '',
                     subjects: [],
+                    is_active: true,
                 },
                 pagination: {
                     current_page: 1,
@@ -684,13 +714,19 @@
 
                 resetGroupForm() {
                     this.groupForm = {
+                        id: null,
                         session: this.session || '',
                         class_id: this.classId ? Number(this.classId) : '',
                         name: '',
                         description: '',
                         subjects: [],
+                        is_active: true,
                     };
                     this.groupFormSearch = '';
+                },
+
+                isEditingGroup() {
+                    return Number(this.groupForm.id || 0) > 0;
                 },
 
                 openCreateGroupModal() {
@@ -709,13 +745,37 @@
                     this.groupModalOpen = true;
                 },
 
-                closeCreateGroupModal() {
+                openEditGroupModal(group) {
+                    this.clearStatus();
+                    if (!group || !group.id) {
+                        this.setStatus('Invalid subject group selected.', 'error');
+                        return;
+                    }
+
+                    this.groupForm = {
+                        id: Number(group.id),
+                        session: String(group.session || this.session || ''),
+                        class_id: Number(group.class_id || this.classId || 0),
+                        name: String(group.name || ''),
+                        description: String(group.description || ''),
+                        subjects: this.normalizeIds(group.subject_ids || []),
+                        is_active: Boolean(group.is_active),
+                    };
+                    this.groupFormSearch = '';
+                    this.groupModalOpen = true;
+                },
+
+                closeGroupModal() {
                     if (this.creatingGroup) {
                         return;
                     }
 
                     this.groupModalOpen = false;
                     this.resetGroupForm();
+                },
+
+                closeCreateGroupModal() {
+                    this.closeGroupModal();
                 },
 
                 normalizeIds(values) {
@@ -1055,10 +1115,15 @@
                     }
                 },
 
-                async createSubjectGroup() {
+                groupUpdateUrl(groupId) {
+                    const id = Number(groupId || 0);
+                    return String(config.updateGroupUrlTemplate || '').replace('__GROUP_ID__', String(id));
+                },
+
+                async saveSubjectGroup() {
                     this.clearStatus();
                     if (!this.groupForm.session || !this.groupForm.class_id) {
-                        this.setStatus('Session and class are required for creating a group.', 'error');
+                        this.setStatus('Session and class are required for saving a subject group.', 'error');
                         return;
                     }
 
@@ -1075,37 +1140,50 @@
 
                     this.creatingGroup = true;
                     try {
-                        const response = await fetch(config.storeGroupUrl, {
-                            method: 'POST',
+                        const isEditing = this.isEditingGroup();
+                        const endpoint = isEditing ? this.groupUpdateUrl(this.groupForm.id) : config.storeGroupUrl;
+                        const method = isEditing ? 'PUT' : 'POST';
+                        const payload = {
+                            name: this.groupForm.name,
+                            description: this.groupForm.description || null,
+                            subjects: selectedSubjects,
+                            is_active: Boolean(this.groupForm.is_active),
+                        };
+
+                        if (!isEditing) {
+                            payload.session = this.groupForm.session;
+                            payload.class_id = Number(this.groupForm.class_id);
+                        }
+
+                        const response = await fetch(endpoint, {
+                            method,
                             headers: {
                                 'Content-Type': 'application/json',
                                 Accept: 'application/json',
                                 'X-CSRF-TOKEN': config.csrfToken,
                             },
-                            body: JSON.stringify({
-                                session: this.groupForm.session,
-                                class_id: Number(this.groupForm.class_id),
-                                name: this.groupForm.name,
-                                description: this.groupForm.description || null,
-                                subjects: selectedSubjects,
-                            }),
+                            body: JSON.stringify(payload),
                         });
 
                         const result = await response.json();
                         if (!response.ok) {
-                            this.setStatus(result.message || 'Failed to create subject group.', 'error');
+                            this.setStatus(result.message || 'Failed to save subject group.', 'error');
                             return;
                         }
 
-                        this.setStatus(result.message || 'Subject group created successfully.');
+                        this.setStatus(result.message || (isEditing ? 'Subject group updated successfully.' : 'Subject group created successfully.'));
                         this.groupModalOpen = false;
                         this.resetGroupForm();
                         await this.loadSubjectGroups(true);
                     } catch (error) {
-                        this.setStatus('Unexpected error while creating subject group.', 'error');
+                        this.setStatus('Unexpected error while saving subject group.', 'error');
                     } finally {
                         this.creatingGroup = false;
                     }
+                },
+
+                async createSubjectGroup() {
+                    await this.saveSubjectGroup();
                 },
 
                 async onStudentGroupChange(studentId, rawGroupId) {
