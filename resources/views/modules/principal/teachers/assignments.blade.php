@@ -34,7 +34,11 @@
 
                         <div>
                             <x-input-label for="session" value="Session" />
-                            <x-text-input id="session" name="session" type="text" class="mt-1 block w-full" value="{{ $defaultSession }}" required />
+                            <select id="session" name="session" class="mt-1 block w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm" required>
+                                @foreach($sessions as $session)
+                                    <option value="{{ $session }}" @selected($session === $defaultSession)>{{ $session }}</option>
+                                @endforeach
+                            </select>
                         </div>
 
                         <div class="md:col-span-2">
@@ -58,9 +62,12 @@
                         <div class="flex items-center gap-2">
                             <input id="searchInput" type="text" placeholder="Search teacher/class/subject/session"
                                    class="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm">
-                            <input id="sessionFilter" type="text" placeholder="Session filter"
-                                   class="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm"
-                                   value="{{ $defaultSession }}">
+                            <select id="sessionFilter" class="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm">
+                                <option value="">All Sessions</option>
+                                @foreach($sessions as $session)
+                                    <option value="{{ $session }}" @selected($session === $defaultSession)>{{ $session }}</option>
+                                @endforeach
+                            </select>
                             <select id="perPage" class="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm">
                                 <option value="10">10</option>
                                 <option value="25">25</option>
@@ -336,12 +343,12 @@
             await loadAssignments();
         });
 
-        const onSessionFilterChange = window.NSMS.debounce(async () => {
+        const onSessionFilterChange = async () => {
             state.session = sessionFilterInput.value.trim();
             state.page = 1;
             await loadAssignments();
-        }, 300);
-        sessionFilterInput.addEventListener('input', onSessionFilterChange);
+        };
+        sessionFilterInput.addEventListener('change', onSessionFilterChange);
 
         (async () => {
             await loadOptions();

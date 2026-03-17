@@ -20,9 +20,16 @@ class TeacherAssignmentController extends Controller
     public function index(): View
     {
         $this->ensureTeacherProfiles();
+        $defaultSession = $this->academicSessionForDate(now()->toDateString());
+        $sessions = collect(array_merge([$defaultSession], $this->availableSessions()))
+            ->filter(fn ($value): bool => is_string($value) && trim($value) !== '')
+            ->unique()
+            ->values()
+            ->all();
 
         return view('modules.principal.teachers.assignments', [
-            'defaultSession' => $this->academicSessionForDate(now()->toDateString()),
+            'defaultSession' => $defaultSession,
+            'sessions' => $sessions,
         ]);
     }
 
@@ -224,5 +231,38 @@ class TeacherAssignmentController extends Controller
         $startYear = $dateTime->month >= 7 ? $dateTime->year : ($dateTime->year - 1);
 
         return $startYear.'-'.($startYear + 1);
+    }
+
+    private function availableSessions(): array
+    {
+        $storedSessions = TeacherAssignment::query()
+            ->select('session')
+            ->distinct()
+            ->orderByDesc('session')
+            ->pluck('session')
+            ->filter(fn ($value): bool => is_string($value) && trim($value) !== '')
+            ->values()
+            ->all();
+
+        $fallbackSessions = $this->sessionOptions();
+
+        return collect(array_merge($storedSessions, $fallbackSessions))
+            ->filter(fn ($value): bool => is_string($value) && trim($value) !== '')
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    private function sessionOptions(int $backward = 1, int $forward = 3): array
+    {
+        $now = now();
+        $currentStartYear = $now->month >= 7 ? $now->year : ($now->year - 1);
+        $sessions = [];
+
+        for ($year = $currentStartYear - $backward; $year <= $currentStartYear + $forward; $year++) {
+            $sessions[] = $year.'-'.($year + 1);
+        }
+
+        return $sessions;
     }
 }
