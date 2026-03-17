@@ -5,6 +5,7 @@ namespace App\Modules\Subjects\Services;
 use App\Models\SchoolClass;
 use App\Models\Student;
 use App\Models\StudentSubjectAssignment;
+use App\Models\Subject;
 use App\Models\SubjectGroup;
 use App\Models\User;
 use Illuminate\Database\QueryException;
@@ -64,7 +65,6 @@ class StudentSubjectAssignmentMatrixService
         $students = $studentsPaginator->getCollection();
 
         $subjects = $classRoom->subjects()
-            ->where('subjects.is_default', true)
             ->where('subjects.status', 'active')
             ->orderByDesc('is_default')
             ->orderBy('name')
@@ -157,7 +157,6 @@ class StudentSubjectAssignmentMatrixService
 
         $allowedSubjectIds = $student->classRoom
             ? $student->classRoom->subjects()
-                ->where('subjects.is_default', true)
                 ->where('subjects.status', 'active')
                 ->pluck('subjects.id')
                 ->map(fn ($id) => (int) $id)
@@ -166,47 +165,52 @@ class StudentSubjectAssignmentMatrixService
 
         $normalized = $this->normalizeSubjectIds($subjectIds, $allowedSubjectIds);
 
-        return DB::transaction(function () use ($student, $session, $normalized, $resolvedAssignedBy): int {
-            $groupBasedSubjectIds = StudentSubjectAssignment::query()
-                ->where('session', $session)
-                ->where('student_id', (int) $student->id)
-                ->whereNotNull('subject_group_id')
-                ->pluck('subject_id')
-                ->map(fn ($id): int => (int) $id)
-                ->values()
-                ->all();
+        return $this->executeWithUserForeignKeyFallback(
+            $resolvedAssignedBy,
+            function (?int $safeAssignedBy) use ($student, $session, $normalized): int {
+                return DB::transaction(function () use ($student, $session, $normalized, $safeAssignedBy): int {
+                    $groupBasedSubjectIds = StudentSubjectAssignment::query()
+                        ->where('session', $session)
+                        ->where('student_id', (int) $student->id)
+                        ->whereNotNull('subject_group_id')
+                        ->pluck('subject_id')
+                        ->map(fn ($id): int => (int) $id)
+                        ->values()
+                        ->all();
 
-            $conflicting = array_values(array_intersect($normalized, $groupBasedSubjectIds));
-            if (! empty($conflicting)) {
-                throw new RuntimeException('Some selected subjects are currently assigned via a subject group. Change the group first or remove conflicting subjects.');
+                    $conflicting = array_values(array_intersect($normalized, $groupBasedSubjectIds));
+                    if (! empty($conflicting)) {
+                        throw new RuntimeException('Some selected subjects are currently assigned via a subject group. Change the group first or remove conflicting subjects.');
+                    }
+
+                    StudentSubjectAssignment::query()
+                        ->where('session', $session)
+                        ->where('student_id', (int) $student->id)
+                        ->whereNull('subject_group_id')
+                        ->delete();
+
+                    if (empty($normalized)) {
+                        return 0;
+                    }
+
+                    $now = now();
+                    $rows = collect($normalized)->map(fn (int $subjectId): array => [
+                        'session' => $session,
+                        'student_id' => (int) $student->id,
+                        'class_id' => (int) $student->class_id,
+                        'subject_id' => $subjectId,
+                        'subject_group_id' => null,
+                        'assigned_by' => $safeAssignedBy,
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ])->all();
+
+                    StudentSubjectAssignment::query()->insert($rows);
+
+                    return count($rows);
+                });
             }
-
-            StudentSubjectAssignment::query()
-                ->where('session', $session)
-                ->where('student_id', (int) $student->id)
-                ->whereNull('subject_group_id')
-                ->delete();
-
-            if (empty($normalized)) {
-                return 0;
-            }
-
-            $now = now();
-            $rows = collect($normalized)->map(fn (int $subjectId): array => [
-                'session' => $session,
-                'student_id' => (int) $student->id,
-                'class_id' => (int) $student->class_id,
-                'subject_id' => $subjectId,
-                'subject_group_id' => null,
-                'assigned_by' => $resolvedAssignedBy,
-                'created_at' => $now,
-                'updated_at' => $now,
-            ])->all();
-
-            StudentSubjectAssignment::query()->insert($rows);
-
-            return count($rows);
-        });
+        );
     }
 
     /**
@@ -224,7 +228,6 @@ class StudentSubjectAssignmentMatrixService
             ->get(['id', 'class_id', 'student_id']);
 
         $allowedSubjectIds = $classRoom->subjects()
-            ->where('subjects.is_default', true)
             ->where('subjects.status', 'active')
             ->pluck('subjects.id')
             ->map(fn ($id) => (int) $id)
@@ -241,60 +244,65 @@ class StudentSubjectAssignmentMatrixService
             'subject_ids' => $normalized,
         ]);
 
-        return DB::transaction(function () use ($students, $session, $normalized, $resolvedAssignedBy): array {
-            $studentsCount = $students->count();
-            $subjectsCount = count($normalized);
-            $assignmentsCreated = 0;
+        return $this->executeWithUserForeignKeyFallback(
+            $resolvedAssignedBy,
+            function (?int $safeAssignedBy) use ($students, $session, $normalized): array {
+                return DB::transaction(function () use ($students, $session, $normalized, $safeAssignedBy): array {
+                    $studentsCount = $students->count();
+                    $subjectsCount = count($normalized);
+                    $assignmentsCreated = 0;
 
-            if ($studentsCount === 0 || $subjectsCount === 0) {
-                return [
-                    'students_count' => $studentsCount,
-                    'subjects_count' => $subjectsCount,
-                    'assignments_created' => 0,
-                ];
-            }
-
-            foreach ($students as $student) {
-                foreach ($normalized as $subjectId) {
-                    $assignment = StudentSubjectAssignment::query()->firstOrCreate(
-                        [
-                            'session' => $session,
-                            'student_id' => (int) $student->id,
-                            'subject_id' => (int) $subjectId,
-                        ],
-                        [
-                            'class_id' => (int) $student->class_id,
-                            'subject_group_id' => null,
-                            'assigned_by' => $resolvedAssignedBy,
-                        ]
-                    );
-
-                    if ($assignment->wasRecentlyCreated) {
-                        $assignmentsCreated++;
-                        continue;
+                    if ($studentsCount === 0 || $subjectsCount === 0) {
+                        return [
+                            'students_count' => $studentsCount,
+                            'subjects_count' => $subjectsCount,
+                            'assignments_created' => 0,
+                        ];
                     }
 
-                    // Ensure existing assignment behaves as common-subject assignment in matrix.
-                    $needsUpdate = $assignment->subject_group_id !== null
-                        || (int) $assignment->class_id !== (int) $student->class_id
-                        || (int) ($assignment->assigned_by ?? 0) !== (int) ($resolvedAssignedBy ?? 0);
+                    foreach ($students as $student) {
+                        foreach ($normalized as $subjectId) {
+                            $assignment = StudentSubjectAssignment::query()->firstOrCreate(
+                                [
+                                    'session' => $session,
+                                    'student_id' => (int) $student->id,
+                                    'subject_id' => (int) $subjectId,
+                                ],
+                                [
+                                    'class_id' => (int) $student->class_id,
+                                    'subject_group_id' => null,
+                                    'assigned_by' => $safeAssignedBy,
+                                ]
+                            );
 
-                    if ($needsUpdate) {
-                        $assignment->forceFill([
-                            'class_id' => (int) $student->class_id,
-                            'subject_group_id' => null,
-                            'assigned_by' => $resolvedAssignedBy,
-                        ])->save();
+                            if ($assignment->wasRecentlyCreated) {
+                                $assignmentsCreated++;
+                                continue;
+                            }
+
+                            // Ensure existing assignment behaves as common-subject assignment in matrix.
+                            $needsUpdate = $assignment->subject_group_id !== null
+                                || (int) $assignment->class_id !== (int) $student->class_id
+                                || (int) ($assignment->assigned_by ?? 0) !== (int) ($safeAssignedBy ?? 0);
+
+                            if ($needsUpdate) {
+                                $assignment->forceFill([
+                                    'class_id' => (int) $student->class_id,
+                                    'subject_group_id' => null,
+                                    'assigned_by' => $safeAssignedBy,
+                                ])->save();
+                            }
+                        }
                     }
-                }
-            }
 
-            return [
-                'students_count' => $studentsCount,
-                'subjects_count' => $subjectsCount,
-                'assignments_created' => $assignmentsCreated,
-            ];
-        });
+                    return [
+                        'students_count' => $studentsCount,
+                        'subjects_count' => $subjectsCount,
+                        'assignments_created' => $assignmentsCreated,
+                    ];
+                });
+            }
+        );
     }
 
     public function subjectGroups(int $classId, string $session): array
@@ -333,7 +341,6 @@ class StudentSubjectAssignmentMatrixService
     ): array {
         $classRoom = SchoolClass::query()->findOrFail($classId);
         $allowedSubjectIds = $classRoom->subjects()
-            ->where('subjects.is_default', true)
             ->where('subjects.status', 'active')
             ->pluck('subjects.id')
             ->map(fn ($id): int => (int) $id)
@@ -356,29 +363,41 @@ class StudentSubjectAssignmentMatrixService
 
         try {
             $resolvedCreatedBy = $createdBy !== null ? $this->resolveAssignedBy($createdBy) : null;
-            $group = DB::transaction(function () use (
-                $session,
-                $classRoom,
-                $cleanName,
-                $cleanDescription,
-                $normalized,
+            $group = $this->executeWithUserForeignKeyFallback(
                 $resolvedCreatedBy,
-                $isActive
-            ): SubjectGroup {
-                /** @var SubjectGroup $group */
-                $group = SubjectGroup::query()->create([
-                    'session' => $session,
-                    'class_id' => (int) $classRoom->id,
-                    'name' => $cleanName,
-                    'description' => $cleanDescription,
-                    'is_active' => $isActive,
-                    'created_by' => $resolvedCreatedBy,
-                ]);
+                function (?int $safeCreatedBy) use (
+                    $session,
+                    $classRoom,
+                    $cleanName,
+                    $cleanDescription,
+                    $normalized,
+                    $isActive
+                ): SubjectGroup {
+                    return DB::transaction(function () use (
+                        $session,
+                        $classRoom,
+                        $cleanName,
+                        $cleanDescription,
+                        $normalized,
+                        $safeCreatedBy,
+                        $isActive
+                    ): SubjectGroup {
+                        /** @var SubjectGroup $group */
+                        $group = SubjectGroup::query()->create([
+                            'session' => $session,
+                            'class_id' => (int) $classRoom->id,
+                            'name' => $cleanName,
+                            'description' => $cleanDescription,
+                            'is_active' => $isActive,
+                            'created_by' => $safeCreatedBy,
+                        ]);
 
-                $group->subjects()->sync($normalized);
+                        $group->subjects()->sync($normalized);
 
-                return $group;
-            });
+                        return $group;
+                    });
+                }
+            );
         } catch (QueryException $exception) {
             if ($this->isUniqueConstraintViolation($exception)) {
                 throw new RuntimeException('A subject group with this name already exists for the selected class and session.');
@@ -394,6 +413,58 @@ class StudentSubjectAssignmentMatrixService
         }]);
 
         return $this->buildGroupPayload($group);
+    }
+
+    public function createCustomSubjectForClass(int $classId, string $subjectName): array
+    {
+        $classRoom = SchoolClass::query()->findOrFail($classId);
+        $normalizedName = preg_replace('/\s+/', ' ', trim($subjectName));
+        if ($normalizedName === null || $normalizedName === '') {
+            throw new RuntimeException('Please enter a custom subject name.');
+        }
+
+        return DB::transaction(function () use ($classRoom, $normalizedName): array {
+            $lowerName = mb_strtolower($normalizedName, 'UTF-8');
+            /** @var Subject|null $subject */
+            $subject = Subject::query()
+                ->whereRaw('LOWER(name) = ?', [$lowerName])
+                ->first();
+
+            $wasCreated = false;
+            if (! $subject) {
+                $subject = Subject::query()->create([
+                    'name' => $normalizedName,
+                    'code' => null,
+                    'is_default' => false,
+                    'status' => 'active',
+                ]);
+                $wasCreated = true;
+            }
+
+            if (($subject->status ?? 'active') !== 'active') {
+                $subject->status = 'active';
+                $subject->save();
+            }
+
+            $alreadyAttached = $classRoom->subjects()
+                ->where('subjects.id', (int) $subject->id)
+                ->exists();
+
+            if (! $alreadyAttached) {
+                $classRoom->subjects()->syncWithoutDetaching([(int) $subject->id]);
+            }
+
+            return [
+                'subject' => [
+                    'id' => (int) $subject->id,
+                    'name' => $subject->name,
+                    'code' => $subject->code,
+                    'is_default' => (bool) $subject->is_default,
+                ],
+                'was_created' => $wasCreated,
+                'already_attached' => $alreadyAttached,
+            ];
+        });
     }
 
     public function assignSubjectGroupToStudent(
@@ -426,54 +497,64 @@ class StudentSubjectAssignmentMatrixService
                 ->all();
         }
 
-        return DB::transaction(function () use (
-            $student,
-            $session,
-            $subjectGroup,
-            $groupSubjectIds,
-            $resolvedAssignedBy
-        ): array {
-            $commonSubjectIds = StudentSubjectAssignment::query()
-                ->where('session', $session)
-                ->where('student_id', (int) $student->id)
-                ->whereNull('subject_group_id')
-                ->pluck('subject_id')
-                ->map(fn ($id): int => (int) $id)
-                ->values()
-                ->all();
+        return $this->executeWithUserForeignKeyFallback(
+            $resolvedAssignedBy,
+            function (?int $safeAssignedBy) use (
+                $student,
+                $session,
+                $subjectGroup,
+                $groupSubjectIds
+            ): array {
+                return DB::transaction(function () use (
+                    $student,
+                    $session,
+                    $subjectGroup,
+                    $groupSubjectIds,
+                    $safeAssignedBy
+                ): array {
+                    $commonSubjectIds = StudentSubjectAssignment::query()
+                        ->where('session', $session)
+                        ->where('student_id', (int) $student->id)
+                        ->whereNull('subject_group_id')
+                        ->pluck('subject_id')
+                        ->map(fn ($id): int => (int) $id)
+                        ->values()
+                        ->all();
 
-            $subjectsToAssign = array_values(array_diff($groupSubjectIds, $commonSubjectIds));
-            $skippedDueCommon = count($groupSubjectIds) - count($subjectsToAssign);
+                    $subjectsToAssign = array_values(array_diff($groupSubjectIds, $commonSubjectIds));
+                    $skippedDueCommon = count($groupSubjectIds) - count($subjectsToAssign);
 
-            StudentSubjectAssignment::query()
-                ->where('session', $session)
-                ->where('student_id', (int) $student->id)
-                ->whereNotNull('subject_group_id')
-                ->delete();
+                    StudentSubjectAssignment::query()
+                        ->where('session', $session)
+                        ->where('student_id', (int) $student->id)
+                        ->whereNotNull('subject_group_id')
+                        ->delete();
 
-            if ($subjectGroup && ! empty($subjectsToAssign)) {
-                $now = now();
-                $rows = collect($subjectsToAssign)->map(fn (int $subjectId): array => [
-                    'session' => $session,
-                    'student_id' => (int) $student->id,
-                    'class_id' => (int) $student->class_id,
-                    'subject_id' => $subjectId,
-                    'subject_group_id' => (int) $subjectGroup->id,
-                    'assigned_by' => $resolvedAssignedBy,
-                    'created_at' => $now,
-                    'updated_at' => $now,
-                ])->all();
+                    if ($subjectGroup && ! empty($subjectsToAssign)) {
+                        $now = now();
+                        $rows = collect($subjectsToAssign)->map(fn (int $subjectId): array => [
+                            'session' => $session,
+                            'student_id' => (int) $student->id,
+                            'class_id' => (int) $student->class_id,
+                            'subject_id' => $subjectId,
+                            'subject_group_id' => (int) $subjectGroup->id,
+                            'assigned_by' => $safeAssignedBy,
+                            'created_at' => $now,
+                            'updated_at' => $now,
+                        ])->all();
 
-                StudentSubjectAssignment::query()->insert($rows);
+                        StudentSubjectAssignment::query()->insert($rows);
+                    }
+
+                    return [
+                        'group_id' => $subjectGroup?->id,
+                        'assigned_count' => count($subjectsToAssign),
+                        'skipped_due_common' => $skippedDueCommon,
+                        'updated_at' => now()->toDateTimeString(),
+                    ];
+                });
             }
-
-            return [
-                'group_id' => $subjectGroup?->id,
-                'assigned_count' => count($subjectsToAssign),
-                'skipped_due_common' => $skippedDueCommon,
-                'updated_at' => now()->toDateTimeString(),
-            ];
-        });
+        );
     }
 
     /**
@@ -542,13 +623,60 @@ class StudentSubjectAssignmentMatrixService
             || str_contains($message, 'subject_groups_session_class_name_unique');
     }
 
+    /**
+     * @template TReturn
+     * @param callable(?int): TReturn $callback
+     * @return TReturn
+     */
+    private function executeWithUserForeignKeyFallback(?int $userId, callable $callback): mixed
+    {
+        try {
+            return $callback($userId);
+        } catch (QueryException $exception) {
+            if ($userId !== null && $this->isUserForeignKeyViolation($exception)) {
+                Log::warning('User FK failed during subject assignment write; retrying without user reference.', [
+                    'user_id' => $userId,
+                    'sql_state' => $exception->errorInfo[0] ?? null,
+                    'driver_code' => $exception->errorInfo[1] ?? null,
+                    'message' => $exception->getMessage(),
+                ]);
+
+                return $callback(null);
+            }
+
+            throw $exception;
+        }
+    }
+
+    private function isUserForeignKeyViolation(QueryException $exception): bool
+    {
+        $sqlState = $exception->errorInfo[0] ?? null;
+        $driverCode = (int) ($exception->errorInfo[1] ?? 0);
+        if ($sqlState !== '23000' || $driverCode !== 1452) {
+            return false;
+        }
+
+        $message = strtolower($exception->getMessage());
+        $referencesUsers = str_contains($message, 'references `users` (`id`)');
+        if (! $referencesUsers) {
+            return false;
+        }
+
+        $studentAssignmentViolation = str_contains($message, 'student_subject_assignments')
+            && str_contains($message, 'assigned_by');
+        $subjectGroupViolation = str_contains($message, 'subject_groups')
+            && str_contains($message, 'created_by');
+
+        return $studentAssignmentViolation || $subjectGroupViolation;
+    }
+
     private function resolveAssignedBy(?int $assignedBy): ?int
     {
         if ($assignedBy === null || $assignedBy <= 0) {
             return null;
         }
 
-        return User::query()->whereKey($assignedBy)->exists()
+        return User::query()->useWritePdo()->whereKey($assignedBy)->exists()
             ? $assignedBy
             : null;
     }

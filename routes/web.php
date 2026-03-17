@@ -252,6 +252,10 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
         ->middleware(['permission:manage_subject_assignments'])
         ->name('principal.student-subjects.assign-class');
 
+    Route::post('/principal/student-subjects/custom-subject', [StudentSubjectAssignmentMatrixController::class, 'storeCustomSubject'])
+        ->middleware(['permission:manage_subject_assignments'])
+        ->name('principal.student-subjects.custom-subject');
+
     Route::get('/principal/subject-groups', [StudentSubjectAssignmentMatrixController::class, 'subjectGroups'])
         ->middleware(['permission:manage_subject_assignments'])
         ->name('principal.subject-groups.index');

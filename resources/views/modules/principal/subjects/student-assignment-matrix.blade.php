@@ -18,6 +18,7 @@
             matrixUrl: @js(route('principal.student-subjects.data')),
             updateUrl: @js(route('principal.student-subjects.update')),
             assignClassUrl: @js(route('principal.student-subjects.assign-class')),
+            storeCustomSubjectUrl: @js(route('principal.student-subjects.custom-subject')),
             subjectGroupsUrl: @js(route('principal.subject-groups.index')),
             storeGroupUrl: @js(route('principal.subject-groups.store')),
             assignGroupUrl: @js(route('principal.student-subjects.assign-group')),
@@ -242,6 +243,14 @@
                                             <div class="inline-flex items-center gap-2">
                                                 <button
                                                     type="button"
+                                                    @click="promptAndAddCustomSubject('bulk', null, bulkSubjectSearch)"
+                                                    :disabled="addingCustomSubject || !classId"
+                                                    class="inline-flex min-h-8 items-center rounded-md border border-slate-300 px-2.5 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                                >
+                                                    <span x-text="addingCustomSubject ? 'Adding...' : 'Other'"></span>
+                                                </button>
+                                                <button
+                                                    type="button"
                                                     @click="selectAllBulkSubjects()"
                                                     :disabled="subjects.length === 0"
                                                     class="inline-flex min-h-8 items-center rounded-md border border-slate-300 px-2.5 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
@@ -303,7 +312,7 @@
                                 :disabled="savingBulk || !classId || !session || bulkSubjects.length === 0"
                                 class="inline-flex min-h-11 items-center justify-center rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-black disabled:cursor-not-allowed disabled:opacity-50"
                             >
-                                <span x-text="savingBulk ? 'Assigning...' : 'Assign to Entire Class'"></span>
+                                <span class="!text-black" x-text="savingBulk ? 'Assigning...' : 'Assign to Entire Class'"></span>
                             </button>
                         </div>
                     </div>
@@ -396,6 +405,16 @@
                                                     x-cloak
                                                     class="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-md border border-slate-200 bg-white shadow-lg"
                                                 >
+                                                    <div class="border-b border-slate-100 px-3 py-2">
+                                                        <button
+                                                            type="button"
+                                                            @click="promptAndAddCustomSubject('student', student.id)"
+                                                            :disabled="addingCustomSubject || !classId"
+                                                            class="inline-flex min-h-8 items-center rounded-md border border-slate-300 px-2.5 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                                        >
+                                                            <span x-text="addingCustomSubject ? 'Adding...' : 'Other Subject'"></span>
+                                                        </button>
+                                                    </div>
                                                     <template x-if="subjects.length === 0">
                                                         <div class="px-3 py-2 text-xs text-slate-500">No class subjects defined.</div>
                                                     </template>
@@ -533,7 +552,17 @@
                         <div>
                             <div class="flex flex-wrap items-center justify-between gap-3">
                                 <x-input-label value="Subjects" />
-                                <span class="inline-flex items-center rounded-full bg-indigo-50 px-2.5 py-1 text-[11px] font-medium text-indigo-700" x-text="`${groupForm.subjects.length} selected`"></span>
+                                <div class="inline-flex items-center gap-2">
+                                    <button
+                                        type="button"
+                                        @click="promptAndAddCustomSubject('group', null, groupFormSearch)"
+                                        :disabled="addingCustomSubject || !classId"
+                                        class="inline-flex min-h-8 items-center rounded-md border border-slate-300 px-2.5 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                        <span x-text="addingCustomSubject ? 'Adding...' : 'Other Subject'"></span>
+                                    </button>
+                                    <span class="inline-flex items-center rounded-full bg-indigo-50 px-2.5 py-1 text-[11px] font-medium text-indigo-700" x-text="`${groupForm.subjects.length} selected`"></span>
+                                </div>
                             </div>
                             <input
                                 x-model.trim="groupFormSearch"
@@ -599,6 +628,7 @@
                 savingAllChanges: false,
                 loadingGroups: false,
                 creatingGroup: false,
+                addingCustomSubject: false,
                 savingByStudent: {},
                 groupSavingByStudent: {},
                 status: {
@@ -694,6 +724,141 @@
                             .map((value) => Number(value))
                             .filter((value) => Number.isInteger(value) && value > 0)
                     )];
+                },
+
+                sortSubjects() {
+                    this.subjects = (this.subjects || [])
+                        .slice()
+                        .sort((left, right) => {
+                            const defaultPriority = Number(Boolean(right.is_default)) - Number(Boolean(left.is_default));
+                            if (defaultPriority !== 0) {
+                                return defaultPriority;
+                            }
+
+                            return String(left.name || '').localeCompare(
+                                String(right.name || ''),
+                                undefined,
+                                { sensitivity: 'base' }
+                            );
+                        });
+                },
+
+                upsertSubject(rawSubject) {
+                    if (!rawSubject || !rawSubject.id) {
+                        return null;
+                    }
+
+                    const normalized = {
+                        id: Number(rawSubject.id),
+                        name: String(rawSubject.name || '').trim(),
+                        code: rawSubject.code || '',
+                        is_default: Boolean(rawSubject.is_default),
+                    };
+
+                    const existingIndex = this.subjects.findIndex((subject) => subject.id === normalized.id);
+                    if (existingIndex >= 0) {
+                        this.subjects.splice(existingIndex, 1, normalized);
+                    } else {
+                        this.subjects.push(normalized);
+                    }
+
+                    this.sortSubjects();
+                    return normalized;
+                },
+
+                attachSubjectToSelection(target, subjectId, studentId = null) {
+                    const normalizedId = Number(subjectId);
+                    if (!Number.isInteger(normalizedId) || normalizedId <= 0) {
+                        return;
+                    }
+
+                    if (target === 'bulk') {
+                        this.bulkSubjects = this.normalizeIds([...(this.bulkSubjects || []), normalizedId]);
+                        return;
+                    }
+
+                    if (target === 'group') {
+                        const current = this.groupForm.subjects ? this.groupForm.subjects.slice() : [];
+                        current.push(normalizedId);
+                        this.groupForm.subjects = this.normalizeIds(current);
+                        return;
+                    }
+
+                    if (target === 'student') {
+                        const sid = Number(studentId || 0);
+                        if (sid <= 0) {
+                            return;
+                        }
+
+                        const current = this.selectedByStudent[sid] ? this.selectedByStudent[sid].slice() : [];
+                        current.push(normalizedId);
+                        this.selectedByStudent[sid] = this.normalizeIds(current);
+                        this.markStudentDirty(sid);
+                    }
+                },
+
+                async promptAndAddCustomSubject(target = 'bulk', studentId = null, prefill = '') {
+                    this.clearStatus();
+                    if (!this.classId || !this.session) {
+                        this.setStatus('Select session and class before adding a custom subject.', 'error');
+                        return;
+                    }
+
+                    const defaultName = String(prefill || '').trim();
+                    const rawName = window.prompt('Enter custom subject name', defaultName);
+                    if (rawName === null) {
+                        return;
+                    }
+
+                    const cleanedName = String(rawName || '').trim().replace(/\s+/g, ' ');
+                    if (!cleanedName) {
+                        this.setStatus('Custom subject name is required.', 'error');
+                        return;
+                    }
+
+                    const existing = this.subjects.find((subject) =>
+                        String(subject.name || '').trim().toLowerCase() === cleanedName.toLowerCase()
+                    );
+                    if (existing) {
+                        this.attachSubjectToSelection(target, existing.id, studentId);
+                        this.setStatus('Subject already exists and has been selected.');
+                        return;
+                    }
+
+                    this.addingCustomSubject = true;
+                    try {
+                        const response = await fetch(config.storeCustomSubjectUrl, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                Accept: 'application/json',
+                                'X-CSRF-TOKEN': config.csrfToken,
+                            },
+                            body: JSON.stringify({
+                                class_id: Number(this.classId),
+                                name: cleanedName,
+                            }),
+                        });
+
+                        const result = await response.json();
+                        if (!response.ok) {
+                            this.setStatus(result.message || 'Unable to add custom subject.', 'error');
+                            return;
+                        }
+
+                        const subject = this.upsertSubject(result.subject || null);
+                        if (!subject) {
+                            this.setStatus('Subject was created but could not be loaded in the matrix.', 'error');
+                            return;
+                        }
+
+                        this.attachSubjectToSelection(target, subject.id, studentId);
+                        this.setStatus(result.message || 'Custom subject added successfully.');
+                    } catch (error) {
+                        this.setStatus('Unexpected error while adding custom subject.', 'error');
+                    } finally {
+                        this.addingCustomSubject = false;
+                    }
                 },
 
                 paginationText() {
@@ -1036,8 +1201,11 @@
 
                         this.subjects = (result.subjects || []).map((subject) => ({
                             id: Number(subject.id),
-                            name: subject.name,
+                            name: subject.name || '',
+                            code: subject.code || '',
+                            is_default: Boolean(subject.is_default),
                         }));
+                        this.sortSubjects();
                         this.bulkSubjectSearch = '';
 
                         this.students = (result.students || []).map((student) => ({

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\SchoolClass;
 use App\Modules\Subjects\Requests\AssignStudentSubjectGroupRequest;
 use App\Modules\Subjects\Requests\AssignClassStudentSubjectsRequest;
+use App\Modules\Subjects\Requests\StoreClassCustomSubjectRequest;
 use App\Modules\Subjects\Requests\StoreSubjectGroupRequest;
 use App\Modules\Subjects\Requests\StudentSubjectAssignmentMatrixQueryRequest;
 use App\Modules\Subjects\Requests\SubjectGroupQueryRequest;
@@ -102,6 +103,29 @@ class StudentSubjectAssignmentMatrixController extends Controller
             'subjects_count' => $result['subjects_count'] ?? 0,
             'assignments_created' => $result['assignments_created'] ?? 0,
         ]);
+    }
+
+    public function storeCustomSubject(StoreClassCustomSubjectRequest $request): JsonResponse
+    {
+        try {
+            $result = $this->service->createCustomSubjectForClass(
+                (int) $request->input('class_id'),
+                $request->string('name')->toString()
+            );
+        } catch (RuntimeException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 422);
+        }
+
+        $message = ($result['already_attached'] ?? false)
+            ? 'Subject already exists for this class and was selected.'
+            : (($result['was_created'] ?? false)
+                ? 'Custom subject added and attached to this class.'
+                : 'Subject attached to this class.');
+
+        return response()->json([
+            'message' => $message,
+            'subject' => $result['subject'] ?? null,
+        ], 201);
     }
 
     public function subjectGroups(SubjectGroupQueryRequest $request): JsonResponse
