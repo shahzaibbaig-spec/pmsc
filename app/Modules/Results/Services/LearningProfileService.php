@@ -8,6 +8,7 @@ use App\Models\Mark;
 use App\Models\ReportComment;
 use App\Models\Student;
 use App\Models\StudentLearningProfile;
+use App\Modules\Exams\Enums\ExamType;
 use Carbon\Carbon;
 
 class LearningProfileService
@@ -156,7 +157,10 @@ class LearningProfileService
             $subjectBuckets[$subjectKey][] = $percentage;
             $subjectNameByKey[$subjectKey] = $subjectName;
 
-            $examTypeKey = (string) $exam->exam_type;
+            $examTypeKey = $this->examTypeValue($exam->exam_type);
+            if ($examTypeKey === '') {
+                continue;
+            }
             $examTypeBuckets[$examTypeKey] = $examTypeBuckets[$examTypeKey] ?? [];
             $examTypeBuckets[$examTypeKey][] = $percentage;
 
@@ -537,5 +541,21 @@ class LearningProfileService
 
         return 'Draft';
     }
-}
 
+    private function examTypeValue(mixed $examType): string
+    {
+        if ($examType instanceof ExamType) {
+            return $examType->value;
+        }
+
+        if (is_string($examType)) {
+            return trim($examType);
+        }
+
+        if (is_scalar($examType)) {
+            return (string) $examType;
+        }
+
+        return '';
+    }
+}

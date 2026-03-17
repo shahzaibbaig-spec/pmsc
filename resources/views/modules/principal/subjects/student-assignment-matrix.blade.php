@@ -312,7 +312,7 @@
                                 :disabled="savingBulk || !classId || !session || bulkSubjects.length === 0"
                                 class="inline-flex min-h-11 items-center justify-center rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-black disabled:cursor-not-allowed disabled:opacity-50"
                             >
-                                <span class="!text-black" x-text="savingBulk ? 'Assigning...' : 'Assign to Entire Class'"></span>
+                                <span class="text-black" style="color: #000 !important;" x-text="savingBulk ? 'Assigning...' : 'Assign to Entire Class'"></span>
                             </button>
                         </div>
                     </div>

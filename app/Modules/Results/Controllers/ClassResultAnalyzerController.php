@@ -292,7 +292,10 @@ class ClassResultAnalyzerController extends Controller
                 continue;
             }
 
-            $examTypeKey = (string) $exam->exam_type;
+            $examTypeKey = $this->examTypeValue($exam->exam_type);
+            if ($examTypeKey === '') {
+                continue;
+            }
             $percentage = $this->markPercentage($mark, $sessionExamLookup);
             $sessionPercentagesByExamType[$examTypeKey] = $sessionPercentagesByExamType[$examTypeKey] ?? [];
             $sessionPercentagesByExamType[$examTypeKey][] = $percentage;
@@ -735,5 +738,22 @@ class ClassResultAnalyzerController extends Controller
         }
 
         return 'Fail';
+    }
+
+    private function examTypeValue(mixed $examType): string
+    {
+        if ($examType instanceof ExamType) {
+            return $examType->value;
+        }
+
+        if (is_string($examType)) {
+            return trim($examType);
+        }
+
+        if (is_scalar($examType)) {
+            return (string) $examType;
+        }
+
+        return '';
     }
 }
