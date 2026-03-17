@@ -9,7 +9,9 @@ use App\Models\SchoolSetting;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 class PayrollService
@@ -98,42 +100,48 @@ class PayrollService
         $createdCount = 0;
         $totalNet = 0.0;
         $totalGross = 0.0;
+        $resolvedGeneratedBy = $this->resolveUserId($generatedBy);
 
-        DB::transaction(function () use ($profiles, $month, $generatedBy, &$createdCount, &$totalNet, &$totalGross): void {
-            $run = PayrollRun::query()->create([
-                'month' => $month,
-                'run_date' => now()->toDateString(),
-                'status' => 'generated',
-                'generated_by' => $generatedBy,
-            ]);
+        $this->executeWithUserForeignKeyFallback(
+            $resolvedGeneratedBy,
+            function (?int $safeGeneratedBy) use ($profiles, $month, &$createdCount, &$totalNet, &$totalGross): void {
+                DB::transaction(function () use ($profiles, $month, $safeGeneratedBy, &$createdCount, &$totalNet, &$totalGross): void {
+                    $run = PayrollRun::query()->create([
+                        'month' => $month,
+                        'run_date' => now()->toDateString(),
+                        'status' => 'generated',
+                        'generated_by' => $safeGeneratedBy,
+                    ]);
 
-            foreach ($profiles as $profile) {
-                $baseSalary = (float) $profile->basic_salary;
-                $allowancesTotal = round(
-                    (float) $profile->allowances + (float) $profile->allowancesRows->sum('amount'),
-                    2
-                );
-                $deductionsTotal = round(
-                    (float) $profile->deductions + (float) $profile->deductionsRows->sum('amount'),
-                    2
-                );
-                $netSalary = round(max($baseSalary + $allowancesTotal - $deductionsTotal, 0), 2);
+                    foreach ($profiles as $profile) {
+                        $baseSalary = (float) $profile->basic_salary;
+                        $allowancesTotal = round(
+                            (float) $profile->allowances + (float) $profile->allowancesRows->sum('amount'),
+                            2
+                        );
+                        $deductionsTotal = round(
+                            (float) $profile->deductions + (float) $profile->deductionsRows->sum('amount'),
+                            2
+                        );
+                        $netSalary = round(max($baseSalary + $allowancesTotal - $deductionsTotal, 0), 2);
 
-                $run->items()->create([
-                    'payroll_profile_id' => $profile->id,
-                    'user_id' => $profile->user_id,
-                    'basic_salary' => round($baseSalary, 2),
-                    'allowances_total' => $allowancesTotal,
-                    'deductions_total' => $deductionsTotal,
-                    'net_salary' => $netSalary,
-                    'status' => 'generated',
-                ]);
+                        $run->items()->create([
+                            'payroll_profile_id' => $profile->id,
+                            'user_id' => $profile->user_id,
+                            'basic_salary' => round($baseSalary, 2),
+                            'allowances_total' => $allowancesTotal,
+                            'deductions_total' => $deductionsTotal,
+                            'net_salary' => $netSalary,
+                            'status' => 'generated',
+                        ]);
 
-                $createdCount++;
-                $totalGross += $baseSalary + $allowancesTotal;
-                $totalNet += $netSalary;
+                        $createdCount++;
+                        $totalGross += $baseSalary + $allowancesTotal;
+                        $totalNet += $netSalary;
+                    }
+                });
             }
-        });
+        );
 
         return [
             'month' => $month,
@@ -343,6 +351,56 @@ class PayrollService
             'name' => $setting?->school_name ?? 'School Management System',
             'logo_absolute_path' => $logoAbsolutePath,
         ];
+    }
+
+    /**
+     * @template TReturn
+     * @param callable(?int): TReturn $callback
+     * @return TReturn
+     */
+    private function executeWithUserForeignKeyFallback(?int $userId, callable $callback): mixed
+    {
+        try {
+            return $callback($userId);
+        } catch (QueryException $exception) {
+            if ($userId !== null && $this->isPayrollRunGeneratedByForeignKeyViolation($exception)) {
+                Log::warning('User FK failed during payroll run creation; retrying without generator reference.', [
+                    'user_id' => $userId,
+                    'sql_state' => $exception->errorInfo[0] ?? null,
+                    'driver_code' => $exception->errorInfo[1] ?? null,
+                    'message' => $exception->getMessage(),
+                ]);
+
+                return $callback(null);
+            }
+
+            throw $exception;
+        }
+    }
+
+    private function isPayrollRunGeneratedByForeignKeyViolation(QueryException $exception): bool
+    {
+        $sqlState = $exception->errorInfo[0] ?? null;
+        $driverCode = (int) ($exception->errorInfo[1] ?? 0);
+        if ($sqlState !== '23000' || $driverCode !== 1452) {
+            return false;
+        }
+
+        $message = strtolower($exception->getMessage());
+        return str_contains($message, 'references `users` (`id`)')
+            && str_contains($message, 'payroll_runs')
+            && str_contains($message, 'generated_by');
+    }
+
+    private function resolveUserId(?int $userId): ?int
+    {
+        if ($userId === null || $userId <= 0) {
+            return null;
+        }
+
+        return User::query()->useWritePdo()->whereKey($userId)->exists()
+            ? $userId
+            : null;
     }
 
     private function syncBreakdownRows(PayrollProfile $profile, array $allowanceItems, array $deductionItems): void
