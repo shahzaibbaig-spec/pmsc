@@ -10,6 +10,8 @@ use App\Models\SchoolClass;
 use App\Models\SchoolSetting;
 use App\Models\Student;
 use App\Models\StudentFeeAssignment;
+use App\Models\User;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -69,6 +71,38 @@ class FeeManagementService
     public function lateFeeAmount(): float
     {
         return round(max((float) config('fees.late_fee_amount', 200), 0), 2);
+    }
+
+    /**
+     * @param array{
+     *   session:string,
+     *   class_id:int,
+     *   title:string,
+     *   amount:float|int|string,
+     *   fee_type:string,
+     *   is_monthly:bool,
+     *   is_active:bool
+     * } $attributes
+     */
+    public function createFeeStructure(array $attributes, ?int $createdBy): FeeStructure
+    {
+        $resolvedCreatedBy = $this->resolveUserId($createdBy);
+
+        return $this->executeWithUserForeignKeyFallback(
+            $resolvedCreatedBy,
+            function (?int $safeCreatedBy) use ($attributes): FeeStructure {
+                return FeeStructure::query()->create([
+                    'session' => (string) $attributes['session'],
+                    'class_id' => (int) $attributes['class_id'],
+                    'title' => trim((string) $attributes['title']),
+                    'amount' => round((float) $attributes['amount'], 2),
+                    'fee_type' => trim((string) $attributes['fee_type']),
+                    'is_monthly' => (bool) $attributes['is_monthly'],
+                    'is_active' => (bool) $attributes['is_active'],
+                    'created_by' => $safeCreatedBy,
+                ]);
+            }
+        );
     }
 
     public function graceDays(): int
@@ -273,109 +307,129 @@ class FeeManagementService
         $skippedExistingCount = 0;
         $skippedNoItemsCount = 0;
         $totalArrearsAdded = 0.0;
+        $resolvedGeneratedBy = $this->resolveUserId($generatedBy);
 
-        DB::transaction(function () use (
-            $students,
-            $feeStructures,
-            $session,
-            $month,
-            $dueDate,
-            $generatedBy,
-            $classId,
-            $alreadyBilledOneTime,
-            $existingChallanKeys,
-            $arrearsByStudent,
-            &$createdCount,
-            &$skippedExistingCount,
-            &$skippedNoItemsCount,
-            &$totalArrearsAdded
-        ): void {
-            foreach ($students as $student) {
-                $challanKey = $student->id.'|'.$session.'|'.$month;
-                if ($existingChallanKeys->has($challanKey)) {
-                    $skippedExistingCount++;
-                    continue;
-                }
+        $this->executeWithUserForeignKeyFallback(
+            $resolvedGeneratedBy,
+            function (?int $safeGeneratedBy) use (
+                $students,
+                $feeStructures,
+                $session,
+                $month,
+                $dueDate,
+                $classId,
+                $alreadyBilledOneTime,
+                $existingChallanKeys,
+                $arrearsByStudent,
+                &$createdCount,
+                &$skippedExistingCount,
+                &$skippedNoItemsCount,
+                &$totalArrearsAdded
+            ): void {
+                DB::transaction(function () use (
+                    $students,
+                    $feeStructures,
+                    $session,
+                    $month,
+                    $dueDate,
+                    $safeGeneratedBy,
+                    $classId,
+                    $alreadyBilledOneTime,
+                    $existingChallanKeys,
+                    $arrearsByStudent,
+                    &$createdCount,
+                    &$skippedExistingCount,
+                    &$skippedNoItemsCount,
+                    &$totalArrearsAdded
+                ): void {
+                    foreach ($students as $student) {
+                        $challanKey = $student->id.'|'.$session.'|'.$month;
+                        if ($existingChallanKeys->has($challanKey)) {
+                            $skippedExistingCount++;
+                            continue;
+                        }
 
-                $blockedOneTime = collect($alreadyBilledOneTime->get($student->id, []))
-                    ->map(fn ($id): int => (int) $id)
-                    ->flip();
+                        $blockedOneTime = collect($alreadyBilledOneTime->get($student->id, []))
+                            ->map(fn ($id): int => (int) $id)
+                            ->flip();
 
-                $items = [];
-                $totalAmount = 0.0;
+                        $items = [];
+                        $totalAmount = 0.0;
 
-                foreach ($feeStructures as $structure) {
-                    $assignment = StudentFeeAssignment::query()->firstOrCreate(
-                        [
+                        foreach ($feeStructures as $structure) {
+                            $assignment = StudentFeeAssignment::query()->firstOrCreate(
+                                [
+                                    'student_id' => $student->id,
+                                    'fee_structure_id' => $structure->id,
+                                    'session' => $session,
+                                ],
+                                [
+                                    'custom_amount' => null,
+                                    'is_active' => true,
+                                    'assigned_by' => $safeGeneratedBy,
+                                ]
+                            );
+
+                            if (! $assignment->is_active) {
+                                continue;
+                            }
+
+                            if (! $structure->is_monthly && $blockedOneTime->has((int) $structure->id)) {
+                                continue;
+                            }
+
+                            $lineAmount = $assignment->custom_amount !== null
+                                ? (float) $assignment->custom_amount
+                                : (float) $structure->amount;
+
+                            if ($lineAmount <= 0) {
+                                continue;
+                            }
+
+                            $items[] = [
+                                'fee_structure_id' => $structure->id,
+                                'title' => $structure->title,
+                                'fee_type' => $structure->fee_type,
+                                'amount' => round($lineAmount, 2),
+                            ];
+                            $totalAmount += $lineAmount;
+                        }
+
+                        $baseFeeAmount = round($totalAmount, 2);
+                        $arrearsAmount = round((float) ($arrearsByStudent->get($student->id, 0) ?? 0), 2);
+                        $finalTotalAmount = round($baseFeeAmount + $arrearsAmount, 2);
+
+                        if (empty($items) && $arrearsAmount <= 0) {
+                            $skippedNoItemsCount++;
+                            continue;
+                        }
+
+                        $challan = FeeChallan::query()->create([
+                            'challan_number' => $this->challanNumber($session, $month, (int) $student->id),
                             'student_id' => $student->id,
-                            'fee_structure_id' => $structure->id,
+                            'class_id' => $classId,
                             'session' => $session,
-                        ],
-                        [
-                            'custom_amount' => null,
-                            'is_active' => true,
-                            'assigned_by' => $generatedBy,
-                        ]
-                    );
+                            'month' => $month,
+                            'issue_date' => now()->toDateString(),
+                            'due_date' => $dueDate,
+                            'arrears' => $arrearsAmount,
+                            'late_fee' => 0,
+                            'late_fee_waived_at' => null,
+                            'total_amount' => $finalTotalAmount,
+                            'status' => self::STATUS_UNPAID,
+                            'generated_by' => $safeGeneratedBy,
+                        ]);
 
-                    if (! $assignment->is_active) {
-                        continue;
+                        foreach ($items as $item) {
+                            $challan->items()->create($item);
+                        }
+
+                        $createdCount++;
+                        $totalArrearsAdded += $arrearsAmount;
                     }
-
-                    if (! $structure->is_monthly && $blockedOneTime->has((int) $structure->id)) {
-                        continue;
-                    }
-
-                    $lineAmount = $assignment->custom_amount !== null
-                        ? (float) $assignment->custom_amount
-                        : (float) $structure->amount;
-
-                    if ($lineAmount <= 0) {
-                        continue;
-                    }
-
-                    $items[] = [
-                        'fee_structure_id' => $structure->id,
-                        'title' => $structure->title,
-                        'fee_type' => $structure->fee_type,
-                        'amount' => round($lineAmount, 2),
-                    ];
-                    $totalAmount += $lineAmount;
-                }
-
-                $baseFeeAmount = round($totalAmount, 2);
-                $arrearsAmount = round((float) ($arrearsByStudent->get($student->id, 0) ?? 0), 2);
-                $finalTotalAmount = round($baseFeeAmount + $arrearsAmount, 2);
-
-                if (empty($items) && $arrearsAmount <= 0) {
-                    $skippedNoItemsCount++;
-                    continue;
-                }
-
-                $challan = FeeChallan::query()->create([
-                    'challan_number' => $this->challanNumber($session, $month, (int) $student->id),
-                    'student_id' => $student->id,
-                    'class_id' => $classId,
-                    'session' => $session,
-                    'month' => $month,
-                    'issue_date' => now()->toDateString(),
-                    'due_date' => $dueDate,
-                    'arrears' => $arrearsAmount,
-                    'late_fee' => 0,
-                    'late_fee_waived_at' => null,
-                    'total_amount' => $finalTotalAmount,
-                    'status' => self::STATUS_UNPAID,
-                    'generated_by' => $generatedBy,
-                ]);
-
-                foreach ($items as $item) {
-                    $challan->items()->create($item);
-                }
-
-                $createdCount++;
-                $totalArrearsAdded += $arrearsAmount;
+                });
             }
-        });
+        );
 
         return [
             'class_name' => trim($classRoom->name.' '.($classRoom->section ?? '')),
@@ -404,63 +458,77 @@ class FeeManagementService
             throw new RuntimeException('Payment amount must be greater than zero.');
         }
 
-        return DB::transaction(function () use (
-            $challan,
-            $amountPaid,
-            $paymentDate,
-            $receivedBy,
-            $paymentMethod,
-            $referenceNo,
-            $notes
-        ): FeePayment {
-            $locked = FeeChallan::query()->lockForUpdate()->find($challan->id);
-            if (! $locked) {
-                throw new RuntimeException('Challan not found.');
+        $resolvedReceivedBy = $this->resolveUserId($receivedBy);
+
+        return $this->executeWithUserForeignKeyFallback(
+            $resolvedReceivedBy,
+            function (?int $safeReceivedBy) use (
+                $challan,
+                $amountPaid,
+                $paymentDate,
+                $paymentMethod,
+                $referenceNo,
+                $notes
+            ): FeePayment {
+                return DB::transaction(function () use (
+                    $challan,
+                    $amountPaid,
+                    $paymentDate,
+                    $safeReceivedBy,
+                    $paymentMethod,
+                    $referenceNo,
+                    $notes
+                ): FeePayment {
+                    $locked = FeeChallan::query()->lockForUpdate()->find($challan->id);
+                    if (! $locked) {
+                        throw new RuntimeException('Challan not found.');
+                    }
+
+                    $normalizedStatus = $this->normalizeStatus($locked->status);
+                    if ($normalizedStatus !== $locked->status) {
+                        $locked->forceFill(['status' => $normalizedStatus])->save();
+                    }
+
+                    $paidBefore = (float) FeePayment::query()
+                        ->where('fee_challan_id', $locked->id)
+                        ->sum('amount_paid');
+
+                    $this->applyLateFeeIfEligibleToLockedChallan($locked, $paidBefore);
+
+                    $total = (float) $locked->total_amount;
+                    $remaining = $this->remainingFromTotals($total, $paidBefore);
+
+                    if ($remaining <= 0) {
+                        throw new RuntimeException('This challan is already fully paid.');
+                    }
+
+                    if ($amountPaid > $remaining) {
+                        throw new RuntimeException('Payment amount cannot exceed remaining balance.');
+                    }
+
+                    $payment = FeePayment::query()->create([
+                        'fee_challan_id' => $locked->id,
+                        'amount_paid' => round($amountPaid, 2),
+                        'payment_date' => $paymentDate,
+                        'payment_method' => $paymentMethod !== null && $paymentMethod !== '' ? $paymentMethod : null,
+                        'reference_no' => $referenceNo !== null && $referenceNo !== '' ? $referenceNo : null,
+                        'received_by' => $safeReceivedBy,
+                        'notes' => $notes !== null && $notes !== '' ? $notes : null,
+                    ]);
+
+                    $paidAfter = round($paidBefore + $amountPaid, 2);
+                    $status = $this->statusFromPaidAndTotal($paidAfter, $total);
+                    $isPaid = $status === self::STATUS_PAID;
+
+                    $locked->forceFill([
+                        'status' => $status,
+                        'paid_at' => $isPaid ? now() : null,
+                    ])->save();
+
+                    return $payment;
+                });
             }
-
-            $normalizedStatus = $this->normalizeStatus($locked->status);
-            if ($normalizedStatus !== $locked->status) {
-                $locked->forceFill(['status' => $normalizedStatus])->save();
-            }
-
-            $paidBefore = (float) FeePayment::query()
-                ->where('fee_challan_id', $locked->id)
-                ->sum('amount_paid');
-
-            $this->applyLateFeeIfEligibleToLockedChallan($locked, $paidBefore);
-
-            $total = (float) $locked->total_amount;
-            $remaining = $this->remainingFromTotals($total, $paidBefore);
-
-            if ($remaining <= 0) {
-                throw new RuntimeException('This challan is already fully paid.');
-            }
-
-            if ($amountPaid > $remaining) {
-                throw new RuntimeException('Payment amount cannot exceed remaining balance.');
-            }
-
-            $payment = FeePayment::query()->create([
-                'fee_challan_id' => $locked->id,
-                'amount_paid' => round($amountPaid, 2),
-                'payment_date' => $paymentDate,
-                'payment_method' => $paymentMethod !== null && $paymentMethod !== '' ? $paymentMethod : null,
-                'reference_no' => $referenceNo !== null && $referenceNo !== '' ? $referenceNo : null,
-                'received_by' => $receivedBy,
-                'notes' => $notes !== null && $notes !== '' ? $notes : null,
-            ]);
-
-            $paidAfter = round($paidBefore + $amountPaid, 2);
-            $status = $this->statusFromPaidAndTotal($paidAfter, $total);
-            $isPaid = $status === self::STATUS_PAID;
-
-            $locked->forceFill([
-                'status' => $status,
-                'paid_at' => $isPaid ? now() : null,
-            ])->save();
-
-            return $payment;
-        });
+        );
     }
 
     public function waiveLateFee(FeeChallan $challan, int $waivedBy): FeeChallan
@@ -567,6 +635,62 @@ class FeeManagementService
                 'remaining_amount' => $this->remainingFromTotals($total, $paid),
             ],
         ];
+    }
+
+    /**
+     * @template TReturn
+     * @param callable(?int): TReturn $callback
+     * @return TReturn
+     */
+    private function executeWithUserForeignKeyFallback(?int $userId, callable $callback): mixed
+    {
+        try {
+            return $callback($userId);
+        } catch (QueryException $exception) {
+            if ($userId !== null && $this->isUserForeignKeyViolation($exception)) {
+                Log::warning('User FK failed during fee write; retrying without user reference.', [
+                    'user_id' => $userId,
+                    'sql_state' => $exception->errorInfo[0] ?? null,
+                    'driver_code' => $exception->errorInfo[1] ?? null,
+                    'message' => $exception->getMessage(),
+                ]);
+
+                return $callback(null);
+            }
+
+            throw $exception;
+        }
+    }
+
+    private function isUserForeignKeyViolation(QueryException $exception): bool
+    {
+        $sqlState = $exception->errorInfo[0] ?? null;
+        $driverCode = (int) ($exception->errorInfo[1] ?? 0);
+        if ($sqlState !== '23000' || $driverCode !== 1452) {
+            return false;
+        }
+
+        $message = strtolower($exception->getMessage());
+        $referencesUsers = str_contains($message, 'references `users` (`id`)');
+        if (! $referencesUsers) {
+            return false;
+        }
+
+        return (str_contains($message, 'fee_structures') && str_contains($message, 'created_by'))
+            || (str_contains($message, 'student_fee_assignments') && str_contains($message, 'assigned_by'))
+            || (str_contains($message, 'fee_challans') && str_contains($message, 'generated_by'))
+            || (str_contains($message, 'fee_payments') && str_contains($message, 'received_by'));
+    }
+
+    private function resolveUserId(?int $userId): ?int
+    {
+        if ($userId === null || $userId <= 0) {
+            return null;
+        }
+
+        return User::query()->useWritePdo()->whereKey($userId)->exists()
+            ? $userId
+            : null;
     }
 
     private function applyLateFeeIfEligibleToLockedChallan(FeeChallan $challan, float $paidAmount): void

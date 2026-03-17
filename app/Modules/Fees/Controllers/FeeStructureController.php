@@ -118,7 +118,7 @@ class FeeStructureController extends Controller
     {
         $validated = $request->validated();
 
-        FeeStructure::query()->create([
+        $this->service->createFeeStructure([
             'session' => (string) $validated['session'],
             'class_id' => (int) $validated['class_id'],
             'title' => trim((string) $validated['title']),
@@ -126,8 +126,7 @@ class FeeStructureController extends Controller
             'fee_type' => trim((string) $validated['fee_type']),
             'is_monthly' => $request->boolean('is_monthly'),
             'is_active' => $request->boolean('is_active', true),
-            'created_by' => (int) $request->user()->id,
-        ]);
+        ], (int) ($request->user()?->id ?? 0));
 
         return redirect()
             ->route('principal.fees.structures.index')
