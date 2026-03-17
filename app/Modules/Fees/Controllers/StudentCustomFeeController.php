@@ -12,6 +12,7 @@ use App\Modules\Fees\Requests\StoreStudentCustomFeeRequest;
 use App\Modules\Fees\Services\FeeManagementService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\View\View;
 
 class StudentCustomFeeController extends Controller
@@ -69,7 +70,7 @@ class StudentCustomFeeController extends Controller
         }
 
         $customByStudent = collect();
-        if ($studentIds->isNotEmpty()) {
+        if ($studentIds->isNotEmpty() && $this->studentCustomFeeTableExists()) {
             $customByStudent = StudentFeeStructure::query()
                 ->where('session', $selectedSession)
                 ->whereIn('student_id', $studentIds)
@@ -146,6 +147,10 @@ class StudentCustomFeeController extends Controller
 
     public function store(StoreStudentCustomFeeRequest $request): RedirectResponse
     {
+        if (! $this->studentCustomFeeTableExists()) {
+            return back()->with('error', 'Student custom fee table is missing. Please run migrations on this server.');
+        }
+
         $validated = $request->validated();
 
         $this->service->upsertStudentCustomFee([
@@ -173,13 +178,16 @@ class StudentCustomFeeController extends Controller
 
     private function availableSessions(): array
     {
-        $sessions = StudentFeeStructure::query()
-            ->select('session')
-            ->distinct()
-            ->orderByDesc('session')
-            ->pluck('session')
-            ->values()
-            ->all();
+        $sessions = [];
+        if ($this->studentCustomFeeTableExists()) {
+            $sessions = StudentFeeStructure::query()
+                ->select('session')
+                ->distinct()
+                ->orderByDesc('session')
+                ->pluck('session')
+                ->values()
+                ->all();
+        }
 
         if (empty($sessions)) {
             $sessions = FeeStructure::query()
@@ -214,5 +222,10 @@ class StudentCustomFeeController extends Controller
             FeeManagementService::STUDENT_CUSTOM_FEE_COMPUTER => 'Computer Fee',
             FeeManagementService::STUDENT_CUSTOM_FEE_EXAM => 'Exam Fee',
         ];
+    }
+
+    private function studentCustomFeeTableExists(): bool
+    {
+        return Schema::hasTable('student_fee_structures');
     }
 }

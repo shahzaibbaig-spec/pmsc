@@ -17,6 +17,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use RuntimeException;
 
 class FeeManagementService
@@ -124,6 +125,10 @@ class FeeManagementService
      */
     public function upsertStudentCustomFee(array $attributes, ?int $createdBy): StudentFeeStructure
     {
+        if (! $this->studentCustomFeeTableExists()) {
+            throw new RuntimeException('Student custom fee table is missing. Please run migrations.');
+        }
+
         $resolvedCreatedBy = $this->resolveUserId($createdBy);
 
         return $this->executeWithUserForeignKeyFallback(
@@ -374,12 +379,15 @@ class FeeManagementService
 
         $studentIds = $students->pluck('id');
         $oneTimeStructureIds = $feeStructures->where('is_monthly', false)->pluck('id');
-        $studentCustomFeeByStudent = StudentFeeStructure::query()
-            ->where('session', $session)
-            ->where('is_active', true)
-            ->whereIn('student_id', $studentIds)
-            ->get(['student_id', 'tuition_fee', 'computer_fee', 'exam_fee', 'is_active'])
-            ->keyBy('student_id');
+        $studentCustomFeeByStudent = collect();
+        if ($this->studentCustomFeeTableExists()) {
+            $studentCustomFeeByStudent = StudentFeeStructure::query()
+                ->where('session', $session)
+                ->where('is_active', true)
+                ->whereIn('student_id', $studentIds)
+                ->get(['student_id', 'tuition_fee', 'computer_fee', 'exam_fee', 'is_active'])
+                ->keyBy('student_id');
+        }
 
         $alreadyBilledOneTime = collect();
         if ($oneTimeStructureIds->isNotEmpty()) {
@@ -955,5 +963,10 @@ class FeeManagementService
         $monthKey = str_replace('-', '', $month);
 
         return sprintf('CH-%s-%s-%06d', $sessionKey, $monthKey, $studentId);
+    }
+
+    private function studentCustomFeeTableExists(): bool
+    {
+        return Schema::hasTable('student_fee_structures');
     }
 }
