@@ -16,13 +16,17 @@ use App\Modules\Students\Requests\BulkAddStudentsRequest;
 use App\Modules\Students\Requests\BulkDeleteStudentsRequest;
 use App\Modules\Students\Requests\ImportStudentsWorkbookRequest;
 use App\Modules\Students\Requests\StoreStudentRequest;
+use App\Modules\Students\Requests\UpdateStudentPhotoRequest;
 use App\Modules\Students\Requests\UpdateStudentRequest;
 use App\Modules\Students\Services\StudentImportService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
+use RuntimeException;
 use Throwable;
 
 class StudentManagementController extends Controller
@@ -183,6 +187,48 @@ class StudentManagementController extends Controller
         return redirect()
             ->route('admin.students.show', $student)
             ->with('success', 'Student updated successfully.');
+    }
+
+    public function updatePhoto(UpdateStudentPhotoRequest $request, Student $student): RedirectResponse
+    {
+        $removePhoto = (bool) $request->boolean('remove_photo');
+        $uploadedPhoto = $request->file('photo');
+        $capturedPhoto = trim((string) $request->input('photo_capture', ''));
+
+        if (! $removePhoto && ! $uploadedPhoto && $capturedPhoto === '') {
+            return back()->withErrors([
+                'photo' => 'Upload a photo or capture one from the camera.',
+            ]);
+        }
+
+        $previousPhotoPath = $student->photo_path;
+        $nextPhotoPath = $previousPhotoPath;
+        $successMessage = 'Student photo updated successfully.';
+
+        try {
+            if ($uploadedPhoto) {
+                $nextPhotoPath = $uploadedPhoto->store('student-photos', 'public');
+            } elseif ($capturedPhoto !== '') {
+                $nextPhotoPath = $this->storeCapturedStudentPhoto($capturedPhoto);
+            } elseif ($removePhoto) {
+                $nextPhotoPath = null;
+                $successMessage = 'Student photo removed successfully.';
+            }
+        } catch (RuntimeException $exception) {
+            return back()->withErrors([
+                'photo' => $exception->getMessage(),
+            ]);
+        }
+
+        if ($nextPhotoPath !== $previousPhotoPath) {
+            $student->forceFill(['photo_path' => $nextPhotoPath])->save();
+
+            if (! empty($previousPhotoPath)) {
+                Storage::disk('public')->delete($previousPhotoPath);
+            }
+        }
+
+        return back()->with('success', $successMessage);
     }
 
     public function deletePage(Student $student): View
@@ -639,5 +685,36 @@ class StudentManagementController extends Controller
             $percentage >= 50 => 'D',
             default => 'F',
         };
+    }
+
+    private function storeCapturedStudentPhoto(string $capturedPhoto): string
+    {
+        $normalized = trim($capturedPhoto);
+        $pattern = '/^data:image\/(png|jpe?g|webp);base64,([a-zA-Z0-9\/+=\s]+)$/';
+
+        if (! preg_match($pattern, $normalized, $matches)) {
+            throw new RuntimeException('Invalid camera image format. Please capture the photo again.');
+        }
+
+        $extension = strtolower((string) ($matches[1] ?? 'jpg'));
+        if ($extension === 'jpeg') {
+            $extension = 'jpg';
+        }
+
+        $base64Payload = str_replace(' ', '+', (string) ($matches[2] ?? ''));
+        $binary = base64_decode($base64Payload, true);
+
+        if ($binary === false || $binary === '') {
+            throw new RuntimeException('Unable to decode captured image. Please try again.');
+        }
+
+        if (strlen($binary) > 3 * 1024 * 1024) {
+            throw new RuntimeException('Captured image is too large. Please retake with a smaller frame.');
+        }
+
+        $path = 'student-photos/'.Str::uuid().'.'.$extension;
+        Storage::disk('public')->put($path, $binary);
+
+        return $path;
     }
 }

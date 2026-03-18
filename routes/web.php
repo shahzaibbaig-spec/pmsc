@@ -171,6 +171,10 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
         ->middleware(['role:Admin', 'permission:manage_users'])
         ->name('admin.students.update');
 
+    Route::post('/admin/students/{student}/photo', [StudentManagementController::class, 'updatePhoto'])
+        ->middleware(['role:Admin', 'permission:manage_users'])
+        ->name('admin.students.photo.update');
+
     Route::get('/admin/students/{student}/delete', [StudentManagementController::class, 'deletePage'])
         ->middleware(['role:Admin', 'permission:manage_users'])
         ->name('admin.students.delete-page');
@@ -198,6 +202,10 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
     Route::get('/principal/students/{student}', [StudentManagementController::class, 'show'])
         ->middleware('role:Principal')
         ->name('principal.students.show');
+
+    Route::post('/principal/students/{student}/photo', [StudentManagementController::class, 'updatePhoto'])
+        ->middleware('role:Principal')
+        ->name('principal.students.photo.update');
 
     Route::get('/principal/students/{student}/tabs/{tab}', [StudentManagementController::class, 'tabContent'])
         ->middleware('role:Principal')

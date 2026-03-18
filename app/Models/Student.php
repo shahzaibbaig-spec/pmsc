@@ -21,6 +21,7 @@ class Student extends Model
         'age',
         'contact',
         'address',
+        'photo_path',
         'status',
     ];
 
