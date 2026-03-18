@@ -111,6 +111,16 @@ class StudentSubjectAssignmentMatrixService
                 return $groupId !== null ? (int) $groupId : null;
             });
 
+        $groupSubjectMap = $assignments
+            ->whereNotNull('subject_group_id')
+            ->groupBy('student_id')
+            ->map(fn (Collection $rows): array => $rows
+                ->pluck('subject_id')
+                ->map(fn ($id) => (int) $id)
+                ->unique()
+                ->values()
+                ->all());
+
         return [
             'class' => [
                 'id' => $classRoom->id,
@@ -131,8 +141,12 @@ class StudentSubjectAssignmentMatrixService
                 'student_id' => $student->student_id,
                 'name' => $student->name,
                 'father_name' => $student->father_name,
-                'assigned_subject_ids' => $commonAssignmentMap->get($student->id, []),
+                'assigned_subject_ids' => array_values(array_unique(array_merge(
+                    $commonAssignmentMap->get($student->id, []),
+                    $groupSubjectMap->get($student->id, [])
+                ))),
                 'common_subject_ids' => $commonAssignmentMap->get($student->id, []),
+                'group_subject_ids' => $groupSubjectMap->get($student->id, []),
                 'subject_group_id' => $groupAssignmentMap->get((int) $student->id),
                 'last_updated_at' => $latestUpdates->get((int) $student->id, ''),
             ])->values()->all(),

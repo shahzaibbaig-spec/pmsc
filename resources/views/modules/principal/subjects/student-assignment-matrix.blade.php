@@ -396,7 +396,7 @@
                                             class="block min-h-10 w-full min-w-44 rounded-md border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
                                         >
                                             <option value="">No Group</option>
-                                            <template x-for="group in subjectGroups" :key="'group-option-'+student.id+'-'+group.id">
+                                            <template x-for="group in activeSubjectGroups()" :key="'group-option-'+student.id+'-'+group.id">
                                                 <option :value="group.id" x-text="group.name"></option>
                                             </template>
                                         </select>
@@ -441,10 +441,12 @@
                                                             <input
                                                                 type="checkbox"
                                                                 class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                                                                :checked="selectedByStudent[student.id] && selectedByStudent[student.id].includes(subject.id)"
+                                                                :checked="(selectedByStudent[student.id] && selectedByStudent[student.id].includes(subject.id)) || isGroupAssignedSubject(student.id, subject.id)"
+                                                                :disabled="isGroupAssignedSubject(student.id, subject.id)"
                                                                 @change="onStudentSubjectChange(student.id, subject.id, $event.target.checked)"
                                                             >
                                                             <span x-text="subject.name"></span>
+                                                            <span x-show="isGroupAssignedSubject(student.id, subject.id)" class="inline-flex items-center rounded-full bg-indigo-100 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700">Group</span>
                                                         </label>
                                                     </template>
                                                 </div>
@@ -458,7 +460,8 @@
                                                 <input
                                                     type="checkbox"
                                                     class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                                                    :checked="selectedByStudent[student.id] && selectedByStudent[student.id].includes(subject.id)"
+                                                    :checked="(selectedByStudent[student.id] && selectedByStudent[student.id].includes(subject.id)) || isGroupAssignedSubject(student.id, subject.id)"
+                                                    :disabled="isGroupAssignedSubject(student.id, subject.id)"
                                                     @change="onStudentSubjectChange(student.id, subject.id, $event.target.checked)"
                                                 >
                                             </td>
@@ -659,6 +662,7 @@
                 addingCustomSubject: false,
                 savingByStudent: {},
                 groupSavingByStudent: {},
+                groupRequestVersionByStudent: {},
                 status: {
                     message: '',
                     type: 'success',
@@ -972,17 +976,38 @@
                     );
                 },
 
+                activeSubjectGroups() {
+                    return (this.subjectGroups || []).filter((group) => Boolean(group.is_active));
+                },
+
                 studentSelectionLabel(studentId) {
+                    const row = this.students.find((student) => Number(student.id) === Number(studentId));
                     const selected = this.selectedByStudent[studentId] || [];
-                    if (!selected.length) {
+                    const groupAssigned = row ? this.normalizeIds(row.group_subject_ids || []) : [];
+                    const merged = this.normalizeIds([...selected, ...groupAssigned]);
+
+                    if (!merged.length) {
                         return 'Select common subjects';
                     }
 
                     const names = this.subjects
-                        .filter((subject) => selected.includes(subject.id))
+                        .filter((subject) => merged.includes(subject.id))
                         .map((subject) => subject.name);
 
                     return names.length ? names.join(', ') : 'Select common subjects';
+                },
+
+                isGroupAssignedSubject(studentId, subjectId) {
+                    const sid = Number(studentId);
+                    const subId = Number(subjectId);
+                    const row = this.students.find((student) => Number(student.id) === sid);
+                    if (!row) {
+                        return false;
+                    }
+
+                    const groupSubjects = this.normalizeIds(row.group_subject_ids || []);
+
+                    return groupSubjects.includes(subId);
                 },
 
                 toggleGroupFormSubject(subjectId, checked) {
@@ -1188,6 +1213,9 @@
 
                 async onStudentGroupChange(studentId, rawGroupId) {
                     const sid = Number(studentId);
+                    const requestVersion = Number(this.groupRequestVersionByStudent[sid] || 0) + 1;
+                    this.groupRequestVersionByStudent[sid] = requestVersion;
+
                     const previousGroupId = this.groupByStudent[sid] !== undefined && this.groupByStudent[sid] !== null
                         ? Number(this.groupByStudent[sid])
                         : null;
@@ -1216,6 +1244,10 @@
                             }),
                         });
 
+                        if (Number(this.groupRequestVersionByStudent[sid] || 0) !== requestVersion) {
+                            return;
+                        }
+
                         const result = await response.json();
                         if (!response.ok) {
                             this.groupByStudent[sid] = previousGroupId;
@@ -1229,23 +1261,35 @@
                         }
 
                         const convertedFromCommon = Number(result.converted_from_common || 0);
-                        if (convertedFromCommon > 0) {
-                            this.setStatus(`Student group assignment updated. ${convertedFromCommon} overlapping common subjects were moved into the selected group.`);
-                        } else {
-                            this.setStatus('Student group assignment updated.');
+                        await this.loadStudents(false, this.pagination.current_page, true);
+
+                        if (Number(this.groupRequestVersionByStudent[sid] || 0) !== requestVersion) {
+                            return;
                         }
+
+                        this.setStatus(
+                            convertedFromCommon > 0
+                                ? `Student group assignment auto-saved. ${convertedFromCommon} overlapping common subjects were moved into the selected group.`
+                                : 'Student group assignment auto-saved.'
+                        );
                     } catch (error) {
                         this.groupByStudent[sid] = previousGroupId;
                         this.setStatus('Unexpected error while assigning subject group.', 'error');
                     } finally {
-                        this.groupSavingByStudent[sid] = false;
+                        if (Number(this.groupRequestVersionByStudent[sid] || 0) === requestVersion) {
+                            this.groupSavingByStudent[sid] = false;
+                        }
                     }
                 },
 
-                async loadStudents(resetPage = true, targetPage = null) {
-                    this.clearStatus();
+                async loadStudents(resetPage = true, targetPage = null, silent = false) {
+                    if (!silent) {
+                        this.clearStatus();
+                    }
                     if (!this.session || !this.classId) {
-                        this.setStatus('Session and class are required.', 'error');
+                        if (!silent) {
+                            this.setStatus('Session and class are required.', 'error');
+                        }
                         this.students = [];
                         this.subjects = [];
                         this.subjectGroups = [];
@@ -1274,7 +1318,9 @@
 
                         const result = await response.json();
                         if (!response.ok) {
-                            this.setStatus(result.message || 'Failed to load students.', 'error');
+                            if (!silent) {
+                                this.setStatus(result.message || 'Failed to load students.', 'error');
+                            }
                             return;
                         }
 
@@ -1293,6 +1339,7 @@
                             name: student.name || '',
                             last_updated_at: student.last_updated_at || '',
                             assigned_subject_ids: this.normalizeIds(student.common_subject_ids || student.assigned_subject_ids || []),
+                            group_subject_ids: this.normalizeIds(student.group_subject_ids || []),
                             subject_group_id: student.subject_group_id ? Number(student.subject_group_id) : null,
                         }));
 
@@ -1307,6 +1354,7 @@
                         this.dirtyStudentIds = [];
                         this.savingByStudent = {};
                         this.groupSavingByStudent = {};
+                        this.groupRequestVersionByStudent = {};
 
                         const incomingPagination = result.pagination || {};
                         this.pagination = {
@@ -1320,7 +1368,9 @@
 
                         await this.loadSubjectGroups(true);
                     } catch (error) {
-                        this.setStatus('Unexpected error while loading students.', 'error');
+                        if (!silent) {
+                            this.setStatus('Unexpected error while loading students.', 'error');
+                        }
                     } finally {
                         this.loading = false;
                     }
