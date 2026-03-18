@@ -586,17 +586,7 @@ class StudentSubjectAssignmentMatrixService
                     $groupSubjectIds,
                     $safeAssignedBy
                 ): array {
-                    $commonSubjectIds = StudentSubjectAssignment::query()
-                        ->where('session', $session)
-                        ->where('student_id', (int) $student->id)
-                        ->whereNull('subject_group_id')
-                        ->pluck('subject_id')
-                        ->map(fn ($id): int => (int) $id)
-                        ->values()
-                        ->all();
-
-                    $subjectsToAssign = array_values(array_diff($groupSubjectIds, $commonSubjectIds));
-                    $skippedDueCommon = count($groupSubjectIds) - count($subjectsToAssign);
+                    $convertedFromCommon = 0;
 
                     StudentSubjectAssignment::query()
                         ->where('session', $session)
@@ -604,9 +594,17 @@ class StudentSubjectAssignmentMatrixService
                         ->whereNotNull('subject_group_id')
                         ->delete();
 
-                    if ($subjectGroup && ! empty($subjectsToAssign)) {
+                    if ($subjectGroup && ! empty($groupSubjectIds)) {
+                        // Ensure selected group is always persisted by converting overlapping common subjects.
+                        $convertedFromCommon = StudentSubjectAssignment::query()
+                            ->where('session', $session)
+                            ->where('student_id', (int) $student->id)
+                            ->whereNull('subject_group_id')
+                            ->whereIn('subject_id', $groupSubjectIds)
+                            ->delete();
+
                         $now = now();
-                        $rows = collect($subjectsToAssign)->map(fn (int $subjectId): array => [
+                        $rows = collect($groupSubjectIds)->map(fn (int $subjectId): array => [
                             'session' => $session,
                             'student_id' => (int) $student->id,
                             'class_id' => (int) $student->class_id,
@@ -622,8 +620,9 @@ class StudentSubjectAssignmentMatrixService
 
                     return [
                         'group_id' => $subjectGroup?->id,
-                        'assigned_count' => count($subjectsToAssign),
-                        'skipped_due_common' => $skippedDueCommon,
+                        'assigned_count' => $subjectGroup ? count($groupSubjectIds) : 0,
+                        'skipped_due_common' => 0,
+                        'converted_from_common' => $convertedFromCommon,
                         'updated_at' => now()->toDateTimeString(),
                     ];
                 });

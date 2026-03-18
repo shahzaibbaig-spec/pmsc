@@ -1228,8 +1228,9 @@
                             row.last_updated_at = result.updated_at || (new Date()).toISOString();
                         }
 
-                        if (Number(result.skipped_due_common || 0) > 0) {
-                            this.setStatus(`Group assigned, but ${result.skipped_due_common} overlapping subjects were skipped because they are already common subjects.`);
+                        const convertedFromCommon = Number(result.converted_from_common || 0);
+                        if (convertedFromCommon > 0) {
+                            this.setStatus(`Student group assignment updated. ${convertedFromCommon} overlapping common subjects were moved into the selected group.`);
                         } else {
                             this.setStatus('Student group assignment updated.');
                         }

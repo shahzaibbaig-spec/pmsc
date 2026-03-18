@@ -202,6 +202,7 @@ class StudentSubjectAssignmentMatrixController extends Controller
             'group_id' => $result['group_id'],
             'assigned_count' => $result['assigned_count'],
             'skipped_due_common' => $result['skipped_due_common'],
+            'converted_from_common' => $result['converted_from_common'] ?? 0,
             'updated_at' => $result['updated_at'],
         ]);
     }
