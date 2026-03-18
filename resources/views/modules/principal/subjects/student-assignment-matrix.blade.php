@@ -118,6 +118,25 @@
                         </div>
 
                         <div class="flex flex-wrap items-center gap-3">
+                            <div class="inline-flex items-center rounded-full bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700">
+                                <span x-text="`${selectedGroupStudentIds.length} selected for group save`"></span>
+                            </div>
+                            <button
+                                type="button"
+                                @click="saveSelectedGroupAssignments()"
+                                :disabled="savingSelectedGroups || selectedGroupStudentIds.length === 0 || !classId || !session"
+                                class="inline-flex min-h-10 items-center rounded-md bg-indigo-600 px-3 py-2 text-xs font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                <span x-text="savingSelectedGroups ? 'Saving...' : 'Save Group Assignment'"></span>
+                            </button>
+                            <button
+                                type="button"
+                                @click="clearSelectedGroupStudents()"
+                                :disabled="savingSelectedGroups || selectedGroupStudentIds.length === 0"
+                                class="inline-flex min-h-10 items-center rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                Clear Selection
+                            </button>
                             <button
                                 type="button"
                                 @click="saveAllStudentChanges()"
@@ -343,10 +362,21 @@
                         <template x-if="viewMode === 'dropdown'">
                             <thead class="bg-slate-50">
                                 <tr>
+                                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">
+                                        <input
+                                            type="checkbox"
+                                            class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                            :checked="allVisibleStudentsSelectedForGroups()"
+                                            @change="toggleSelectAllGroupStudents($event.target.checked)"
+                                            :disabled="loading || students.length === 0"
+                                            title="Select all students on current page"
+                                        >
+                                    </th>
                                     <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Student Name</th>
                                     <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Group</th>
                                     <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Subjects</th>
                                     <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Last Updated</th>
+                                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Action</th>
                                 </tr>
                             </thead>
                         </template>
@@ -354,12 +384,23 @@
                         <template x-if="viewMode === 'matrix'">
                             <thead class="bg-slate-50">
                                 <tr>
+                                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">
+                                        <input
+                                            type="checkbox"
+                                            class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                            :checked="allVisibleStudentsSelectedForGroups()"
+                                            @change="toggleSelectAllGroupStudents($event.target.checked)"
+                                            :disabled="loading || students.length === 0"
+                                            title="Select all students on current page"
+                                        >
+                                    </th>
                                     <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Student Name</th>
                                     <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Group</th>
                                     <template x-for="subject in subjects" :key="'head-'+subject.id">
                                         <th class="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-600" x-text="subject.name"></th>
                                     </template>
                                     <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Last Updated</th>
+                                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Action</th>
                                 </tr>
                             </thead>
                         </template>
@@ -367,7 +408,7 @@
                         <tbody class="divide-y divide-slate-200 bg-white">
                             <template x-if="loading">
                                 <tr>
-                                    <td :colspan="viewMode === 'matrix' ? (subjects.length + 3) : 4" class="px-4 py-8 text-center text-sm text-slate-500">
+                                    <td :colspan="viewMode === 'matrix' ? (subjects.length + 5) : 6" class="px-4 py-8 text-center text-sm text-slate-500">
                                         Loading students...
                                     </td>
                                 </tr>
@@ -375,7 +416,7 @@
 
                             <template x-if="!loading && students.length === 0">
                                 <tr>
-                                    <td :colspan="viewMode === 'matrix' ? (subjects.length + 3) : 4" class="px-4 py-8 text-center text-sm text-slate-500">
+                                    <td :colspan="viewMode === 'matrix' ? (subjects.length + 5) : 6" class="px-4 py-8 text-center text-sm text-slate-500">
                                         No students found for the selected filters.
                                     </td>
                                 </tr>
@@ -383,6 +424,16 @@
 
                             <template x-for="student in students" :key="'row-'+student.id">
                                 <tr class="align-top">
+                                    <td class="px-4 py-3 text-sm text-slate-800">
+                                        <input
+                                            type="checkbox"
+                                            class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                            :checked="isStudentSelectedForGroup(student.id)"
+                                            @change="toggleStudentGroupSelection(student.id, $event.target.checked)"
+                                            :disabled="loading"
+                                        >
+                                    </td>
+
                                     <td class="px-4 py-3 text-sm text-slate-800">
                                         <div class="font-medium" x-text="student.name"></div>
                                         <div class="text-xs text-slate-500" x-text="student.student_id"></div>
@@ -402,6 +453,7 @@
                                         </select>
                                         <div class="mt-1 flex flex-wrap items-center gap-1 text-[10px] text-slate-500">
                                             <span>Elective Group</span>
+                                            <span class="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-700" x-text="`Assigned: ${studentAssignedGroupLabel(student.id)}`"></span>
                                             <span x-show="groupSavingByStudent[student.id]" class="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 font-medium text-amber-700">Assigning</span>
                                         </div>
                                     </td>
@@ -472,6 +524,17 @@
                                         <span x-text="formatDateTime(student.last_updated_at)"></span>
                                         <span x-show="isDirtyStudent(student.id)" class="ms-2 inline-flex items-center rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-medium text-sky-700">Pending</span>
                                         <span x-show="savingByStudent[student.id]" class="ms-2 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">Saving</span>
+                                    </td>
+
+                                    <td class="px-4 py-3 text-sm text-slate-700">
+                                        <button
+                                            type="button"
+                                            @click="saveStudentGroupAssignment(student.id)"
+                                            :disabled="groupSavingByStudent[student.id] || !session || !classId"
+                                            class="inline-flex min-h-9 items-center rounded-md border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                        >
+                                            <span x-text="groupSavingByStudent[student.id] ? 'Saving...' : 'Save Group'"></span>
+                                        </button>
                                     </td>
                                 </tr>
                             </template>
@@ -663,6 +726,7 @@
                 savingByStudent: {},
                 groupSavingByStudent: {},
                 groupRequestVersionByStudent: {},
+                savingSelectedGroups: false,
                 status: {
                     message: '',
                     type: 'success',
@@ -672,6 +736,7 @@
                 students: [],
                 selectedByStudent: {},
                 groupByStudent: {},
+                selectedGroupStudentIds: [],
                 dirtyStudentIds: [],
                 bulkSubjects: [],
                 bulkSubjectSearch: '',
@@ -980,6 +1045,81 @@
                     return (this.subjectGroups || []).filter((group) => Boolean(group.is_active));
                 },
 
+                currentPageStudentIds() {
+                    return this.students
+                        .map((student) => Number(student.id))
+                        .filter((id) => Number.isInteger(id) && id > 0);
+                },
+
+                allVisibleStudentsSelectedForGroups() {
+                    const ids = this.currentPageStudentIds();
+                    if (ids.length === 0) {
+                        return false;
+                    }
+
+                    return ids.every((id) => this.selectedGroupStudentIds.includes(id));
+                },
+
+                isStudentSelectedForGroup(studentId) {
+                    return this.selectedGroupStudentIds.includes(Number(studentId));
+                },
+
+                toggleStudentGroupSelection(studentId, checked) {
+                    const sid = Number(studentId);
+                    if (!Number.isInteger(sid) || sid <= 0) {
+                        return;
+                    }
+
+                    const current = this.normalizeIds(this.selectedGroupStudentIds || []);
+                    if (checked && !current.includes(sid)) {
+                        current.push(sid);
+                    }
+
+                    this.selectedGroupStudentIds = checked
+                        ? this.normalizeIds(current)
+                        : current.filter((value) => value !== sid);
+                },
+
+                toggleSelectAllGroupStudents(checked) {
+                    if (!checked) {
+                        this.selectedGroupStudentIds = [];
+                        return;
+                    }
+
+                    this.selectedGroupStudentIds = this.currentPageStudentIds();
+                },
+
+                clearSelectedGroupStudents() {
+                    this.selectedGroupStudentIds = [];
+                },
+
+                groupNameById(groupId) {
+                    const id = Number(groupId || 0);
+                    if (!Number.isInteger(id) || id <= 0) {
+                        return 'No Group';
+                    }
+
+                    const group = (this.subjectGroups || []).find((item) => Number(item.id) === id);
+                    if (!group) {
+                        return `Group #${id}`;
+                    }
+
+                    return Boolean(group.is_active)
+                        ? group.name
+                        : `${group.name} (Inactive)`;
+                },
+
+                studentAssignedGroupLabel(studentId) {
+                    const sid = Number(studentId);
+                    const groupId = this.groupByStudent[sid];
+
+                    if (groupId === null || groupId === undefined || groupId === '') {
+                        return 'No Group';
+                    }
+
+                    return this.groupNameById(groupId);
+                },
+
                 studentSelectionLabel(studentId) {
                     const row = this.students.find((student) => Number(student.id) === Number(studentId));
                     const selected = this.selectedByStudent[studentId] || [];
@@ -1211,8 +1351,18 @@
                     await this.saveSubjectGroup();
                 },
 
-                async onStudentGroupChange(studentId, rawGroupId) {
+                async onStudentGroupChange(studentId, rawGroupId, options = {}) {
                     const sid = Number(studentId);
+                    const force = Boolean(options.force);
+                    const silent = Boolean(options.silent);
+                    const refreshAfter = options.refreshAfter === undefined ? true : Boolean(options.refreshAfter);
+                    const successMessage = typeof options.successMessage === 'string'
+                        ? options.successMessage
+                        : null;
+                    const errorMessage = typeof options.errorMessage === 'string'
+                        ? options.errorMessage
+                        : null;
+
                     const requestVersion = Number(this.groupRequestVersionByStudent[sid] || 0) + 1;
                     this.groupRequestVersionByStudent[sid] = requestVersion;
 
@@ -1220,14 +1370,18 @@
                         ? Number(this.groupByStudent[sid])
                         : null;
 
-                    const nextGroupId = rawGroupId === '' ? null : Number(rawGroupId);
-                    if (previousGroupId === nextGroupId) {
-                        return;
+                    const nextGroupId = rawGroupId === '' || rawGroupId === null || rawGroupId === undefined
+                        ? null
+                        : Number(rawGroupId);
+                    if (!force && previousGroupId === nextGroupId) {
+                        return { ok: true, skipped: true, convertedFromCommon: 0 };
                     }
 
                     this.groupByStudent[sid] = nextGroupId;
                     this.groupSavingByStudent[sid] = true;
-                    this.clearStatus();
+                    if (!silent) {
+                        this.clearStatus();
+                    }
 
                     try {
                         const response = await fetch(config.assignGroupUrl, {
@@ -1245,41 +1399,122 @@
                         });
 
                         if (Number(this.groupRequestVersionByStudent[sid] || 0) !== requestVersion) {
-                            return;
+                            return { ok: false, stale: true, convertedFromCommon: 0 };
                         }
 
                         const result = await response.json();
                         if (!response.ok) {
                             this.groupByStudent[sid] = previousGroupId;
-                            this.setStatus(result.message || 'Failed to assign subject group.', 'error');
-                            return;
+                            if (!silent) {
+                                this.setStatus(errorMessage || result.message || 'Failed to assign subject group.', 'error');
+                            }
+
+                            return { ok: false, convertedFromCommon: 0 };
                         }
 
                         const row = this.students.find((student) => student.id === sid);
                         if (row) {
                             row.last_updated_at = result.updated_at || (new Date()).toISOString();
+                            row.subject_group_id = result.group_id ? Number(result.group_id) : null;
                         }
 
                         const convertedFromCommon = Number(result.converted_from_common || 0);
-                        await this.loadStudents(false, this.pagination.current_page, true);
-
-                        if (Number(this.groupRequestVersionByStudent[sid] || 0) !== requestVersion) {
-                            return;
+                        if (refreshAfter) {
+                            await this.loadStudents(false, this.pagination.current_page, true);
                         }
 
-                        this.setStatus(
-                            convertedFromCommon > 0
-                                ? `Student group assignment auto-saved. ${convertedFromCommon} overlapping common subjects were moved into the selected group.`
-                                : 'Student group assignment auto-saved.'
-                        );
+                        if (Number(this.groupRequestVersionByStudent[sid] || 0) !== requestVersion) {
+                            return { ok: false, stale: true, convertedFromCommon };
+                        }
+
+                        if (!silent) {
+                            if (successMessage) {
+                                this.setStatus(successMessage);
+                            } else {
+                                this.setStatus(
+                                    convertedFromCommon > 0
+                                        ? `Student group assignment auto-saved. ${convertedFromCommon} overlapping common subjects were moved into the selected group.`
+                                        : 'Student group assignment auto-saved.'
+                                );
+                            }
+                        }
+
+                        return { ok: true, convertedFromCommon };
                     } catch (error) {
                         this.groupByStudent[sid] = previousGroupId;
-                        this.setStatus('Unexpected error while assigning subject group.', 'error');
+                        if (!silent) {
+                            this.setStatus(errorMessage || 'Unexpected error while assigning subject group.', 'error');
+                        }
+
+                        return { ok: false, convertedFromCommon: 0 };
                     } finally {
                         if (Number(this.groupRequestVersionByStudent[sid] || 0) === requestVersion) {
                             this.groupSavingByStudent[sid] = false;
                         }
                     }
+                },
+
+                async saveStudentGroupAssignment(studentId) {
+                    const sid = Number(studentId);
+                    const selectedGroup = this.groupByStudent[sid] ?? '';
+
+                    await this.onStudentGroupChange(sid, selectedGroup, {
+                        force: true,
+                        successMessage: 'Student group assignment saved.',
+                    });
+                },
+
+                async saveSelectedGroupAssignments() {
+                    this.clearStatus();
+                    if (!this.session || !this.classId) {
+                        this.setStatus('Session and class are required for group assignment.', 'error');
+                        return;
+                    }
+
+                    const selectedIds = this.normalizeIds(this.selectedGroupStudentIds || [])
+                        .filter((sid) => this.students.some((student) => Number(student.id) === sid));
+
+                    if (selectedIds.length === 0) {
+                        this.setStatus('Select at least one student using the checkbox.', 'error');
+                        return;
+                    }
+
+                    this.savingSelectedGroups = true;
+                    const failedStudentIds = [];
+                    let successCount = 0;
+                    let convertedTotal = 0;
+
+                    for (const sid of selectedIds) {
+                        const groupId = this.groupByStudent[sid] ?? '';
+                        const outcome = await this.onStudentGroupChange(sid, groupId, {
+                            force: true,
+                            silent: true,
+                            refreshAfter: false,
+                        });
+
+                        if (outcome && outcome.ok) {
+                            successCount++;
+                            convertedTotal += Number(outcome.convertedFromCommon || 0);
+                        } else {
+                            failedStudentIds.push(sid);
+                        }
+                    }
+
+                    await this.loadStudents(false, this.pagination.current_page, true);
+
+                    if (failedStudentIds.length === 0) {
+                        this.setStatus(
+                            convertedTotal > 0
+                                ? `Saved group assignment for ${successCount} students. ${convertedTotal} overlapping common subjects were moved into selected groups.`
+                                : `Saved group assignment for ${successCount} students.`
+                        );
+                        this.selectedGroupStudentIds = [];
+                    } else {
+                        this.setStatus(`Saved group assignment for ${successCount} of ${selectedIds.length} students. Please retry failed selections.`, 'error');
+                        this.selectedGroupStudentIds = failedStudentIds;
+                    }
+
+                    this.savingSelectedGroups = false;
                 },
 
                 async loadStudents(resetPage = true, targetPage = null, silent = false) {
@@ -1351,6 +1586,8 @@
                         });
                         this.selectedByStudent = nextMap;
                         this.groupByStudent = nextGroupMap;
+                        this.selectedGroupStudentIds = this.normalizeIds(this.selectedGroupStudentIds || [])
+                            .filter((sid) => this.students.some((student) => Number(student.id) === sid));
                         this.dirtyStudentIds = [];
                         this.savingByStudent = {};
                         this.groupSavingByStudent = {};
