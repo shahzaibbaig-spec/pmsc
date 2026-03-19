@@ -7,12 +7,24 @@ use App\Models\AcademicEvent;
 use App\Modules\Academic\Services\AcademicEventNotificationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\View\View;
 
 class AcademicCalendarController extends Controller
 {
     public function index(Request $request): View
     {
+        if (! Schema::hasTable('academic_events')) {
+            return view('modules.academic.calendar.index', [
+                'events' => new LengthAwarePaginator([], 0, 20),
+                'selectedType' => '',
+                'canManage' => $this->canManage($request),
+                'editingEvent' => null,
+                'typeOptions' => ['exam', 'holiday', 'meeting', 'activity', 'announcement'],
+            ]);
+        }
+
         $validated = $request->validate([
             'type' => ['nullable', 'string', 'max:40'],
             'edit' => ['nullable', 'integer'],
@@ -64,6 +76,7 @@ class AcademicCalendarController extends Controller
     public function store(Request $request): RedirectResponse
     {
         abort_unless($this->canManage($request), 403);
+        abort_unless(Schema::hasTable('academic_events'), 503, 'Academic calendar tables are not ready.');
 
         $payload = $this->validatedPayload($request);
         $payload['created_by'] = (int) ($request->user()?->id ?? 0) ?: null;
@@ -78,6 +91,7 @@ class AcademicCalendarController extends Controller
     public function update(Request $request, AcademicEvent $academicEvent): RedirectResponse
     {
         abort_unless($this->canManage($request), 403);
+        abort_unless(Schema::hasTable('academic_events'), 503, 'Academic calendar tables are not ready.');
 
         $payload = $this->validatedPayload($request);
         $academicEvent->forceFill($payload)->save();
@@ -90,6 +104,7 @@ class AcademicCalendarController extends Controller
     public function destroy(Request $request, AcademicEvent $academicEvent): RedirectResponse
     {
         abort_unless($this->canManage($request), 403);
+        abort_unless(Schema::hasTable('academic_events'), 503, 'Academic calendar tables are not ready.');
 
         $academicEvent->delete();
 
@@ -104,6 +119,7 @@ class AcademicCalendarController extends Controller
         AcademicEventNotificationService $service
     ): RedirectResponse {
         abort_unless($this->canManage($request), 403);
+        abort_unless(Schema::hasTable('academic_events'), 503, 'Academic calendar tables are not ready.');
 
         $result = $service->sendReminderForEvent($academicEvent, true);
 
@@ -150,4 +166,3 @@ class AcademicCalendarController extends Controller
         return $request->user()?->hasAnyRole(['Admin', 'Principal']) ?? false;
     }
 }
-

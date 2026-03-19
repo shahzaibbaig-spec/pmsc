@@ -6,12 +6,23 @@ use App\Models\AcademicEvent;
 use App\Models\AcademicNotification;
 use App\Models\User;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Schema;
 
 class AcademicEventNotificationService
 {
     public function sendScheduledReminders(?Carbon $targetDate = null): array
     {
         $date = ($targetDate?->copy() ?? now())->startOfDay();
+        if (! Schema::hasTable('academic_events') || ! Schema::hasTable('academic_notifications')) {
+            return [
+                'date' => $date->toDateString(),
+                'events_checked' => 0,
+                'events_due' => 0,
+                'events_notified' => 0,
+                'sent' => 0,
+                'skipped' => 0,
+            ];
+        }
 
         $events = AcademicEvent::query()
             ->where('notify_before', true)
@@ -49,6 +60,15 @@ class AcademicEventNotificationService
 
     public function sendReminderForEvent(AcademicEvent $event, bool $force = true): array
     {
+        if (! Schema::hasTable('academic_notifications')) {
+            return [
+                'event_id' => (int) $event->id,
+                'teachers' => 0,
+                'sent' => 0,
+                'skipped' => 0,
+            ];
+        }
+
         $teachers = $this->activeTeachers();
         $sent = 0;
         $skipped = 0;
@@ -136,4 +156,3 @@ class AcademicEventNotificationService
         );
     }
 }
-

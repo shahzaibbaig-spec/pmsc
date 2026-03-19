@@ -7,11 +7,14 @@ use App\Models\AcademicNotification;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 
 class AcademicNotificationController extends Controller
 {
     public function read(Request $request, AcademicNotification $academicNotification): RedirectResponse|JsonResponse
     {
+        abort_unless(Schema::hasTable('academic_notifications'), 503, 'Academic notification table is not ready.');
+
         $user = $request->user();
 
         abort_unless($user && (int) $academicNotification->user_id === (int) $user->id, 403);
@@ -29,6 +32,8 @@ class AcademicNotificationController extends Controller
 
     public function readAll(Request $request): RedirectResponse|JsonResponse
     {
+        abort_unless(Schema::hasTable('academic_notifications'), 503, 'Academic notification table is not ready.');
+
         $request->user()?->academicNotifications()
             ->where('is_read', false)
             ->update([
@@ -43,4 +48,3 @@ class AcademicNotificationController extends Controller
         return back();
     }
 }
-

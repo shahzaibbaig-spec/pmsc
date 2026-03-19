@@ -5,7 +5,8 @@
         $isTeacher = $layoutUser?->hasRole('Teacher') ?? false;
         $isDashboardRoute = request()->routeIs('dashboard') || request()->routeIs('*.dashboard');
         $academicPopupNotifications = collect();
-        if ($layoutUser && $isDashboardRoute) {
+        $hasAcademicNotificationsTable = \Illuminate\Support\Facades\Schema::hasTable('academic_notifications');
+        if ($layoutUser && $isDashboardRoute && $hasAcademicNotificationsTable) {
             $academicPopupNotifications = \App\Models\AcademicNotification::query()
                 ->where('user_id', (int) $layoutUser->id)
                 ->where('is_read', false)
