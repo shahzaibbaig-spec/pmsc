@@ -5,11 +5,16 @@ namespace App\Modules\Results\Services;
 use App\Models\ReportComment;
 use App\Models\Student;
 use App\Models\StudentLearningProfile;
+use App\Models\User;
+use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\Log;
 
 class ReportCommentService
 {
     public function generateCommentsForClass(int $classId, string $session, string $examType, ?int $generatedBy = null): array
     {
+        $resolvedGeneratedBy = $this->resolveUserId($generatedBy);
+
         $students = Student::query()
             ->where('class_id', $classId)
             ->where('status', 'active')
@@ -42,13 +47,12 @@ class ReportCommentService
             ]);
 
             $wasEdited = (bool) ($comment->is_edited ?? false);
-            $comment->generated_by = $generatedBy;
             $comment->auto_comment = $autoComment;
             if (! $wasEdited || (string) ($comment->final_comment ?? '') === '') {
                 $comment->final_comment = $autoComment;
                 $comment->is_edited = false;
             }
-            $comment->save();
+            $this->persistCommentWithGeneratorFallback($comment, $resolvedGeneratedBy);
 
             $commentsGenerated++;
         }
@@ -66,6 +70,8 @@ class ReportCommentService
         string $finalComment,
         ?int $generatedBy = null
     ): ReportComment {
+        $resolvedGeneratedBy = $this->resolveUserId($generatedBy);
+
         $student = Student::query()->findOrFail($studentId, ['id', 'name', 'student_id']);
         $profile = StudentLearningProfile::query()
             ->where('student_id', $studentId)
@@ -81,13 +87,62 @@ class ReportCommentService
         $autoComment = (string) ($comment->auto_comment ?: $this->buildAutoComment($student, $profile));
         $finalComment = trim($finalComment);
 
-        $comment->generated_by = $generatedBy;
         $comment->auto_comment = $autoComment;
         $comment->final_comment = $finalComment !== '' ? $finalComment : $autoComment;
         $comment->is_edited = trim((string) $comment->final_comment) !== trim($autoComment);
-        $comment->save();
+        $this->persistCommentWithGeneratorFallback($comment, $resolvedGeneratedBy);
 
         return $comment;
+    }
+
+    private function persistCommentWithGeneratorFallback(ReportComment $comment, ?int $generatedBy): void
+    {
+        try {
+            $comment->generated_by = $generatedBy;
+            $comment->save();
+        } catch (QueryException $exception) {
+            if ($generatedBy !== null && $this->isGeneratedByForeignKeyViolation($exception)) {
+                Log::warning('User FK failed during report comment save; retrying without generator reference.', [
+                    'user_id' => $generatedBy,
+                    'sql_state' => $exception->errorInfo[0] ?? null,
+                    'driver_code' => $exception->errorInfo[1] ?? null,
+                    'message' => $exception->getMessage(),
+                ]);
+
+                $comment->generated_by = null;
+                $comment->save();
+
+                return;
+            }
+
+            throw $exception;
+        }
+    }
+
+    private function isGeneratedByForeignKeyViolation(QueryException $exception): bool
+    {
+        $sqlState = $exception->errorInfo[0] ?? null;
+        $driverCode = (int) ($exception->errorInfo[1] ?? 0);
+        if ($sqlState !== '23000' || $driverCode !== 1452) {
+            return false;
+        }
+
+        $message = strtolower($exception->getMessage());
+
+        return str_contains($message, 'references `users` (`id`)')
+            && str_contains($message, 'report_comments')
+            && str_contains($message, 'generated_by');
+    }
+
+    private function resolveUserId(?int $userId): ?int
+    {
+        if ($userId === null || $userId <= 0) {
+            return null;
+        }
+
+        return User::query()->useWritePdo()->whereKey($userId)->exists()
+            ? $userId
+            : null;
     }
 
     private function buildAutoComment(Student $student, ?StudentLearningProfile $profile): string
@@ -221,4 +276,3 @@ class ReportCommentService
             .'Regular attendance, guided practice tasks, and parent coordination should be maintained for steady improvement.';
     }
 }
-
