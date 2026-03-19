@@ -283,6 +283,27 @@
             saveMarksBtn.disabled = state.locked;
         }
 
+        async function parseApiPayload(response) {
+            const raw = await response.text();
+            if (!raw) {
+                return {};
+            }
+
+            try {
+                return JSON.parse(raw);
+            } catch (error) {
+                return { raw };
+            }
+        }
+
+        function isLoginRedirect(response) {
+            return Boolean(
+                response?.redirected &&
+                typeof response.url === 'string' &&
+                response.url.includes('/login')
+            );
+        }
+
         async function loadSheet() {
             clearMessage();
 
@@ -313,14 +334,31 @@
                     headers: { 'Accept': 'application/json' }
                 });
 
-                const result = await response.json();
+                if (isLoginRedirect(response)) {
+                    showMessage('Your session has expired. Please login again.', 'error');
+                    window.location.href = response.url;
+                    return;
+                }
+
+                const result = await parseApiPayload(response);
                 if (!response.ok) {
-                    if (result.errors) {
+                    if (response.status === 419) {
+                        showMessage('Your session has expired. Please refresh and login again.', 'error');
+                    } else if (result.errors) {
                         const message = Object.values(result.errors).flat().join(' ');
                         showMessage(message || result.message || 'Failed to load marks sheet.', 'error');
+                    } else if (result.message) {
+                        showMessage(result.message, 'error');
                     } else {
-                        showMessage(result.message || 'Failed to load marks sheet.', 'error');
+                        showMessage('Failed to load marks sheet.', 'error');
                     }
+
+                    marksBody.innerHTML = '<tr><td colspan="3" class="px-4 py-8 text-center text-sm text-red-600">Failed to load students.</td></tr>';
+                    return;
+                }
+
+                if (!Array.isArray(result.students)) {
+                    showMessage('Invalid response while loading marks sheet. Please refresh page.', 'error');
                     marksBody.innerHTML = '<tr><td colspan="3" class="px-4 py-8 text-center text-sm text-red-600">Failed to load students.</td></tr>';
                     return;
                 }
@@ -396,23 +434,34 @@
                     headers: {
                         'Content-Type': 'application/json',
                         'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
                         'X-CSRF-TOKEN': csrfToken
                     },
                     body: JSON.stringify(payload)
                 });
 
-                const result = await response.json();
+                if (isLoginRedirect(response)) {
+                    showMessage('Your session has expired. Please login again.', 'error');
+                    window.location.href = response.url;
+                    return;
+                }
+
+                const result = await parseApiPayload(response);
                 if (!response.ok) {
-                    if (result.errors) {
+                    if (response.status === 419) {
+                        showMessage('Your session has expired. Please refresh and login again.', 'error');
+                    } else if (result.errors) {
                         const message = Object.values(result.errors).flat().join(' ');
                         showMessage(message || 'Failed to save marks.', 'error');
+                    } else if (result.message) {
+                        showMessage(result.message, 'error');
                     } else {
-                        showMessage(result.message || 'Failed to save marks.', 'error');
+                        showMessage('Failed to save marks.', 'error');
                     }
                     return;
                 }
 
-                showMessage('Marks saved successfully.');
+                showMessage(result.message || 'Marks saved successfully.');
                 await loadSheet();
             } catch (error) {
                 showMessage('Unexpected error while saving marks.', 'error');

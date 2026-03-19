@@ -9,6 +9,7 @@ use App\Modules\Exams\Services\ExamService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\View\View;
 use RuntimeException;
+use Throwable;
 
 class TeacherExamController extends Controller
 {
@@ -47,6 +48,14 @@ class TeacherExamController extends Controller
             );
         } catch (RuntimeException $exception) {
             return response()->json(['message' => $exception->getMessage()], 422);
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return response()->json([
+                'message' => config('app.debug')
+                    ? $exception->getMessage()
+                    : 'Unexpected error while loading marks sheet.',
+            ], 500);
         }
 
         return response()->json($sheet);
@@ -66,6 +75,14 @@ class TeacherExamController extends Controller
             );
         } catch (RuntimeException $exception) {
             return response()->json(['message' => $exception->getMessage()], 422);
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return response()->json([
+                'message' => config('app.debug')
+                    ? $exception->getMessage()
+                    : 'Unexpected error while saving marks. Please contact admin.',
+            ], 500);
         }
 
         return response()->json(['message' => 'Marks saved successfully.']);
