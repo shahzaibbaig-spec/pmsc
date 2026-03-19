@@ -14,7 +14,19 @@
                     <option value="50">50</option>
                 </select>
             </div>
-            <div class="flex items-end justify-end">
+            <div class="flex flex-wrap items-end justify-end gap-2">
+                <div>
+                    <label for="idCardClassSelect" class="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">Bulk ID Cards</label>
+                    <select id="idCardClassSelect" class="block w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
+                        <option value="">Select class</option>
+                        @foreach($classes as $class)
+                            <option value="{{ $class->id }}">{{ trim($class->name.' '.($class->section ?? '')) }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <a id="bulkIdCardButton" href="#" target="_blank" class="inline-flex min-h-10 items-center justify-center rounded-xl bg-slate-700 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800">
+                    Generate Bulk
+                </a>
                 @can('manage_subject_assignments')
                     <x-ui.button href="{{ route('principal.subject-matrix.index') }}" variant="outline">Open Subject Matrix</x-ui.button>
                 @endcan
@@ -65,11 +77,39 @@
                             </span>
                         </td>
                         <td class="px-4 py-3 text-sm">
-                            <a href="${row.profile_url}" class="font-medium text-indigo-600 hover:text-indigo-700">View Profile</a>
+                            <div class="flex flex-wrap gap-2">
+                                <a href="${row.profile_url}" class="font-medium text-indigo-600 hover:text-indigo-700">View Profile</a>
+                                <a href="${row.id_card_url}" target="_blank" class="font-medium text-violet-600 hover:text-violet-700">ID Card</a>
+                            </div>
                         </td>
                     </tr>
                 `,
             });
+
+            const classSelect = document.getElementById('idCardClassSelect');
+            const bulkButton = document.getElementById('bulkIdCardButton');
+            const routeTemplate = @json(route('idcards.class', ['class' => '__CLASS__']));
+
+            const syncBulkButton = () => {
+                const classId = (classSelect?.value || '').trim();
+                if (!bulkButton) {
+                    return;
+                }
+
+                if (classId === '') {
+                    bulkButton.href = '#';
+                    bulkButton.style.pointerEvents = 'none';
+                    bulkButton.style.opacity = '0.5';
+                    return;
+                }
+
+                bulkButton.href = routeTemplate.replace('__CLASS__', encodeURIComponent(classId));
+                bulkButton.style.pointerEvents = 'auto';
+                bulkButton.style.opacity = '1';
+            };
+
+            classSelect?.addEventListener('change', syncBulkButton);
+            syncBulkButton();
         });
     </script>
 </x-app-layout>

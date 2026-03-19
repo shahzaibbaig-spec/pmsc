@@ -33,7 +33,14 @@ class StudentManagementController extends Controller
 {
     public function index(): View
     {
-        return view('modules.students.index');
+        $classes = SchoolClass::query()
+            ->orderBy('name')
+            ->orderBy('section')
+            ->get(['id', 'name', 'section']);
+
+        return view('modules.students.index', [
+            'classes' => $classes,
+        ]);
     }
 
     public function import(
@@ -143,6 +150,10 @@ class StudentManagementController extends Controller
                 'class_name' => trim(($student->classRoom?->name ?? '').' '.($student->classRoom?->section ?? '')),
                 'contact' => $student->contact,
                 'status' => $student->status,
+                'profile_url' => route('admin.students.show', $student),
+                'edit_url' => route('admin.students.edit', $student),
+                'delete_url' => route('admin.students.delete-page', $student),
+                'id_card_url' => route('idcards.single', ['student' => $student]),
             ];
         })->values();
 

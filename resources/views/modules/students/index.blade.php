@@ -75,10 +75,27 @@
                                 <h3 class="text-lg font-medium text-gray-900">Students</h3>
                                 <p class="text-sm text-gray-600">Admin can import from Excel, bulk add, and bulk delete students.</p>
                             </div>
-                            <a href="{{ route('admin.students.create') }}"
-                               class="inline-flex items-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">
-                                Add Student
-                            </a>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <a href="{{ route('admin.students.create') }}"
+                                   class="inline-flex items-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">
+                                    Add Student
+                                </a>
+                                <select id="idCardClassSelect" class="rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                    <option value="">Select class</option>
+                                    @foreach($classes as $class)
+                                        <option value="{{ $class->id }}">{{ trim($class->name.' '.($class->section ?? '')) }}</option>
+                                    @endforeach
+                                </select>
+                                <a
+                                    id="bulkIdCardButton"
+                                    href="#"
+                                    target="_blank"
+                                    class="inline-flex items-center rounded-md bg-slate-700 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+                                    aria-disabled="true"
+                                >
+                                    Bulk ID Cards
+                                </a>
+                            </div>
                         </div>
 
                         <form method="POST" action="{{ route('admin.students.import') }}" enctype="multipart/form-data" class="grid grid-cols-1 gap-2 rounded-md border border-gray-200 bg-gray-50 p-3 md:grid-cols-6">
@@ -207,6 +224,9 @@
         const selectAllCheckbox = document.getElementById('selectAll');
         const bulkDeleteButton = document.getElementById('bulkDeleteButton');
         const selectedMeta = document.getElementById('selectedMeta');
+        const idCardClassSelect = document.getElementById('idCardClassSelect');
+        const bulkIdCardButton = document.getElementById('bulkIdCardButton');
+        const bulkIdCardRouteTemplate = @json(route('idcards.class', ['class' => '__CLASS__']));
 
         let state = {
             page: 1,
@@ -278,9 +298,10 @@
                                 <td class="px-4 py-3 text-sm text-gray-800">${statusBadge(student.status)}</td>
                                 <td class="px-4 py-3 text-sm">
                                     <div class="flex flex-wrap gap-2">
-                                        <a href="/admin/students/${student.id}" class="rounded-md bg-sky-600 px-3 py-1 text-white hover:bg-sky-700">Profile</a>
-                                        <a href="/admin/students/${student.id}/edit" class="rounded-md bg-amber-500 px-3 py-1 text-white hover:bg-amber-600">Edit</a>
-                                        <a href="/admin/students/${student.id}/delete" class="rounded-md bg-red-600 px-3 py-1 text-white hover:bg-red-700">Delete</a>
+                                        <a href="${student.profile_url}" class="rounded-md bg-sky-600 px-3 py-1 text-white hover:bg-sky-700">Profile</a>
+                                        <a href="${student.id_card_url}" target="_blank" class="rounded-md bg-violet-600 px-3 py-1 text-white hover:bg-violet-700">ID Card</a>
+                                        <a href="${student.edit_url}" class="rounded-md bg-amber-500 px-3 py-1 text-white hover:bg-amber-600">Edit</a>
+                                        <a href="${student.delete_url}" class="rounded-md bg-red-600 px-3 py-1 text-white hover:bg-red-700">Delete</a>
                                     </div>
                                 </td>
                             </tr>
@@ -393,7 +414,29 @@
 
         bulkDeleteButton.addEventListener('click', bulkDeleteSelected);
 
+        const syncBulkIdCardButton = () => {
+            const classId = (idCardClassSelect?.value || '').trim();
+            if (!bulkIdCardButton) {
+                return;
+            }
+
+            if (classId === '') {
+                bulkIdCardButton.href = '#';
+                bulkIdCardButton.style.pointerEvents = 'none';
+                bulkIdCardButton.style.opacity = '0.5';
+                bulkIdCardButton.setAttribute('aria-disabled', 'true');
+                return;
+            }
+
+            bulkIdCardButton.href = bulkIdCardRouteTemplate.replace('__CLASS__', encodeURIComponent(classId));
+            bulkIdCardButton.style.pointerEvents = 'auto';
+            bulkIdCardButton.style.opacity = '1';
+            bulkIdCardButton.setAttribute('aria-disabled', 'false');
+        };
+
+        idCardClassSelect?.addEventListener('change', syncBulkIdCardButton);
+        syncBulkIdCardButton();
+
         window.NSMS.lazyInit(studentsBody, loadStudents);
     </script>
 </x-app-layout>
-

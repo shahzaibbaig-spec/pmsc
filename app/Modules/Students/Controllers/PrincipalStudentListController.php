@@ -3,6 +3,7 @@
 namespace App\Modules\Students\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Models\SchoolClass;
 use App\Models\Student;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -12,7 +13,14 @@ class PrincipalStudentListController extends Controller
 {
     public function index(): View
     {
-        return view('modules.principal.students.list');
+        $classes = SchoolClass::query()
+            ->orderBy('name')
+            ->orderBy('section')
+            ->get(['id', 'name', 'section']);
+
+        return view('modules.principal.students.list', [
+            'classes' => $classes,
+        ]);
     }
 
     public function data(Request $request): JsonResponse
@@ -70,6 +78,7 @@ class PrincipalStudentListController extends Controller
                     'class_name' => trim(($student->classRoom?->name ?? '').' '.($student->classRoom?->section ?? '')),
                     'status' => $student->status,
                     'profile_url' => route('principal.students.show', $student),
+                    'id_card_url' => route('idcards.single', ['student' => $student]),
                 ];
             })->values()->all(),
             'meta' => [

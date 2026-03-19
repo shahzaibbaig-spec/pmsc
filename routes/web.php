@@ -28,6 +28,7 @@ use App\Modules\Payroll\Controllers\PayrollProfileController;
 use App\Modules\Payroll\Controllers\PayrollRunController;
 use App\Modules\Payroll\Controllers\PayrollDashboardController;
 use App\Modules\Reports\Controllers\ReportPdfController;
+use App\Modules\Reports\Controllers\StudentIdCardController;
 use App\Modules\Results\Controllers\PrincipalResultController;
 use App\Modules\Results\Controllers\StudentResultController;
 use App\Modules\Results\Controllers\TeacherResultController;
@@ -38,6 +39,7 @@ use App\Modules\Search\Controllers\StudentSearchController;
 use App\Modules\Students\Controllers\StudentDashboardController;
 use App\Modules\Students\Controllers\PrincipalStudentListController;
 use App\Modules\Students\Controllers\StudentManagementController;
+use App\Modules\Students\Controllers\StudentQrProfileController;
 use App\Modules\Subjects\Controllers\StudentSubjectAssignmentMatrixController;
 use App\Modules\Subjects\Controllers\SubjectManagementController;
 use App\Modules\Teachers\Controllers\TeacherAssignmentController;
@@ -57,6 +59,9 @@ use Illuminate\Support\Facades\Route;
 Route::get('/', function () {
     return redirect()->route('login');
 });
+
+Route::get('/student/qr/{code}', [StudentQrProfileController::class, 'show'])
+    ->name('students.qr.profile');
 
 Route::get('/dashboard', DashboardRedirectController::class)
     ->middleware(['auth', 'verified', 'force-password-change'])
@@ -684,6 +689,14 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
     Route::get('/reports/class-result-cards/pdf', [ReportPdfController::class, 'classResultCardsPdf'])
         ->middleware(['role:Admin|Principal', 'permission:generate_results'])
         ->name('reports.pdf.class-result-cards');
+
+    Route::get('/id-card/{student}', [StudentIdCardController::class, 'single'])
+        ->middleware(['role:Admin,Principal'])
+        ->name('idcards.single');
+
+    Route::get('/id-card/class/{class}', [StudentIdCardController::class, 'bulk'])
+        ->middleware(['role:Admin,Principal'])
+        ->name('idcards.class');
 
     Route::get('/reports/attendance/pdf', [ReportPdfController::class, 'attendanceReportPdf'])
         ->middleware(['role:Principal', 'permission:view_attendance'])
