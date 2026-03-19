@@ -119,23 +119,23 @@
 
                         <div class="flex flex-wrap items-center gap-3">
                             <div class="inline-flex items-center rounded-full bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700">
-                                <span x-text="`${selectedGroupStudentIds.length} selected for group save`"></span>
+                                <span x-text="`${selectedGroupStudentIds.length} selected`"></span>
                             </div>
                             <button
                                 type="button"
                                 @click="saveSelectedGroupAssignments()"
-                                :disabled="savingSelectedGroups || selectedGroupStudentIds.length === 0 || !classId || !session"
+                                :disabled="savingSelectedGroups || clearingSelectedSubjects || selectedGroupStudentIds.length === 0 || !classId || !session"
                                 class="inline-flex min-h-10 items-center rounded-md bg-indigo-600 px-3 py-2 text-xs font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
                             >
                                 <span x-text="savingSelectedGroups ? 'Saving...' : 'Save Group Assignment'"></span>
                             </button>
                             <button
                                 type="button"
-                                @click="clearSelectedGroupStudents()"
-                                :disabled="savingSelectedGroups || selectedGroupStudentIds.length === 0"
-                                class="inline-flex min-h-10 items-center rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                @click="clearSubjectsForSelectedStudents()"
+                                :disabled="savingSelectedGroups || clearingSelectedSubjects || selectedGroupStudentIds.length === 0 || !classId || !session"
+                                class="inline-flex min-h-10 items-center rounded-md border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
                             >
-                                Clear Selection
+                                <span x-text="clearingSelectedSubjects ? 'Clearing...' : 'Clear Selection'"></span>
                             </button>
                             <button
                                 type="button"
@@ -527,14 +527,24 @@
                                     </td>
 
                                     <td class="px-4 py-3 text-sm text-slate-700">
-                                        <button
-                                            type="button"
-                                            @click="saveStudentGroupAssignment(student.id)"
-                                            :disabled="groupSavingByStudent[student.id] || !session || !classId"
-                                            class="inline-flex min-h-9 items-center rounded-md border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50"
-                                        >
-                                            <span x-text="groupSavingByStudent[student.id] ? 'Saving...' : 'Save Group'"></span>
-                                        </button>
+                                        <div class="flex flex-wrap items-center gap-2">
+                                            <button
+                                                type="button"
+                                                @click="saveStudentGroupAssignment(student.id)"
+                                                :disabled="groupSavingByStudent[student.id] || clearingSubjectsByStudent[student.id] || !session || !classId"
+                                                class="inline-flex min-h-9 items-center rounded-md border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                            >
+                                                <span x-text="groupSavingByStudent[student.id] ? 'Saving...' : 'Save Group'"></span>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                @click="clearAllSubjectsForStudent(student.id)"
+                                                :disabled="clearingSubjectsByStudent[student.id] || groupSavingByStudent[student.id] || savingByStudent[student.id] || !session || !classId || !hasAnySubjectAssigned(student.id)"
+                                                class="inline-flex min-h-9 items-center rounded-md border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                            >
+                                                <span x-text="clearingSubjectsByStudent[student.id] ? 'Clearing...' : 'Clear Subjects'"></span>
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             </template>
@@ -727,6 +737,8 @@
                 groupSavingByStudent: {},
                 groupRequestVersionByStudent: {},
                 savingSelectedGroups: false,
+                clearingSelectedSubjects: false,
+                clearingSubjectsByStudent: {},
                 status: {
                     message: '',
                     type: 'success',
@@ -1091,6 +1103,19 @@
 
                 clearSelectedGroupStudents() {
                     this.selectedGroupStudentIds = [];
+                },
+
+                hasAnySubjectAssigned(studentId) {
+                    const sid = Number(studentId);
+                    const row = this.students.find((student) => Number(student.id) === sid);
+                    if (!row) {
+                        return false;
+                    }
+
+                    const commonSubjects = this.normalizeIds(this.selectedByStudent[sid] || []);
+                    const groupSubjects = this.normalizeIds(row.group_subject_ids || []);
+
+                    return commonSubjects.length > 0 || groupSubjects.length > 0 || (row.subject_group_id !== null && row.subject_group_id !== undefined);
                 },
 
                 groupNameById(groupId) {
@@ -1464,6 +1489,130 @@
                     });
                 },
 
+                async clearAllSubjectsForStudent(studentId, options = {}) {
+                    const sid = Number(studentId);
+                    if (!Number.isInteger(sid) || sid <= 0) {
+                        return false;
+                    }
+
+                    const silent = Boolean(options.silent);
+                    const askConfirm = options.askConfirm === undefined ? !silent : Boolean(options.askConfirm);
+                    const refreshAfter = options.refreshAfter === undefined ? true : Boolean(options.refreshAfter);
+                    const row = this.students.find((student) => Number(student.id) === sid);
+                    const studentName = row?.name || `Student #${sid}`;
+
+                    if (askConfirm) {
+                        const confirmed = window.confirm(`Clear all subjects for ${studentName}? This will remove common and group subjects.`);
+                        if (!confirmed) {
+                            return false;
+                        }
+                    }
+
+                    if (!silent) {
+                        this.clearStatus();
+                    }
+
+                    this.clearingSubjectsByStudent[sid] = true;
+
+                    try {
+                        const clearGroupResult = await this.onStudentGroupChange(sid, '', {
+                            force: true,
+                            silent: true,
+                            refreshAfter: false,
+                        });
+
+                        if (!clearGroupResult || !clearGroupResult.ok) {
+                            if (!silent) {
+                                this.setStatus(`Failed to clear group subjects for ${studentName}.`, 'error');
+                            }
+                            return false;
+                        }
+
+                        this.selectedByStudent[sid] = [];
+                        const saveResult = await this.persistStudentSubjects(sid, true);
+                        if (!saveResult) {
+                            if (!silent) {
+                                this.setStatus(`Failed to clear common subjects for ${studentName}.`, 'error');
+                            }
+                            return false;
+                        }
+
+                        if (row) {
+                            row.group_subject_ids = [];
+                            row.assigned_subject_ids = [];
+                            row.subject_group_id = null;
+                        }
+
+                        if (refreshAfter) {
+                            await this.loadStudents(false, this.pagination.current_page, true);
+                        }
+
+                        if (!silent) {
+                            this.setStatus(`All subjects cleared for ${studentName}.`);
+                        }
+
+                        return true;
+                    } catch (error) {
+                        if (!silent) {
+                            this.setStatus(`Unexpected error while clearing subjects for ${studentName}.`, 'error');
+                        }
+                        return false;
+                    } finally {
+                        this.clearingSubjectsByStudent[sid] = false;
+                    }
+                },
+
+                async clearSubjectsForSelectedStudents() {
+                    this.clearStatus();
+                    if (!this.session || !this.classId) {
+                        this.setStatus('Session and class are required before clearing subjects.', 'error');
+                        return;
+                    }
+
+                    const selectedIds = this.normalizeIds(this.selectedGroupStudentIds || [])
+                        .filter((sid) => this.students.some((student) => Number(student.id) === sid));
+
+                    if (selectedIds.length === 0) {
+                        this.setStatus('Select at least one student using the checkbox.', 'error');
+                        return;
+                    }
+
+                    const confirmed = window.confirm(`Clear all subjects for ${selectedIds.length} selected students?`);
+                    if (!confirmed) {
+                        return;
+                    }
+
+                    this.clearingSelectedSubjects = true;
+                    let successCount = 0;
+                    const failedStudentIds = [];
+
+                    for (const sid of selectedIds) {
+                        const ok = await this.clearAllSubjectsForStudent(sid, {
+                            silent: true,
+                            askConfirm: false,
+                            refreshAfter: false,
+                        });
+
+                        if (ok) {
+                            successCount++;
+                        } else {
+                            failedStudentIds.push(sid);
+                        }
+                    }
+
+                    await this.loadStudents(false, this.pagination.current_page, true);
+
+                    if (failedStudentIds.length === 0) {
+                        this.setStatus(`Cleared all subjects for ${successCount} students.`);
+                        this.selectedGroupStudentIds = [];
+                    } else {
+                        this.setStatus(`Cleared all subjects for ${successCount} of ${selectedIds.length} students. Please retry failed rows.`, 'error');
+                        this.selectedGroupStudentIds = failedStudentIds;
+                    }
+
+                    this.clearingSelectedSubjects = false;
+                },
+
                 async saveSelectedGroupAssignments() {
                     this.clearStatus();
                     if (!this.session || !this.classId) {
@@ -1530,6 +1679,9 @@
                         this.subjectGroups = [];
                         this.selectedByStudent = {};
                         this.groupByStudent = {};
+                        this.selectedGroupStudentIds = [];
+                        this.clearingSubjectsByStudent = {};
+                        this.clearingSelectedSubjects = false;
                         return;
                     }
 
@@ -1592,6 +1744,8 @@
                         this.savingByStudent = {};
                         this.groupSavingByStudent = {};
                         this.groupRequestVersionByStudent = {};
+                        this.clearingSubjectsByStudent = {};
+                        this.clearingSelectedSubjects = false;
 
                         const incomingPagination = result.pagination || {};
                         this.pagination = {
