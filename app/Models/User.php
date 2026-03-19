@@ -120,4 +120,14 @@ class User extends Authenticatable
         return $this->hasMany(PayrollItem::class);
     }
 
+    public function academicEvents(): HasMany
+    {
+        return $this->hasMany(AcademicEvent::class, 'created_by');
+    }
+
+    public function academicNotifications(): HasMany
+    {
+        return $this->hasMany(AcademicNotification::class);
+    }
+
 }

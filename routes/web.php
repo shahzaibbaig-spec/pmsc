@@ -2,6 +2,8 @@
 
 use App\Http\Controllers\DashboardRedirectController;
 use App\Http\Controllers\NotificationController;
+use App\Modules\Academic\Controllers\AcademicCalendarController;
+use App\Modules\Academic\Controllers\AcademicNotificationController;
 use App\Modules\Accountant\Controllers\AccountantDashboardController;
 use App\Modules\Admin\Controllers\AdminDashboardController;
 use App\Modules\Admin\Controllers\RbacMatrixController;
@@ -78,6 +80,32 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
 
     Route::post('/notifications/read-all', [NotificationController::class, 'readAll'])
         ->name('notifications.read-all');
+
+    Route::get('/academic-calendar', [AcademicCalendarController::class, 'index'])
+        ->middleware(['role:Admin,Principal,Teacher'])
+        ->name('academic-calendar.index');
+
+    Route::post('/academic-calendar', [AcademicCalendarController::class, 'store'])
+        ->middleware(['role:Admin,Principal'])
+        ->name('academic-calendar.store');
+
+    Route::put('/academic-calendar/{academicEvent}', [AcademicCalendarController::class, 'update'])
+        ->middleware(['role:Admin,Principal'])
+        ->name('academic-calendar.update');
+
+    Route::delete('/academic-calendar/{academicEvent}', [AcademicCalendarController::class, 'destroy'])
+        ->middleware(['role:Admin,Principal'])
+        ->name('academic-calendar.destroy');
+
+    Route::post('/academic-calendar/{academicEvent}/send-reminder', [AcademicCalendarController::class, 'sendReminder'])
+        ->middleware(['role:Admin,Principal'])
+        ->name('academic-calendar.send-reminder');
+
+    Route::post('/academic-notifications/{academicNotification}/read', [AcademicNotificationController::class, 'read'])
+        ->name('academic-notifications.read');
+
+    Route::post('/academic-notifications/read-all', [AcademicNotificationController::class, 'readAll'])
+        ->name('academic-notifications.read-all');
 
     Route::get('/admin/dashboard', AdminDashboardController::class)
         ->middleware(['role:Admin', 'permission:manage_users'])

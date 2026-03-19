@@ -3,6 +3,17 @@
     @php
         $layoutUser = auth()->user();
         $isTeacher = $layoutUser?->hasRole('Teacher') ?? false;
+        $isDashboardRoute = request()->routeIs('dashboard') || request()->routeIs('*.dashboard');
+        $academicPopupNotifications = collect();
+        if ($layoutUser && $isDashboardRoute) {
+            $academicPopupNotifications = \App\Models\AcademicNotification::query()
+                ->where('user_id', (int) $layoutUser->id)
+                ->where('is_read', false)
+                ->orderByDesc('sent_at')
+                ->orderByDesc('id')
+                ->limit(5)
+                ->get(['id', 'title', 'message', 'sent_at']);
+        }
     @endphp
     <head>
         <meta charset="utf-8">
@@ -100,6 +111,122 @@
 
                     window.addEventListener('load', () => {
                         navigator.serviceWorker.register('{{ asset('sw-teacher.js') }}').catch(() => null);
+                    });
+                })();
+            </script>
+        @endif
+
+        @if ($academicPopupNotifications->isNotEmpty())
+            <div id="academicNotificationPopup" class="fixed bottom-4 right-4 z-50 w-[calc(100%-2rem)] max-w-sm rounded-2xl border border-indigo-200 bg-white shadow-2xl">
+                <div class="flex items-center justify-between border-b border-indigo-100 px-4 py-3">
+                    <div>
+                        <p class="text-sm font-semibold text-slate-900">Academic Reminders</p>
+                        <p id="academicPopupCount" class="text-xs text-slate-500">{{ $academicPopupNotifications->count() }} unread</p>
+                    </div>
+                    <button id="academicPopupCloseBtn" type="button" class="rounded-md px-2 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-700">
+                        Close
+                    </button>
+                </div>
+
+                <div id="academicPopupRows" class="max-h-96 overflow-y-auto">
+                    @foreach ($academicPopupNotifications as $notification)
+                        <div id="academic-popup-row-{{ $notification->id }}" class="border-b border-slate-100 px-4 py-3">
+                            <p class="text-sm font-semibold text-slate-900">{{ $notification->title }}</p>
+                            <p class="mt-1 text-xs text-slate-600">{{ $notification->message }}</p>
+                            <div class="mt-2 flex items-center justify-between">
+                                <p class="text-[11px] text-slate-500">{{ $notification->sent_at?->diffForHumans() ?? '-' }}</p>
+                                <button
+                                    type="button"
+                                    class="academic-mark-read-btn text-[11px] font-medium text-indigo-600 hover:text-indigo-700"
+                                    data-endpoint="{{ route('academic-notifications.read', $notification) }}"
+                                    data-row-id="academic-popup-row-{{ $notification->id }}"
+                                >
+                                    Mark read
+                                </button>
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+
+                <div class="flex items-center justify-between gap-2 px-4 py-3">
+                    <button id="academicPopupReadAllBtn" type="button" class="inline-flex min-h-9 items-center rounded-lg border border-indigo-300 px-3 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-50">
+                        Mark all read
+                    </button>
+                    <a href="{{ route('academic-calendar.index') }}" class="text-xs font-medium text-slate-600 hover:text-slate-800">
+                        Open Academic Calendar
+                    </a>
+                </div>
+            </div>
+
+            <script>
+                (() => {
+                    const popup = document.getElementById('academicNotificationPopup');
+                    const rowsContainer = document.getElementById('academicPopupRows');
+                    const countLabel = document.getElementById('academicPopupCount');
+                    const closeBtn = document.getElementById('academicPopupCloseBtn');
+                    const readAllBtn = document.getElementById('academicPopupReadAllBtn');
+                    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+                    if (!popup || !rowsContainer || !countLabel || !csrfToken) {
+                        return;
+                    }
+
+                    const refreshState = () => {
+                        const remaining = rowsContainer.querySelectorAll('[id^="academic-popup-row-"]').length;
+                        countLabel.textContent = `${remaining} unread`;
+                        if (remaining === 0) {
+                            popup.remove();
+                        }
+                    };
+
+                    const postRequest = async (endpoint) => {
+                        const response = await fetch(endpoint, {
+                            method: 'POST',
+                            headers: {
+                                'Accept': 'application/json',
+                                'X-CSRF-TOKEN': csrfToken,
+                            },
+                        });
+
+                        if (!response.ok) {
+                            throw new Error('Request failed.');
+                        }
+
+                        return response.json().catch(() => ({}));
+                    };
+
+                    rowsContainer.addEventListener('click', async (event) => {
+                        const target = event.target;
+                        if (!target.classList.contains('academic-mark-read-btn')) {
+                            return;
+                        }
+
+                        target.disabled = true;
+                        const endpoint = target.getAttribute('data-endpoint');
+                        const rowId = target.getAttribute('data-row-id');
+                        try {
+                            await postRequest(endpoint);
+                            const row = document.getElementById(rowId);
+                            if (row) {
+                                row.remove();
+                            }
+                            refreshState();
+                        } catch (_) {
+                            target.disabled = false;
+                        }
+                    });
+
+                    readAllBtn?.addEventListener('click', async () => {
+                        readAllBtn.disabled = true;
+                        try {
+                            await postRequest(@json(route('academic-notifications.read-all')));
+                            popup.remove();
+                        } catch (_) {
+                            readAllBtn.disabled = false;
+                        }
+                    });
+
+                    closeBtn?.addEventListener('click', () => {
+                        popup.remove();
                     });
                 })();
             </script>

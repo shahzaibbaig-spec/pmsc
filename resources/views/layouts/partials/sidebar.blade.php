@@ -10,6 +10,7 @@
             ['route' => 'admin.rbac-matrix.index', 'label' => 'RBAC Matrix'],
             ['route' => 'admin.settings.edit', 'label' => 'School Settings'],
             ['route' => 'principal.results.generator', 'label' => 'Results'],
+            ['route' => 'academic-calendar.index', 'label' => 'Academic Calendar'],
             ['route' => 'notifications.index', 'label' => 'Notifications'],
         ];
 
@@ -69,6 +70,7 @@
             ['route' => 'results.learning-profiles', 'label' => 'Learning Profiles'],
             ['route' => 'principal.analytics.teachers.index', 'label' => 'Teacher Analytics'],
             ['route' => 'principal.medical.referrals.index', 'label' => 'Medical Referrals'],
+            ['route' => 'academic-calendar.index', 'label' => 'Academic Calendar'],
             ['route' => 'notifications.index', 'label' => 'Notifications'],
         ];
         if ($sidebarUser?->can('manage_subject_assignments')) {
@@ -131,6 +133,7 @@
         }
 
         $menuItems[] = ['route' => 'teacher.timetable.index', 'label' => 'Timetable'];
+        $menuItems[] = ['route' => 'academic-calendar.index', 'label' => 'Academic Calendar'];
         $menuItems[] = ['route' => 'notifications.index', 'label' => 'Notifications'];
     } elseif ($sidebarUser?->hasRole('Doctor')) {
         $menuItems = [
