@@ -38,6 +38,7 @@ use App\Modules\Reports\Controllers\ReportPdfController;
 use App\Modules\Reports\Controllers\AdmitCardController;
 use App\Modules\Reports\Controllers\StudentIdCardController;
 use App\Modules\Results\Controllers\PrincipalResultController;
+use App\Modules\Results\Controllers\ResultSheetController;
 use App\Modules\Results\Controllers\StudentResultController;
 use App\Modules\Results\Controllers\TeacherResultController;
 use App\Modules\Results\Controllers\ClassResultAnalyzerController;
@@ -474,6 +475,14 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
         ->middleware(['role:Admin|Principal', 'permission:generate_results'])
         ->name('principal.results.generator');
 
+    Route::get('/principal/results/gazette', [ResultSheetController::class, 'gazette'])
+        ->middleware(['role:Admin|Principal', 'permission:generate_results'])
+        ->name('principal.results.gazette');
+
+    Route::get('/principal/results/tabulation', [ResultSheetController::class, 'tabulation'])
+        ->middleware(['role:Admin|Principal', 'permission:generate_results'])
+        ->name('principal.results.tabulation');
+
     Route::get('/principal/analytics/performance-insights', [PerformanceInsightsController::class, 'index'])
         ->middleware(['role:Principal', 'permission:view_teacher_performance'])
         ->name('principal.analytics.performance-insights.index');
@@ -741,6 +750,14 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
     Route::get('/reports/class-result-cards/pdf', [ReportPdfController::class, 'classResultCardsPdf'])
         ->middleware(['role:Admin|Principal', 'permission:generate_results'])
         ->name('reports.pdf.class-result-cards');
+
+    Route::get('/reports/gazette/pdf', [ResultSheetController::class, 'gazettePdf'])
+        ->middleware(['role:Admin|Principal', 'permission:generate_results'])
+        ->name('reports.pdf.gazette');
+
+    Route::get('/reports/tabulation/pdf', [ResultSheetController::class, 'tabulationPdf'])
+        ->middleware(['role:Admin|Principal', 'permission:generate_results'])
+        ->name('reports.pdf.tabulation');
 
     Route::get('/principal/admit-cards', [AdmitCardController::class, 'index'])
         ->middleware(['role:Admin|Principal', 'permission:generate_results'])

@@ -1,0 +1,146 @@
+<x-app-layout>
+    <x-slot name="header">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+            <div>
+                <h2 class="text-xl font-semibold text-slate-900">Tabulation Sheet</h2>
+                <p class="mt-1 text-sm text-slate-500">Subject-wise obtained/total marks for all students in class.</p>
+            </div>
+            <a
+                href="{{ route('principal.results.gazette', ['class_id' => $filters['class_id'], 'session' => $filters['session']]) }}"
+                class="inline-flex min-h-10 items-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            >
+                Open Gazette
+            </a>
+        </div>
+    </x-slot>
+
+    <div class="space-y-6">
+        @if (session('status'))
+            <div class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                {{ session('status') }}
+            </div>
+        @endif
+
+        @if ($errorMessage)
+            <div class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                {{ $errorMessage }}
+            </div>
+        @endif
+
+        <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <form method="GET" action="{{ route('principal.results.tabulation') }}" class="grid grid-cols-1 gap-4 md:grid-cols-4">
+                <div>
+                    <label for="class_id" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Class</label>
+                    <select
+                        id="class_id"
+                        name="class_id"
+                        required
+                        class="block min-h-11 w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                    >
+                        @foreach($classes as $classRoom)
+                            <option value="{{ $classRoom->id }}" @selected((string) $filters['class_id'] === (string) $classRoom->id)>
+                                {{ trim($classRoom->name.' '.($classRoom->section ?? '')) }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+                <div>
+                    <label for="session" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Exam Session</label>
+                    <select
+                        id="session"
+                        name="session"
+                        required
+                        class="block min-h-11 w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                    >
+                        @foreach($sessions as $session)
+                            <option value="{{ $session }}" @selected((string) $filters['session'] === (string) $session)>
+                                {{ $session }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+                <div class="flex items-end gap-2 md:col-span-2">
+                    <x-ui.button type="submit">Apply Filters</x-ui.button>
+                    @if($report)
+                        <a
+                            href="{{ route('reports.pdf.tabulation', ['class_id' => $filters['class_id'], 'session' => $filters['session']]) }}"
+                            target="_blank"
+                            class="inline-flex min-h-11 items-center rounded-xl border border-indigo-300 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100"
+                        >
+                            Export Tabulation PDF
+                        </a>
+                    @endif
+                </div>
+            </form>
+        </section>
+
+        @if($report)
+            <section class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+                <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Class</p>
+                    <p class="mt-2 text-sm font-semibold text-slate-900">{{ $report['class']['name'] }}</p>
+                </article>
+                <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Session</p>
+                    <p class="mt-2 text-sm font-semibold text-slate-900">{{ $report['exam']['session'] }}</p>
+                </article>
+                <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Exam Type</p>
+                    <p class="mt-2 text-sm font-semibold text-slate-900">{{ $report['exam']['exam_type_label'] }}</p>
+                </article>
+                <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Subjects</p>
+                    <p class="mt-2 text-2xl font-semibold text-slate-900">{{ (int) $report['summary']['subjects_count'] }}</p>
+                </article>
+                <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Class Average</p>
+                    <p class="mt-2 text-2xl font-semibold text-indigo-700">{{ number_format((float) $report['summary']['class_average_percentage'], 2) }}%</p>
+                </article>
+            </section>
+
+            <section class="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-slate-200">
+                        <thead class="bg-slate-50">
+                            <tr>
+                                <th class="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Student</th>
+                                @foreach($report['subjects'] as $subject)
+                                    <th class="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                        {{ $subject['name'] }}
+                                    </th>
+                                @endforeach
+                                <th class="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Total</th>
+                                <th class="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Obtained</th>
+                                <th class="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">%</th>
+                                <th class="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Grade</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100 bg-white">
+                            @foreach($report['rows'] as $row)
+                                <tr>
+                                    <td class="px-3 py-2 text-sm text-slate-700">
+                                        <div class="font-semibold text-slate-900">{{ $row['student_name'] }}</div>
+                                        <div class="text-xs text-slate-500">{{ $row['student_code'] }}</div>
+                                    </td>
+                                    @foreach($report['subjects'] as $subject)
+                                        @php
+                                            $subjectId = (int) $subject['id'];
+                                            $subjectMark = $row['subject_marks'][$subjectId] ?? ['obtained' => 0, 'total' => (int) $subject['total_marks']];
+                                        @endphp
+                                        <td class="px-3 py-2 text-sm text-slate-700">
+                                            {{ (int) $subjectMark['obtained'] }}/{{ (int) $subjectMark['total'] }}
+                                        </td>
+                                    @endforeach
+                                    <td class="px-3 py-2 text-sm font-semibold text-slate-900">{{ (int) $row['total_marks'] }}</td>
+                                    <td class="px-3 py-2 text-sm font-semibold text-indigo-700">{{ (int) $row['obtained_marks'] }}</td>
+                                    <td class="px-3 py-2 text-sm text-slate-700">{{ number_format((float) $row['percentage'], 2) }}</td>
+                                    <td class="px-3 py-2 text-sm font-semibold text-slate-900">{{ $row['grade'] }}</td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        @endif
+    </div>
+</x-app-layout>
