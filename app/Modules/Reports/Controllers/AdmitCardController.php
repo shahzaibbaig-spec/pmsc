@@ -16,6 +16,7 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\View\View;
 use RuntimeException;
 
@@ -29,6 +30,12 @@ class AdmitCardController extends Controller
 
     public function index(Request $request): View
     {
+        if (! $this->admitCardTablesReady()) {
+            return redirect()
+                ->route('dashboard')
+                ->with('error', $this->missingTablesMessage());
+        }
+
         $sessions = ExamSession::query()
             ->orderByDesc('start_date')
             ->orderByDesc('id')
@@ -52,6 +59,10 @@ class AdmitCardController extends Controller
 
     public function storeExamSession(Request $request): RedirectResponse
     {
+        if (! $this->admitCardTablesReady()) {
+            return back()->with('error', $this->missingTablesMessage());
+        }
+
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:150'],
             'session' => ['required', 'string', 'max:20'],
@@ -73,6 +84,10 @@ class AdmitCardController extends Controller
 
     public function singlePdf(Request $request): Response
     {
+        if (! $this->admitCardTablesReady()) {
+            return response($this->missingTablesMessage(), 422);
+        }
+
         $validated = $request->validate([
             'student_id' => ['required', 'integer', 'exists:students,id'],
             'exam_session_id' => ['required', 'integer', 'exists:exam_sessions,id'],
@@ -114,6 +129,10 @@ class AdmitCardController extends Controller
 
     public function classPdf(Request $request): Response
     {
+        if (! $this->admitCardTablesReady()) {
+            return response($this->missingTablesMessage(), 422);
+        }
+
         $validated = $request->validate([
             'class_id' => ['required', 'integer', 'exists:school_classes,id'],
             'exam_session_id' => ['required', 'integer', 'exists:exam_sessions,id'],
@@ -187,6 +206,12 @@ class AdmitCardController extends Controller
 
     public function overrides(Request $request): View
     {
+        if (! $this->admitCardTablesReady()) {
+            return redirect()
+                ->route('dashboard')
+                ->with('error', $this->missingTablesMessage());
+        }
+
         $examSessions = ExamSession::query()
             ->orderByDesc('start_date')
             ->orderByDesc('id')
@@ -270,6 +295,10 @@ class AdmitCardController extends Controller
 
     public function storeOverride(Request $request): RedirectResponse
     {
+        if (! $this->admitCardTablesReady()) {
+            return back()->with('error', $this->missingTablesMessage());
+        }
+
         $validated = $request->validate([
             'student_id' => ['required', 'integer', 'exists:students,id'],
             'exam_session_id' => ['required', 'integer', 'exists:exam_sessions,id'],
@@ -397,5 +426,17 @@ class AdmitCardController extends Controller
         $absolute = public_path('storage/'.$normalized);
 
         return is_file($absolute) ? $absolute : null;
+    }
+
+    private function admitCardTablesReady(): bool
+    {
+        return Schema::hasTable('exam_sessions')
+            && Schema::hasTable('admit_card_overrides')
+            && Schema::hasTable('fee_defaulters');
+    }
+
+    private function missingTablesMessage(): string
+    {
+        return 'Admit card tables are missing on server. Please run latest migrations: php artisan migrate --force';
     }
 }
