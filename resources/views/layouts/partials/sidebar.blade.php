@@ -12,6 +12,9 @@
             ['route' => 'principal.results.generator', 'label' => 'Results'],
             ['route' => 'principal.admit-cards.index', 'label' => 'Admit Cards'],
             ['route' => 'principal.exams.seating-plans.index', 'label' => 'Seating Plan'],
+            ['route' => 'principal.exams.room-invigilators.index', 'label' => 'Room Invigilators'],
+            ['route' => 'exams.hall-attendance.index', 'label' => 'Exam Hall Attendance'],
+            ['route' => 'principal.exams.live-attendance-monitor.index', 'label' => 'Live Exam Attendance'],
             ['route' => 'academic-calendar.index', 'label' => 'Academic Calendar'],
             ['route' => 'notifications.index', 'label' => 'Notifications'],
         ];
@@ -74,6 +77,9 @@
             ['route' => 'principal.results.generator', 'label' => 'Results'],
             ['route' => 'principal.admit-cards.index', 'label' => 'Admit Cards'],
             ['route' => 'principal.exams.seating-plans.index', 'label' => 'Seating Plan'],
+            ['route' => 'principal.exams.room-invigilators.index', 'label' => 'Room Invigilators'],
+            ['route' => 'exams.hall-attendance.index', 'label' => 'Exam Hall Attendance'],
+            ['route' => 'principal.exams.live-attendance-monitor.index', 'label' => 'Live Exam Attendance'],
             ['route' => 'results.analyzer', 'label' => 'Result Analyzer'],
             ['route' => 'results.promotion-analyzer', 'label' => 'Promotion Analyzer'],
             ['route' => 'results.learning-profiles', 'label' => 'Learning Profiles'],
@@ -143,6 +149,7 @@
             $menuItems[] = ['route' => 'results.promotion-analyzer', 'label' => 'Promotion Analyzer'];
             $menuItems[] = ['route' => 'results.learning-profiles', 'label' => 'Learning Profiles'];
         }
+        $menuItems[] = ['route' => 'exams.hall-attendance.index', 'label' => 'Exam Hall Attendance'];
         if ($sidebarUser?->can('view_own_mark_entries')) {
             $menuItems[] = ['route' => 'teacher.marks.entries.index', 'label' => 'My Mark Entries'];
         }

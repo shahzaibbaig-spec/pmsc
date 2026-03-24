@@ -140,4 +140,9 @@ class User extends Authenticatable
         return $this->hasMany(ExamSeatingPlan::class, 'generated_by');
     }
 
+    public function markedExamAttendances(): HasMany
+    {
+        return $this->hasMany(ExamAttendance::class, 'marked_by');
+    }
+
 }

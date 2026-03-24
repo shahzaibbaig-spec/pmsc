@@ -17,6 +17,9 @@ use App\Modules\Classes\Controllers\PrincipalDashboardController;
 use App\Modules\Exams\Controllers\TeacherExamController;
 use App\Modules\Exams\Controllers\TeacherMarkEntryController;
 use App\Modules\Exams\Controllers\ExamSeatingPlanController;
+use App\Modules\Exams\Controllers\ExamRoomInvigilatorController;
+use App\Modules\Exams\Controllers\ExamHallAttendanceController;
+use App\Modules\Exams\Controllers\LiveExamAttendanceMonitorController;
 use App\Modules\Fees\Controllers\FeeChallanController;
 use App\Modules\Fees\Controllers\FeeDefaulterController;
 use App\Modules\Fees\Controllers\FeeInstallmentPlanController;
@@ -766,6 +769,46 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
     Route::get('/principal/exams/seating-plan/{examSeatingPlan}/seat-slip/{examSeatAssignment}', [ExamSeatingPlanController::class, 'seatSlip'])
         ->middleware(['role:Admin|Principal', 'permission:generate_results'])
         ->name('principal.exams.seating-plans.seat-slip');
+
+    Route::get('/principal/exams/room-invigilators', [ExamRoomInvigilatorController::class, 'index'])
+        ->middleware(['role:Admin|Principal', 'permission:generate_results'])
+        ->name('principal.exams.room-invigilators.index');
+
+    Route::post('/principal/exams/room-invigilators', [ExamRoomInvigilatorController::class, 'store'])
+        ->middleware(['role:Admin|Principal', 'permission:generate_results'])
+        ->name('principal.exams.room-invigilators.store');
+
+    Route::delete('/principal/exams/room-invigilators/{examRoomInvigilator}', [ExamRoomInvigilatorController::class, 'destroy'])
+        ->middleware(['role:Admin|Principal', 'permission:generate_results'])
+        ->name('principal.exams.room-invigilators.destroy');
+
+    Route::get('/exams/hall-attendance', [ExamHallAttendanceController::class, 'index'])
+        ->middleware(['role:Admin|Principal|Teacher'])
+        ->name('exams.hall-attendance.index');
+
+    Route::get('/exams/hall-attendance/options', [ExamHallAttendanceController::class, 'options'])
+        ->middleware(['role:Admin|Principal|Teacher'])
+        ->name('exams.hall-attendance.options');
+
+    Route::get('/exams/hall-attendance/sheet', [ExamHallAttendanceController::class, 'sheet'])
+        ->middleware(['role:Admin|Principal|Teacher'])
+        ->name('exams.hall-attendance.sheet');
+
+    Route::post('/exams/hall-attendance/save', [ExamHallAttendanceController::class, 'save'])
+        ->middleware(['role:Admin|Principal|Teacher'])
+        ->name('exams.hall-attendance.save');
+
+    Route::get('/exams/hall-attendance/room-sheet/pdf', [ExamHallAttendanceController::class, 'roomSheetPdf'])
+        ->middleware(['role:Admin|Principal|Teacher'])
+        ->name('exams.hall-attendance.room-sheet-pdf');
+
+    Route::get('/principal/exams/live-attendance-monitor', [LiveExamAttendanceMonitorController::class, 'index'])
+        ->middleware(['role:Admin|Principal', 'permission:generate_results'])
+        ->name('principal.exams.live-attendance-monitor.index');
+
+    Route::get('/principal/exams/live-attendance-monitor/data', [LiveExamAttendanceMonitorController::class, 'data'])
+        ->middleware(['role:Admin|Principal', 'permission:generate_results'])
+        ->name('principal.exams.live-attendance-monitor.data');
 
     Route::post('/principal/admit-cards/exam-sessions', [AdmitCardController::class, 'storeExamSession'])
         ->middleware(['role:Admin|Principal', 'permission:generate_results'])

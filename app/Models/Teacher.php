@@ -59,4 +59,9 @@ class Teacher extends Model
     {
         return $this->hasMany(TeacherSubjectAssignment::class);
     }
+
+    public function examRoomInvigilatorAssignments(): HasMany
+    {
+        return $this->hasMany(ExamRoomInvigilator::class);
+    }
 }

@@ -31,4 +31,14 @@ class ExamSession extends Model
     {
         return $this->hasMany(ExamSeatingPlan::class);
     }
+
+    public function roomInvigilators(): HasMany
+    {
+        return $this->hasMany(ExamRoomInvigilator::class);
+    }
+
+    public function attendances(): HasMany
+    {
+        return $this->hasMany(ExamAttendance::class);
+    }
 }
