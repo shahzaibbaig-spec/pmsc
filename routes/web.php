@@ -10,6 +10,7 @@ use App\Modules\Admin\Controllers\RbacMatrixController;
 use App\Modules\Admin\Controllers\SchoolSettingController;
 use App\Modules\Admin\Controllers\UserManagementController;
 use App\Modules\Analytics\Controllers\PerformanceInsightsController;
+use App\Modules\Analytics\Controllers\PrincipalAnalyticsDashboardController;
 use App\Modules\Analytics\Controllers\TeacherAnalyticsController;
 use App\Modules\Attendance\Controllers\TeacherAttendanceController;
 use App\Modules\Classes\Controllers\ClassManagementController;
@@ -482,6 +483,18 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
     Route::get('/principal/results/tabulation', [ResultSheetController::class, 'tabulation'])
         ->middleware(['role:Admin|Principal', 'permission:generate_results'])
         ->name('principal.results.tabulation');
+
+    Route::get('/principal/analytics', [PrincipalAnalyticsDashboardController::class, 'index'])
+        ->middleware(['role:Admin,Principal'])
+        ->name('principal.analytics.dashboard.index');
+
+    Route::get('/principal/analytics/class/{schoolClass}', [PrincipalAnalyticsDashboardController::class, 'classDrilldown'])
+        ->middleware(['role:Admin,Principal'])
+        ->name('principal.analytics.dashboard.class');
+
+    Route::get('/principal/analytics/teacher/{teacher}', [PrincipalAnalyticsDashboardController::class, 'teacherDrilldown'])
+        ->middleware(['role:Admin,Principal'])
+        ->name('principal.analytics.dashboard.teacher');
 
     Route::get('/principal/analytics/performance-insights', [PerformanceInsightsController::class, 'index'])
         ->middleware(['role:Principal', 'permission:view_teacher_performance'])
