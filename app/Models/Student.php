@@ -159,4 +159,9 @@ class Student extends Model
     {
         return $this->hasMany(FeeBlockOverride::class);
     }
+
+    public function admitCardOverrides(): HasMany
+    {
+        return $this->hasMany(AdmitCardOverride::class);
+    }
 }

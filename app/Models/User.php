@@ -130,4 +130,9 @@ class User extends Authenticatable
         return $this->hasMany(AcademicNotification::class);
     }
 
+    public function approvedAdmitCardOverrides(): HasMany
+    {
+        return $this->hasMany(AdmitCardOverride::class, 'approved_by');
+    }
+
 }

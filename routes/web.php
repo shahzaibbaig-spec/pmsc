@@ -31,6 +31,7 @@ use App\Modules\Payroll\Controllers\PayrollProfileController;
 use App\Modules\Payroll\Controllers\PayrollRunController;
 use App\Modules\Payroll\Controllers\PayrollDashboardController;
 use App\Modules\Reports\Controllers\ReportPdfController;
+use App\Modules\Reports\Controllers\AdmitCardController;
 use App\Modules\Reports\Controllers\StudentIdCardController;
 use App\Modules\Results\Controllers\PrincipalResultController;
 use App\Modules\Results\Controllers\StudentResultController;
@@ -736,6 +737,30 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
     Route::get('/reports/class-result-cards/pdf', [ReportPdfController::class, 'classResultCardsPdf'])
         ->middleware(['role:Admin|Principal', 'permission:generate_results'])
         ->name('reports.pdf.class-result-cards');
+
+    Route::get('/principal/admit-cards', [AdmitCardController::class, 'index'])
+        ->middleware(['role:Admin|Principal', 'permission:generate_results'])
+        ->name('principal.admit-cards.index');
+
+    Route::post('/principal/admit-cards/exam-sessions', [AdmitCardController::class, 'storeExamSession'])
+        ->middleware(['role:Admin|Principal', 'permission:generate_results'])
+        ->name('principal.admit-cards.exam-sessions.store');
+
+    Route::get('/principal/admit-cards/single/pdf', [AdmitCardController::class, 'singlePdf'])
+        ->middleware(['role:Admin|Principal', 'permission:generate_results'])
+        ->name('principal.admit-cards.single-pdf');
+
+    Route::get('/principal/admit-cards/class/pdf', [AdmitCardController::class, 'classPdf'])
+        ->middleware(['role:Admin|Principal', 'permission:generate_results'])
+        ->name('principal.admit-cards.class-pdf');
+
+    Route::get('/principal/admit-cards/overrides', [AdmitCardController::class, 'overrides'])
+        ->middleware(['role:Admin|Principal', 'permission:generate_results'])
+        ->name('principal.admit-cards.overrides.index');
+
+    Route::post('/principal/admit-cards/overrides', [AdmitCardController::class, 'storeOverride'])
+        ->middleware(['role:Admin|Principal', 'permission:generate_results'])
+        ->name('principal.admit-cards.overrides.store');
 
     Route::get('/id-card/{student}', [StudentIdCardController::class, 'single'])
         ->middleware(['role:Admin,Principal'])

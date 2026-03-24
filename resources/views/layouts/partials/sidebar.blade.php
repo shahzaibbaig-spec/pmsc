@@ -10,6 +10,7 @@
             ['route' => 'admin.rbac-matrix.index', 'label' => 'RBAC Matrix'],
             ['route' => 'admin.settings.edit', 'label' => 'School Settings'],
             ['route' => 'principal.results.generator', 'label' => 'Results'],
+            ['route' => 'principal.admit-cards.index', 'label' => 'Admit Cards'],
             ['route' => 'academic-calendar.index', 'label' => 'Academic Calendar'],
             ['route' => 'notifications.index', 'label' => 'Notifications'],
         ];
@@ -70,6 +71,7 @@
             ['route' => 'principal.teacher-assignments.index', 'label' => 'Assignments'],
             ['route' => 'principal.timetable.import.index', 'label' => 'Timetable Import'],
             ['route' => 'principal.results.generator', 'label' => 'Results'],
+            ['route' => 'principal.admit-cards.index', 'label' => 'Admit Cards'],
             ['route' => 'results.analyzer', 'label' => 'Result Analyzer'],
             ['route' => 'results.promotion-analyzer', 'label' => 'Promotion Analyzer'],
             ['route' => 'results.learning-profiles', 'label' => 'Learning Profiles'],
