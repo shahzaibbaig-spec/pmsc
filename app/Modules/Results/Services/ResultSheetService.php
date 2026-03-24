@@ -2,6 +2,7 @@
 
 namespace App\Modules\Results\Services;
 
+use BackedEnum;
 use App\Models\Exam;
 use App\Models\Mark;
 use App\Models\SchoolClass;
@@ -166,7 +167,7 @@ class ResultSheetService
             ->where('class_id', $classId)
             ->where('session', $session)
             ->pluck('exam_type')
-            ->map(fn ($type): string => (string) $type)
+            ->map(fn ($type): string => $this->normalizeExamType($type))
             ->unique()
             ->values();
 
@@ -186,6 +187,15 @@ class ResultSheetService
             ->first();
 
         return (string) $best;
+    }
+
+    private function normalizeExamType(mixed $type): string
+    {
+        if ($type instanceof BackedEnum) {
+            return (string) $type->value;
+        }
+
+        return (string) $type;
     }
 
     /**
