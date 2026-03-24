@@ -17,9 +17,11 @@ use App\Modules\Classes\Controllers\PrincipalDashboardController;
 use App\Modules\Exams\Controllers\TeacherExamController;
 use App\Modules\Exams\Controllers\TeacherMarkEntryController;
 use App\Modules\Fees\Controllers\FeeChallanController;
+use App\Modules\Fees\Controllers\FeeInstallmentPlanController;
 use App\Modules\Fees\Controllers\FeePaymentController;
 use App\Modules\Fees\Controllers\FeeReportController;
 use App\Modules\Fees\Controllers\FeeStructureController;
+use App\Modules\Fees\Controllers\StudentArrearController;
 use App\Modules\Fees\Controllers\StudentCustomFeeController;
 use App\Modules\Medical\Controllers\DoctorDashboardController;
 use App\Modules\Medical\Controllers\DoctorMedicalRequestListController;
@@ -561,6 +563,30 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
     Route::delete('/principal/fees/student-custom-fees/{studentFeeStructure}', [StudentCustomFeeController::class, 'reset'])
         ->middleware(['role:Admin,Accountant', 'permission:edit_fee_structure'])
         ->name('principal.fees.student-custom-fees.reset');
+
+    Route::get('/principal/fees/installment-plans', [FeeInstallmentPlanController::class, 'index'])
+        ->middleware(['role:Admin,Accountant', 'permission:view_fee_structure'])
+        ->name('principal.fees.installment-plans.index');
+
+    Route::post('/principal/fees/installment-plans', [FeeInstallmentPlanController::class, 'store'])
+        ->middleware(['role:Admin,Accountant', 'permission:edit_fee_structure'])
+        ->name('principal.fees.installment-plans.store');
+
+    Route::post('/principal/fees/installment-plans/installments/{feeInstallment}/pay', [FeeInstallmentPlanController::class, 'payInstallment'])
+        ->middleware(['role:Admin,Accountant', 'permission:record_fee_payment'])
+        ->name('principal.fees.installment-plans.installments.pay');
+
+    Route::get('/principal/fees/add-arrears', [StudentArrearController::class, 'index'])
+        ->middleware(['role:Admin,Accountant', 'permission:view_fee_reports'])
+        ->name('principal.fees.add-arrears.index');
+
+    Route::post('/principal/fees/add-arrears', [StudentArrearController::class, 'store'])
+        ->middleware(['role:Admin,Accountant', 'permission:edit_fee_structure'])
+        ->name('principal.fees.add-arrears.store');
+
+    Route::post('/principal/fees/add-arrears/{studentArrear}/pay', [StudentArrearController::class, 'pay'])
+        ->middleware(['role:Admin,Accountant', 'permission:record_fee_payment'])
+        ->name('principal.fees.add-arrears.pay');
 
     Route::get('/principal/fees/challans/generate', [FeeChallanController::class, 'create'])
         ->middleware(['role:Admin,Accountant', 'permission:generate_fee_challans'])

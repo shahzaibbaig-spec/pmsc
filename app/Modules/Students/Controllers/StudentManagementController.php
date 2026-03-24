@@ -12,6 +12,7 @@ use App\Models\SchoolClass;
 use App\Models\Student;
 use App\Models\StudentAttendance;
 use App\Models\StudentResult;
+use App\Modules\Fees\Services\FeeManagementService;
 use App\Modules\Students\Requests\BulkAddStudentsRequest;
 use App\Modules\Students\Requests\BulkDeleteStudentsRequest;
 use App\Modules\Students\Requests\ImportStudentsWorkbookRequest;
@@ -492,7 +493,15 @@ class StudentManagementController extends Controller
             'overdue_challans' => 0,
         ]);
 
+        $dueSummary = app(FeeManagementService::class)->dueSummaryForStudent($studentId);
+        $legacyPending = round((float) $totals['pending_amount'], 2);
+        $computedPending = round((float) ($dueSummary['total_due'] ?? 0), 2);
+
         return array_merge($totals, [
+            'legacy_pending_amount' => $legacyPending,
+            'installment_due' => round((float) ($dueSummary['installment_due'] ?? 0), 2),
+            'arrears_due' => round((float) ($dueSummary['arrears_due'] ?? 0), 2),
+            'pending_amount' => $computedPending > 0 ? $computedPending : $legacyPending,
             'challans' => $challans,
         ]);
     }
@@ -623,6 +632,9 @@ class StudentManagementController extends Controller
     private function feeTabData(Student $student): array
     {
         $feeStats = $this->feeStats((int) $student->id);
+        $feeService = app(FeeManagementService::class);
+        $dueSummary = $feeService->dueSummaryForStudent((int) $student->id);
+
         $challans = $feeStats['challans']->map(function (FeeChallan $challan): array {
             $totalAmount = (float) $challan->total_amount;
             $paidAmount = min((float) ($challan->paid_total ?? 0), $totalAmount);
@@ -642,9 +654,55 @@ class StudentManagementController extends Controller
             ];
         });
 
+        $installmentSchedule = $feeService->installmentScheduleForStudent((int) $student->id)
+            ->map(function ($installment): array {
+                $amount = round((float) $installment->amount, 2);
+                $paidAmount = round((float) $installment->paid_amount, 2);
+                $remaining = round(max($amount - $paidAmount, 0), 2);
+
+                return [
+                    'id' => (int) $installment->id,
+                    'plan_id' => (int) $installment->fee_installment_plan_id,
+                    'plan_session' => (string) ($installment->plan?->session ?? ''),
+                    'plan_type' => (string) ($installment->plan?->plan_type ?? ''),
+                    'plan_name' => (string) ($installment->plan?->plan_name ?? ''),
+                    'installment_no' => (int) $installment->installment_no,
+                    'title' => (string) ($installment->title ?? ''),
+                    'due_date' => $installment->due_date,
+                    'amount' => $amount,
+                    'paid_amount' => $paidAmount,
+                    'remaining_amount' => $remaining,
+                    'status' => (string) $installment->status,
+                ];
+            })
+            ->values();
+
+        $manualArrears = $feeService->arrearsForStudent((int) $student->id)
+            ->map(function ($arrear): array {
+                $amount = round((float) $arrear->amount, 2);
+                $paidAmount = round((float) $arrear->paid_amount, 2);
+                $remaining = round(max($amount - $paidAmount, 0), 2);
+
+                return [
+                    'id' => (int) $arrear->id,
+                    'session' => $arrear->session,
+                    'title' => (string) $arrear->title,
+                    'amount' => $amount,
+                    'paid_amount' => $paidAmount,
+                    'remaining_amount' => $remaining,
+                    'status' => (string) $arrear->status,
+                    'due_date' => $arrear->due_date,
+                    'notes' => $arrear->notes,
+                ];
+            })
+            ->values();
+
         return [
             'feeStats' => $feeStats,
+            'dueSummary' => $dueSummary,
             'challans' => $challans,
+            'installmentSchedule' => $installmentSchedule,
+            'manualArrears' => $manualArrears,
         ];
     }
 

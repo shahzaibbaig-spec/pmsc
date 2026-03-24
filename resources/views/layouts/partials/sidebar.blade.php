@@ -20,6 +20,9 @@
         if ($sidebarUser?->can('edit_fee_structure')) {
             $menuItems[] = ['route' => 'principal.fees.student-custom-fees.index', 'label' => 'Student Custom Fee'];
         }
+        if ($sidebarUser?->can('view_fee_structure')) {
+            $menuItems[] = ['route' => 'principal.fees.installment-plans.index', 'label' => 'Installment Plans'];
+        }
         if ($sidebarUser?->can('generate_fee_challans')) {
             $menuItems[] = ['route' => 'principal.fees.challans.generate', 'label' => 'Generate Challans'];
         }
@@ -32,6 +35,7 @@
         if ($sidebarUser?->can('view_fee_reports')) {
             $menuItems[] = ['route' => 'principal.fees.reports.index', 'label' => 'Fee Reports'];
             $menuItems[] = ['route' => 'principal.fees.reports.arrears', 'label' => 'Arrears Report'];
+            $menuItems[] = ['route' => 'principal.fees.add-arrears.index', 'label' => 'Add Arrears'];
         }
         $hasPayrollAccess = $sidebarUser?->can('view_payroll')
             || $sidebarUser?->can('manage_payroll')
@@ -87,6 +91,9 @@
         if ($sidebarUser?->can('edit_fee_structure')) {
             $menuItems[] = ['route' => 'principal.fees.student-custom-fees.index', 'label' => 'Student Custom Fee'];
         }
+        if ($sidebarUser?->can('view_fee_structure')) {
+            $menuItems[] = ['route' => 'principal.fees.installment-plans.index', 'label' => 'Installment Plans'];
+        }
         if ($sidebarUser?->can('generate_fee_challans')) {
             $menuItems[] = ['route' => 'principal.fees.challans.generate', 'label' => 'Generate Challans'];
         }
@@ -99,6 +106,7 @@
         if ($sidebarUser?->can('view_fee_reports')) {
             $menuItems[] = ['route' => 'principal.fees.reports.index', 'label' => 'Fee Reports'];
             $menuItems[] = ['route' => 'principal.fees.reports.arrears', 'label' => 'Arrears Report'];
+            $menuItems[] = ['route' => 'principal.fees.add-arrears.index', 'label' => 'Add Arrears'];
         }
         if ($sidebarUser?->can('view_payroll') || $sidebarUser?->can('manage_payroll_profiles')) {
             $menuItems[] = ['route' => 'principal.payroll.profiles.index', 'label' => 'Payroll Profiles'];

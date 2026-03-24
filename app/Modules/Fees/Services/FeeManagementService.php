@@ -4,11 +4,14 @@ namespace App\Modules\Fees\Services;
 
 use App\Models\FeeChallan;
 use App\Models\FeeChallanItem;
+use App\Models\FeeInstallment;
+use App\Models\FeeInstallmentPlan;
 use App\Models\FeePayment;
 use App\Models\FeeStructure;
 use App\Models\SchoolClass;
 use App\Models\SchoolSetting;
 use App\Models\Student;
+use App\Models\StudentArrear;
 use App\Models\StudentFeeAssignment;
 use App\Models\StudentFeeStructure;
 use App\Models\User;
@@ -33,6 +36,18 @@ class FeeManagementService
     public const STUDENT_CUSTOM_FEE_COMPUTER = 'computer_fee';
 
     public const STUDENT_CUSTOM_FEE_EXAM = 'exam_fee';
+
+    public const INSTALLMENT_STATUS_PENDING = 'pending';
+
+    public const INSTALLMENT_STATUS_PARTIAL = 'partial';
+
+    public const INSTALLMENT_STATUS_PAID = 'paid';
+
+    public const ARREAR_STATUS_PENDING = 'pending';
+
+    public const ARREAR_STATUS_PARTIAL = 'partial';
+
+    public const ARREAR_STATUS_PAID = 'paid';
 
     public function sessionOptions(int $backward = 1, int $forward = 3): array
     {
@@ -73,6 +88,30 @@ class FeeManagementService
             self::STATUS_PAID => self::STATUS_PAID,
             self::STATUS_PARTIAL, 'partially_paid' => self::STATUS_PARTIAL,
             default => self::STATUS_UNPAID,
+        };
+    }
+
+    public function normalizeInstallmentStatus(?string $status): string
+    {
+        $value = strtolower(trim((string) $status));
+
+        return match ($value) {
+            self::INSTALLMENT_STATUS_PAID => self::INSTALLMENT_STATUS_PAID,
+            self::INSTALLMENT_STATUS_PARTIAL, self::STATUS_PARTIAL => self::INSTALLMENT_STATUS_PARTIAL,
+            self::STATUS_UNPAID => self::INSTALLMENT_STATUS_PENDING,
+            default => self::INSTALLMENT_STATUS_PENDING,
+        };
+    }
+
+    public function normalizeArrearStatus(?string $status): string
+    {
+        $value = strtolower(trim((string) $status));
+
+        return match ($value) {
+            self::ARREAR_STATUS_PAID => self::ARREAR_STATUS_PAID,
+            self::ARREAR_STATUS_PARTIAL, self::STATUS_PARTIAL => self::ARREAR_STATUS_PARTIAL,
+            self::STATUS_UNPAID => self::ARREAR_STATUS_PENDING,
+            default => self::ARREAR_STATUS_PENDING,
         };
     }
 
@@ -229,6 +268,308 @@ class FeeManagementService
         return round((float) $tuitionFee + (float) $computerFee + (float) $examFee, 2);
     }
 
+    /**
+     * @return array<int, string>
+     */
+    public function installmentPlanTypes(): array
+    {
+        return [
+            FeeInstallmentPlan::TYPE_MONTHLY,
+            FeeInstallmentPlan::TYPE_QUARTERLY,
+            FeeInstallmentPlan::TYPE_CUSTOM,
+        ];
+    }
+
+    /**
+     * @param array{
+     *   student_id:int,
+     *   session:string,
+     *   plan_name?:string|null,
+     *   plan_type:string,
+     *   total_amount:float|int|string,
+     *   number_of_installments:int,
+     *   first_due_date:string,
+     *   custom_interval_days?:int|null,
+     *   notes?:string|null,
+     *   is_active?:bool,
+     *   deactivate_existing?:bool
+     * } $attributes
+     */
+    public function createInstallmentPlan(array $attributes, ?int $createdBy): FeeInstallmentPlan
+    {
+        $planType = strtolower(trim((string) $attributes['plan_type']));
+        if (! in_array($planType, $this->installmentPlanTypes(), true)) {
+            throw new RuntimeException('Invalid installment plan type.');
+        }
+
+        $totalAmount = round((float) $attributes['total_amount'], 2);
+        if ($totalAmount <= 0) {
+            throw new RuntimeException('Total amount must be greater than zero.');
+        }
+
+        $installmentCount = max((int) $attributes['number_of_installments'], 1);
+        $customIntervalDays = isset($attributes['custom_interval_days'])
+            ? (int) $attributes['custom_interval_days']
+            : null;
+
+        if ($planType === FeeInstallmentPlan::TYPE_CUSTOM && ($customIntervalDays === null || $customIntervalDays <= 0)) {
+            throw new RuntimeException('Custom plan requires an interval in days.');
+        }
+
+        $resolvedCreatedBy = $this->resolveUserId($createdBy);
+
+        return $this->executeWithUserForeignKeyFallback(
+            $resolvedCreatedBy,
+            function (?int $safeCreatedBy) use (
+                $attributes,
+                $planType,
+                $totalAmount,
+                $installmentCount,
+                $customIntervalDays
+            ): FeeInstallmentPlan {
+                return DB::transaction(function () use (
+                    $attributes,
+                    $safeCreatedBy,
+                    $planType,
+                    $totalAmount,
+                    $installmentCount,
+                    $customIntervalDays
+                ): FeeInstallmentPlan {
+                    $studentId = (int) $attributes['student_id'];
+                    $session = (string) $attributes['session'];
+                    $deactivateExisting = (bool) ($attributes['deactivate_existing'] ?? true);
+
+                    if ($deactivateExisting) {
+                        FeeInstallmentPlan::query()
+                            ->where('student_id', $studentId)
+                            ->where('session', $session)
+                            ->where('is_active', true)
+                            ->update(['is_active' => false]);
+                    }
+
+                    $plan = FeeInstallmentPlan::query()->create([
+                        'student_id' => $studentId,
+                        'session' => $session,
+                        'plan_name' => trim((string) ($attributes['plan_name'] ?? '')) ?: null,
+                        'plan_type' => $planType,
+                        'total_amount' => $totalAmount,
+                        'number_of_installments' => $installmentCount,
+                        'first_due_date' => (string) $attributes['first_due_date'],
+                        'custom_interval_days' => $planType === FeeInstallmentPlan::TYPE_CUSTOM ? $customIntervalDays : null,
+                        'is_active' => (bool) ($attributes['is_active'] ?? true),
+                        'notes' => trim((string) ($attributes['notes'] ?? '')) ?: null,
+                        'created_by' => $safeCreatedBy,
+                    ]);
+
+                    $this->generateInstallmentsForPlan($plan);
+
+                    return $plan->load('installments');
+                });
+            }
+        );
+    }
+
+    /**
+     * @param array{
+     *   student_id:int,
+     *   session?:string|null,
+     *   title:string,
+     *   amount:float|int|string,
+     *   due_date?:string|null,
+     *   notes?:string|null
+     * } $attributes
+     */
+    public function addStudentArrear(array $attributes, ?int $addedBy): StudentArrear
+    {
+        $amount = round((float) $attributes['amount'], 2);
+        if ($amount <= 0) {
+            throw new RuntimeException('Arrear amount must be greater than zero.');
+        }
+
+        $resolvedAddedBy = $this->resolveUserId($addedBy);
+
+        return $this->executeWithUserForeignKeyFallback(
+            $resolvedAddedBy,
+            function (?int $safeAddedBy) use ($attributes, $amount): StudentArrear {
+                return StudentArrear::query()->create([
+                    'student_id' => (int) $attributes['student_id'],
+                    'session' => trim((string) ($attributes['session'] ?? '')) ?: null,
+                    'title' => trim((string) $attributes['title']),
+                    'amount' => $amount,
+                    'paid_amount' => 0,
+                    'status' => self::ARREAR_STATUS_PENDING,
+                    'due_date' => trim((string) ($attributes['due_date'] ?? '')) ?: null,
+                    'notes' => trim((string) ($attributes['notes'] ?? '')) ?: null,
+                    'added_by' => $safeAddedBy,
+                    'resolved_at' => null,
+                ]);
+            }
+        );
+    }
+
+    public function recordInstallmentPayment(FeeInstallment $installment, float $amountPaid): FeeInstallment
+    {
+        if ($amountPaid <= 0) {
+            throw new RuntimeException('Payment amount must be greater than zero.');
+        }
+
+        return DB::transaction(function () use ($installment, $amountPaid): FeeInstallment {
+            $locked = FeeInstallment::query()->lockForUpdate()->find($installment->id);
+            if (! $locked) {
+                throw new RuntimeException('Installment not found.');
+            }
+
+            $remaining = $this->lineRemainingAmount((float) $locked->amount, (float) $locked->paid_amount);
+            if ($remaining <= 0) {
+                throw new RuntimeException('Installment is already fully paid.');
+            }
+
+            if ($amountPaid > $remaining) {
+                throw new RuntimeException('Payment amount cannot exceed remaining installment balance.');
+            }
+
+            $newPaid = round((float) $locked->paid_amount + $amountPaid, 2);
+            $status = $this->statusFromPaidAndTotal($newPaid, (float) $locked->amount);
+
+            $locked->forceFill([
+                'paid_amount' => $newPaid,
+                'status' => $this->normalizeInstallmentStatus($status),
+                'paid_at' => $status === self::INSTALLMENT_STATUS_PAID ? now() : null,
+            ])->save();
+
+            return $locked->fresh() ?? $locked;
+        });
+    }
+
+    public function recordArrearPayment(StudentArrear $arrear, float $amountPaid): StudentArrear
+    {
+        if ($amountPaid <= 0) {
+            throw new RuntimeException('Payment amount must be greater than zero.');
+        }
+
+        return DB::transaction(function () use ($arrear, $amountPaid): StudentArrear {
+            $locked = StudentArrear::query()->lockForUpdate()->find($arrear->id);
+            if (! $locked) {
+                throw new RuntimeException('Arrear not found.');
+            }
+
+            $remaining = $this->lineRemainingAmount((float) $locked->amount, (float) $locked->paid_amount);
+            if ($remaining <= 0) {
+                throw new RuntimeException('Arrear is already fully paid.');
+            }
+
+            if ($amountPaid > $remaining) {
+                throw new RuntimeException('Payment amount cannot exceed remaining arrear balance.');
+            }
+
+            $newPaid = round((float) $locked->paid_amount + $amountPaid, 2);
+            $status = $this->statusFromPaidAndTotal($newPaid, (float) $locked->amount);
+
+            $locked->forceFill([
+                'paid_amount' => $newPaid,
+                'status' => $this->normalizeArrearStatus($status),
+                'resolved_at' => $status === self::ARREAR_STATUS_PAID ? now() : null,
+            ])->save();
+
+            return $locked->fresh() ?? $locked;
+        });
+    }
+
+    /**
+     * @return array{installment_due:float,arrears_due:float,total_due:float}
+     */
+    public function dueSummaryForStudent(int $studentId, ?string $session = null): array
+    {
+        $installments = FeeInstallment::query()
+            ->where('student_id', $studentId)
+            ->whereIn('status', [
+                self::INSTALLMENT_STATUS_PENDING,
+                self::INSTALLMENT_STATUS_PARTIAL,
+            ])
+            ->whereHas('plan', function ($query) use ($session): void {
+                $query->where('is_active', true);
+
+                if ($session !== null && $session !== '') {
+                    $query->where('session', $session);
+                }
+            })
+            ->get(['amount', 'paid_amount']);
+
+        $installmentDue = round((float) $installments->sum(function (FeeInstallment $installment): float {
+            return $this->lineRemainingAmount((float) $installment->amount, (float) $installment->paid_amount);
+        }), 2);
+
+        $arrears = StudentArrear::query()
+            ->where('student_id', $studentId)
+            ->whereIn('status', [
+                self::ARREAR_STATUS_PENDING,
+                self::ARREAR_STATUS_PARTIAL,
+            ])
+            ->when($session !== null && $session !== '', function ($query) use ($session): void {
+                $query->where(function ($nested) use ($session): void {
+                    $nested->whereNull('session')
+                        ->orWhere('session', $session);
+                });
+            })
+            ->get(['amount', 'paid_amount']);
+
+        $arrearsDue = round((float) $arrears->sum(function (StudentArrear $arrear): float {
+            return $this->lineRemainingAmount((float) $arrear->amount, (float) $arrear->paid_amount);
+        }), 2);
+
+        return [
+            'installment_due' => $installmentDue,
+            'arrears_due' => $arrearsDue,
+            'total_due' => round($installmentDue + $arrearsDue, 2),
+        ];
+    }
+
+    /**
+     * @return Collection<int, FeeInstallment>
+     */
+    public function installmentScheduleForStudent(int $studentId): Collection
+    {
+        return FeeInstallment::query()
+            ->with('plan:id,session,plan_name,plan_type,is_active')
+            ->where('student_id', $studentId)
+            ->orderBy('due_date')
+            ->orderBy('installment_no')
+            ->get([
+                'id',
+                'fee_installment_plan_id',
+                'student_id',
+                'installment_no',
+                'title',
+                'due_date',
+                'amount',
+                'paid_amount',
+                'status',
+                'paid_at',
+            ]);
+    }
+
+    /**
+     * @return Collection<int, StudentArrear>
+     */
+    public function arrearsForStudent(int $studentId): Collection
+    {
+        return StudentArrear::query()
+            ->where('student_id', $studentId)
+            ->orderByDesc('created_at')
+            ->get([
+                'id',
+                'student_id',
+                'session',
+                'title',
+                'amount',
+                'paid_amount',
+                'status',
+                'due_date',
+                'notes',
+                'resolved_at',
+            ]);
+    }
+
     public function graceDays(): int
     {
         return max((int) config('fees.grace_days', 3), 0);
@@ -365,6 +706,72 @@ class FeeManagementService
             throw new RuntimeException('No active students found for selected class.');
         }
 
+        $studentIds = $students->pluck('id');
+        $activePlansByStudent = FeeInstallmentPlan::query()
+            ->where('session', $session)
+            ->where('is_active', true)
+            ->whereIn('student_id', $studentIds)
+            ->orderByDesc('id')
+            ->get([
+                'id',
+                'student_id',
+                'session',
+                'plan_type',
+                'is_active',
+            ])
+            ->groupBy('student_id')
+            ->map(fn (Collection $rows): ?FeeInstallmentPlan => $rows->first());
+
+        $monthEndDate = Carbon::createFromFormat('Y-m', $month)->endOfMonth()->toDateString();
+        $installmentsByPlan = collect();
+        $planIds = $activePlansByStudent->pluck('id')->filter()->values();
+        if ($planIds->isNotEmpty()) {
+            $installmentsByPlan = FeeInstallment::query()
+                ->whereIn('fee_installment_plan_id', $planIds)
+                ->whereIn('status', [
+                    self::INSTALLMENT_STATUS_PENDING,
+                    self::INSTALLMENT_STATUS_PARTIAL,
+                ])
+                ->whereDate('due_date', '<=', $monthEndDate)
+                ->orderBy('due_date')
+                ->orderBy('installment_no')
+                ->get([
+                    'id',
+                    'fee_installment_plan_id',
+                    'student_id',
+                    'installment_no',
+                    'title',
+                    'due_date',
+                    'amount',
+                    'paid_amount',
+                    'status',
+                ])
+                ->groupBy('fee_installment_plan_id');
+        }
+
+        $manualArrearsByStudent = StudentArrear::query()
+            ->whereIn('student_id', $studentIds)
+            ->whereIn('status', [
+                self::ARREAR_STATUS_PENDING,
+                self::ARREAR_STATUS_PARTIAL,
+            ])
+            ->where(function ($query) use ($session): void {
+                $query->whereNull('session')
+                    ->orWhere('session', $session);
+            })
+            ->orderBy('due_date')
+            ->orderBy('id')
+            ->get([
+                'id',
+                'student_id',
+                'title',
+                'amount',
+                'paid_amount',
+                'due_date',
+                'status',
+            ])
+            ->groupBy('student_id');
+
         $feeStructures = FeeStructure::query()
             ->where('session', $session)
             ->where('class_id', $classId)
@@ -373,11 +780,10 @@ class FeeManagementService
             ->orderBy('title')
             ->get(['id', 'title', 'amount', 'fee_type', 'is_monthly']);
 
-        if ($feeStructures->isEmpty()) {
-            throw new RuntimeException('No active fee structures found for selected class and session.');
+        if ($feeStructures->isEmpty() && $activePlansByStudent->isEmpty()) {
+            throw new RuntimeException('No active fee structures or installment plans found for selected class and session.');
         }
 
-        $studentIds = $students->pluck('id');
         $oneTimeStructureIds = $feeStructures->where('is_monthly', false)->pluck('id');
         $studentCustomFeeByStudent = collect();
         if ($this->studentCustomFeeTableExists()) {
@@ -413,7 +819,7 @@ class FeeManagementService
                 $challan->student_id.'|'.$challan->session.'|'.$challan->month => true,
             ]);
 
-        $arrearsByStudent = FeeChallan::query()
+        $legacyArrearsByStudent = FeeChallan::query()
             ->withSum('payments as paid_amount', 'amount_paid')
             ->whereIn('student_id', $studentIds)
             ->whereIn('status', $this->pendingStatuses())
@@ -453,7 +859,10 @@ class FeeManagementService
                 $classId,
                 $alreadyBilledOneTime,
                 $existingChallanKeys,
-                $arrearsByStudent,
+                $legacyArrearsByStudent,
+                $activePlansByStudent,
+                $installmentsByPlan,
+                $manualArrearsByStudent,
                 $studentCustomFeeByStudent,
                 &$createdCount,
                 &$skippedExistingCount,
@@ -470,7 +879,10 @@ class FeeManagementService
                     $classId,
                     $alreadyBilledOneTime,
                     $existingChallanKeys,
-                    $arrearsByStudent,
+                    $legacyArrearsByStudent,
+                    $activePlansByStudent,
+                    $installmentsByPlan,
+                    $manualArrearsByStudent,
                     $studentCustomFeeByStudent,
                     &$createdCount,
                     &$skippedExistingCount,
@@ -490,53 +902,128 @@ class FeeManagementService
 
                         $items = [];
                         $totalAmount = 0.0;
-                        $studentCustomFee = $studentCustomFeeByStudent->get($student->id);
+                        $manualArrearAmount = 0.0;
+                        $studentPlan = $activePlansByStudent->get($student->id);
 
-                        foreach ($feeStructures as $structure) {
-                            $assignment = StudentFeeAssignment::query()->firstOrCreate(
-                                [
-                                    'student_id' => $student->id,
-                                    'fee_structure_id' => $structure->id,
-                                    'session' => $session,
-                                ],
-                                [
-                                    'custom_amount' => null,
-                                    'is_active' => true,
-                                    'assigned_by' => $safeGeneratedBy,
-                                ]
+                        if ($studentPlan instanceof FeeInstallmentPlan) {
+                            $dueInstallments = collect($installmentsByPlan->get($studentPlan->id, collect()));
+
+                            foreach ($dueInstallments as $installment) {
+                                $lineAmount = $this->lineRemainingAmount(
+                                    (float) $installment->amount,
+                                    (float) $installment->paid_amount
+                                );
+
+                                if ($lineAmount <= 0) {
+                                    continue;
+                                }
+
+                                $dueLabel = optional($installment->due_date)->toDateString() ?? '-';
+                                $title = trim((string) $installment->title) !== ''
+                                    ? (string) $installment->title
+                                    : 'Installment '.$installment->installment_no;
+
+                                $items[] = [
+                                    'fee_structure_id' => null,
+                                    'fee_installment_id' => (int) $installment->id,
+                                    'student_arrear_id' => null,
+                                    'title' => sprintf('%s (Due: %s)', $title, $dueLabel),
+                                    'fee_type' => 'installment',
+                                    'amount' => round($lineAmount, 2),
+                                    'paid_amount' => 0,
+                                ];
+                                $totalAmount += $lineAmount;
+                            }
+                        } else {
+                            $studentCustomFee = $studentCustomFeeByStudent->get($student->id);
+
+                            foreach ($feeStructures as $structure) {
+                                $assignment = StudentFeeAssignment::query()->firstOrCreate(
+                                    [
+                                        'student_id' => $student->id,
+                                        'fee_structure_id' => $structure->id,
+                                        'session' => $session,
+                                    ],
+                                    [
+                                        'custom_amount' => null,
+                                        'is_active' => true,
+                                        'assigned_by' => $safeGeneratedBy,
+                                    ]
+                                );
+
+                                if (! $assignment->is_active) {
+                                    continue;
+                                }
+
+                                if (! $structure->is_monthly && $blockedOneTime->has((int) $structure->id)) {
+                                    continue;
+                                }
+
+                                $customFeeAmount = $this->lineAmountFromStudentCustomFee($studentCustomFee, $structure);
+                                $lineAmount = $customFeeAmount ?? ($assignment->custom_amount !== null
+                                    ? (float) $assignment->custom_amount
+                                    : (float) $structure->amount);
+
+                                if ($lineAmount <= 0) {
+                                    continue;
+                                }
+
+                                $items[] = [
+                                    'fee_structure_id' => (int) $structure->id,
+                                    'fee_installment_id' => null,
+                                    'student_arrear_id' => null,
+                                    'title' => $structure->title,
+                                    'fee_type' => $structure->fee_type,
+                                    'amount' => round($lineAmount, 2),
+                                    'paid_amount' => 0,
+                                ];
+                                $totalAmount += $lineAmount;
+                            }
+                        }
+
+                        $studentArrears = collect($manualArrearsByStudent->get($student->id, collect()));
+                        foreach ($studentArrears as $arrear) {
+                            $lineAmount = $this->lineRemainingAmount(
+                                (float) $arrear->amount,
+                                (float) $arrear->paid_amount
                             );
-
-                            if (! $assignment->is_active) {
-                                continue;
-                            }
-
-                            if (! $structure->is_monthly && $blockedOneTime->has((int) $structure->id)) {
-                                continue;
-                            }
-
-                            $customFeeAmount = $this->lineAmountFromStudentCustomFee($studentCustomFee, $structure);
-                            $lineAmount = $customFeeAmount ?? ($assignment->custom_amount !== null
-                                ? (float) $assignment->custom_amount
-                                : (float) $structure->amount);
 
                             if ($lineAmount <= 0) {
                                 continue;
                             }
 
+                            $dueLabel = optional($arrear->due_date)->toDateString();
+                            $title = trim((string) $arrear->title) !== ''
+                                ? 'Arrear: '.trim((string) $arrear->title)
+                                : 'Manual Arrear';
+                            if ($dueLabel !== null && $dueLabel !== '') {
+                                $title .= ' (Due: '.$dueLabel.')';
+                            }
+
                             $items[] = [
-                                'fee_structure_id' => $structure->id,
-                                'title' => $structure->title,
-                                'fee_type' => $structure->fee_type,
+                                'fee_structure_id' => null,
+                                'fee_installment_id' => null,
+                                'student_arrear_id' => (int) $arrear->id,
+                                'title' => $title,
+                                'fee_type' => 'arrear',
                                 'amount' => round($lineAmount, 2),
+                                'paid_amount' => 0,
                             ];
+
+                            $manualArrearAmount += $lineAmount;
                             $totalAmount += $lineAmount;
                         }
 
-                        $baseFeeAmount = round($totalAmount, 2);
-                        $arrearsAmount = round((float) ($arrearsByStudent->get($student->id, 0) ?? 0), 2);
-                        $finalTotalAmount = round($baseFeeAmount + $arrearsAmount, 2);
+                        $legacyArrearAmount = 0.0;
+                        if (! ($studentPlan instanceof FeeInstallmentPlan)) {
+                            $legacyArrearAmount = round((float) ($legacyArrearsByStudent->get($student->id, 0) ?? 0), 2);
+                        }
 
-                        if (empty($items) && $arrearsAmount <= 0) {
+                        $baseAndManualAmount = round($totalAmount, 2);
+                        $arrearsAmount = round($manualArrearAmount + $legacyArrearAmount, 2);
+                        $finalTotalAmount = round($baseAndManualAmount + $legacyArrearAmount, 2);
+
+                        if (empty($items) && $legacyArrearAmount <= 0) {
                             $skippedNoItemsCount++;
                             continue;
                         }
@@ -562,7 +1049,7 @@ class FeeManagementService
                         }
 
                         $createdCount++;
-                        $totalArrearsAdded += $arrearsAmount;
+                        $totalArrearsAdded += round($arrearsAmount, 2);
                     }
                 });
             }
@@ -661,6 +1148,8 @@ class FeeManagementService
                         'status' => $status,
                         'paid_at' => $isPaid ? now() : null,
                     ])->save();
+
+                    $this->syncLinkedBalancesForChallan($locked);
 
                     return $payment;
                 });
@@ -774,6 +1263,161 @@ class FeeManagementService
         ];
     }
 
+    private function generateInstallmentsForPlan(FeeInstallmentPlan $plan): void
+    {
+        $totalInstallments = max((int) $plan->number_of_installments, 1);
+        $totalAmountCents = (int) round(round((float) $plan->total_amount, 2) * 100);
+        $baseAmountCents = intdiv($totalAmountCents, $totalInstallments);
+        $remainderCents = $totalAmountCents - ($baseAmountCents * $totalInstallments);
+        $firstDueDate = $plan->first_due_date?->copy() ?? Carbon::parse((string) $plan->first_due_date);
+        $customIntervalDays = max((int) ($plan->custom_interval_days ?? 0), 1);
+
+        $rows = [];
+        for ($index = 1; $index <= $totalInstallments; $index++) {
+            $amountCents = $baseAmountCents;
+            if ($index === $totalInstallments) {
+                $amountCents += $remainderCents;
+            }
+
+            $dueDate = $this->installmentDueDateForIndex(
+                $firstDueDate,
+                (string) $plan->plan_type,
+                $customIntervalDays,
+                $index
+            );
+
+            $rows[] = [
+                'fee_installment_plan_id' => (int) $plan->id,
+                'student_id' => (int) $plan->student_id,
+                'installment_no' => $index,
+                'title' => sprintf('Installment %d of %d', $index, $totalInstallments),
+                'due_date' => $dueDate,
+                'amount' => round($amountCents / 100, 2),
+                'paid_amount' => 0,
+                'status' => self::INSTALLMENT_STATUS_PENDING,
+                'paid_at' => null,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ];
+        }
+
+        $plan->installments()->delete();
+        FeeInstallment::query()->insert($rows);
+    }
+
+    private function installmentDueDateForIndex(
+        Carbon $firstDueDate,
+        string $planType,
+        int $customIntervalDays,
+        int $index
+    ): string {
+        $offset = max($index - 1, 0);
+        $baseDate = $firstDueDate->copy()->startOfDay();
+
+        if ($offset === 0) {
+            return $baseDate->toDateString();
+        }
+
+        return match (strtolower(trim($planType))) {
+            FeeInstallmentPlan::TYPE_QUARTERLY => $baseDate->addMonthsNoOverflow($offset * 3)->toDateString(),
+            FeeInstallmentPlan::TYPE_CUSTOM => $baseDate->addDays($offset * max($customIntervalDays, 1))->toDateString(),
+            default => $baseDate->addMonthsNoOverflow($offset)->toDateString(),
+        };
+    }
+
+    private function syncLinkedBalancesForChallan(FeeChallan $challan): void
+    {
+        $challanId = (int) $challan->id;
+        $items = FeeChallanItem::query()
+            ->where('fee_challan_id', $challanId)
+            ->where(function ($query): void {
+                $query->whereNotNull('fee_installment_id')
+                    ->orWhereNotNull('student_arrear_id');
+            })
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->get([
+                'id',
+                'amount',
+                'paid_amount',
+                'fee_installment_id',
+                'student_arrear_id',
+            ]);
+
+        if ($items->isEmpty()) {
+            return;
+        }
+
+        $totalPaid = round((float) FeePayment::query()
+            ->where('fee_challan_id', $challanId)
+            ->sum('amount_paid'), 2);
+
+        $remainingToAllocate = $totalPaid;
+        foreach ($items as $item) {
+            $lineAmount = round((float) $item->amount, 2);
+            $alreadyAllocated = round((float) $item->paid_amount, 2);
+            $targetAllocated = round(min($lineAmount, max($remainingToAllocate, 0)), 2);
+            $remainingToAllocate = round(max($remainingToAllocate - $targetAllocated, 0), 2);
+
+            $delta = round($targetAllocated - $alreadyAllocated, 2);
+            if (abs($delta) < 0.01) {
+                continue;
+            }
+
+            $item->forceFill([
+                'paid_amount' => $targetAllocated,
+            ])->save();
+
+            if ($item->fee_installment_id !== null) {
+                $this->applyInstallmentPaymentDelta((int) $item->fee_installment_id, $delta);
+            }
+
+            if ($item->student_arrear_id !== null) {
+                $this->applyArrearPaymentDelta((int) $item->student_arrear_id, $delta);
+            }
+        }
+    }
+
+    private function applyInstallmentPaymentDelta(int $installmentId, float $delta): void
+    {
+        $installment = FeeInstallment::query()->lockForUpdate()->find($installmentId);
+        if (! $installment) {
+            return;
+        }
+
+        $amount = round((float) $installment->amount, 2);
+        $paidBefore = round((float) $installment->paid_amount, 2);
+        $newPaid = round($paidBefore + $delta, 2);
+        $newPaid = round(min(max($newPaid, 0), $amount), 2);
+
+        $status = $this->normalizeInstallmentStatus($this->statusFromPaidAndTotal($newPaid, $amount));
+        $installment->forceFill([
+            'paid_amount' => $newPaid,
+            'status' => $status,
+            'paid_at' => $status === self::INSTALLMENT_STATUS_PAID ? ($installment->paid_at ?? now()) : null,
+        ])->save();
+    }
+
+    private function applyArrearPaymentDelta(int $arrearId, float $delta): void
+    {
+        $arrear = StudentArrear::query()->lockForUpdate()->find($arrearId);
+        if (! $arrear) {
+            return;
+        }
+
+        $amount = round((float) $arrear->amount, 2);
+        $paidBefore = round((float) $arrear->paid_amount, 2);
+        $newPaid = round($paidBefore + $delta, 2);
+        $newPaid = round(min(max($newPaid, 0), $amount), 2);
+
+        $status = $this->normalizeArrearStatus($this->statusFromPaidAndTotal($newPaid, $amount));
+        $arrear->forceFill([
+            'paid_amount' => $newPaid,
+            'status' => $status,
+            'resolved_at' => $status === self::ARREAR_STATUS_PAID ? ($arrear->resolved_at ?? now()) : null,
+        ])->save();
+    }
+
     /**
      * @template TReturn
      * @param callable(?int): TReturn $callback
@@ -817,7 +1461,9 @@ class FeeManagementService
             || (str_contains($message, 'student_fee_structures') && str_contains($message, 'created_by'))
             || (str_contains($message, 'student_fee_assignments') && str_contains($message, 'assigned_by'))
             || (str_contains($message, 'fee_challans') && str_contains($message, 'generated_by'))
-            || (str_contains($message, 'fee_payments') && str_contains($message, 'received_by'));
+            || (str_contains($message, 'fee_payments') && str_contains($message, 'received_by'))
+            || (str_contains($message, 'fee_installment_plans') && str_contains($message, 'created_by'))
+            || (str_contains($message, 'student_arrears') && str_contains($message, 'added_by'));
     }
 
     private function resolveUserId(?int $userId): ?int
@@ -944,6 +1590,11 @@ class FeeManagementService
     }
 
     private function remainingFromTotals(float $totalAmount, float $paidAmount): float
+    {
+        return round(max(round($totalAmount, 2) - round($paidAmount, 2), 0), 2);
+    }
+
+    private function lineRemainingAmount(float $totalAmount, float $paidAmount): float
     {
         return round(max(round($totalAmount, 2) - round($paidAmount, 2), 0), 2);
     }

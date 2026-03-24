@@ -68,18 +68,7 @@ class FeeStructureController extends Controller
             $sessions = $this->service->sessionOptions();
         }
 
-        $feeTypes = FeeStructure::query()
-            ->select('fee_type')
-            ->distinct()
-            ->orderBy('fee_type')
-            ->pluck('fee_type')
-            ->filter()
-            ->values()
-            ->all();
-
-        if (empty($feeTypes)) {
-            $feeTypes = $this->defaultFeeTypes();
-        }
+        $feeTypes = $this->availableFeeTypes();
 
         return view('modules.principal.fees.structures.index', [
             'structures' => $structures,
@@ -109,7 +98,7 @@ class FeeStructureController extends Controller
         return view('modules.principal.fees.structures.create', [
             'classes' => $classes,
             'sessions' => $this->service->sessionOptions(),
-            'feeTypes' => $this->defaultFeeTypes(),
+            'feeTypes' => $this->availableFeeTypes(),
             'defaultSession' => $this->service->sessionOptions()[1] ?? $this->service->sessionOptions()[0] ?? now()->year.'-'.(now()->year + 1),
         ]);
     }
@@ -144,7 +133,7 @@ class FeeStructureController extends Controller
             'feeStructure' => $feeStructure,
             'classes' => $classes,
             'sessions' => $this->service->sessionOptions(),
-            'feeTypes' => $this->defaultFeeTypes(),
+            'feeTypes' => $this->availableFeeTypes((string) $feeStructure->fee_type),
         ]);
     }
 
@@ -180,12 +169,38 @@ class FeeStructureController extends Controller
     {
         return [
             'tuition',
-            'admission',
+            'registration_fee',
+            'admission_fee',
             'exam',
             'transport',
             'library',
             'sports',
             'miscellaneous',
         ];
+    }
+
+    private function availableFeeTypes(?string $forceInclude = null): array
+    {
+        $dbTypes = FeeStructure::query()
+            ->select('fee_type')
+            ->distinct()
+            ->orderBy('fee_type')
+            ->pluck('fee_type')
+            ->filter()
+            ->map(fn (string $type): string => trim($type))
+            ->values()
+            ->all();
+
+        $types = collect(array_merge($this->defaultFeeTypes(), $dbTypes));
+
+        if ($forceInclude !== null && trim($forceInclude) !== '') {
+            $types->push(trim($forceInclude));
+        }
+
+        return $types
+            ->filter(fn (?string $type): bool => $type !== null && trim($type) !== '')
+            ->unique()
+            ->values()
+            ->all();
     }
 }

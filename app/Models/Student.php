@@ -129,4 +129,19 @@ class Student extends Model
     {
         return $this->hasMany(FeeChallan::class);
     }
+
+    public function feeInstallmentPlans(): HasMany
+    {
+        return $this->hasMany(FeeInstallmentPlan::class);
+    }
+
+    public function feeInstallments(): HasMany
+    {
+        return $this->hasMany(FeeInstallment::class);
+    }
+
+    public function arrears(): HasMany
+    {
+        return $this->hasMany(StudentArrear::class);
+    }
 }
