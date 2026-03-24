@@ -164,4 +164,9 @@ class Student extends Model
     {
         return $this->hasMany(AdmitCardOverride::class);
     }
+
+    public function examSeatAssignments(): HasMany
+    {
+        return $this->hasMany(ExamSeatAssignment::class);
+    }
 }

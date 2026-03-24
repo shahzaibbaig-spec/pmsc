@@ -75,4 +75,9 @@ class SchoolClass extends Model
     {
         return $this->hasMany(SubjectGroup::class, 'class_id');
     }
+
+    public function examSeatAssignments(): HasMany
+    {
+        return $this->hasMany(ExamSeatAssignment::class, 'class_id');
+    }
 }

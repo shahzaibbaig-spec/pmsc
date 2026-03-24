@@ -26,4 +26,9 @@ class ExamSession extends Model
     {
         return $this->hasMany(AdmitCardOverride::class);
     }
+
+    public function seatingPlans(): HasMany
+    {
+        return $this->hasMany(ExamSeatingPlan::class);
+    }
 }

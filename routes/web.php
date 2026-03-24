@@ -16,6 +16,7 @@ use App\Modules\Classes\Controllers\ClassManagementController;
 use App\Modules\Classes\Controllers\PrincipalDashboardController;
 use App\Modules\Exams\Controllers\TeacherExamController;
 use App\Modules\Exams\Controllers\TeacherMarkEntryController;
+use App\Modules\Exams\Controllers\ExamSeatingPlanController;
 use App\Modules\Fees\Controllers\FeeChallanController;
 use App\Modules\Fees\Controllers\FeeDefaulterController;
 use App\Modules\Fees\Controllers\FeeInstallmentPlanController;
@@ -741,6 +742,30 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
     Route::get('/principal/admit-cards', [AdmitCardController::class, 'index'])
         ->middleware(['role:Admin|Principal', 'permission:generate_results'])
         ->name('principal.admit-cards.index');
+
+    Route::get('/principal/exams/seating-plan', [ExamSeatingPlanController::class, 'index'])
+        ->middleware(['role:Admin|Principal', 'permission:generate_results'])
+        ->name('principal.exams.seating-plans.index');
+
+    Route::post('/principal/exams/seating-plan/rooms', [ExamSeatingPlanController::class, 'storeRoom'])
+        ->middleware(['role:Admin|Principal', 'permission:generate_results'])
+        ->name('principal.exams.seating-plans.rooms.store');
+
+    Route::post('/principal/exams/seating-plan/generate', [ExamSeatingPlanController::class, 'generate'])
+        ->middleware(['role:Admin|Principal', 'permission:generate_results'])
+        ->name('principal.exams.seating-plans.generate');
+
+    Route::get('/principal/exams/seating-plan/{examSeatingPlan}', [ExamSeatingPlanController::class, 'show'])
+        ->middleware(['role:Admin|Principal', 'permission:generate_results'])
+        ->name('principal.exams.seating-plans.show');
+
+    Route::get('/principal/exams/seating-plan/{examSeatingPlan}/print', [ExamSeatingPlanController::class, 'print'])
+        ->middleware(['role:Admin|Principal', 'permission:generate_results'])
+        ->name('principal.exams.seating-plans.print');
+
+    Route::get('/principal/exams/seating-plan/{examSeatingPlan}/seat-slip/{examSeatAssignment}', [ExamSeatingPlanController::class, 'seatSlip'])
+        ->middleware(['role:Admin|Principal', 'permission:generate_results'])
+        ->name('principal.exams.seating-plans.seat-slip');
 
     Route::post('/principal/admit-cards/exam-sessions', [AdmitCardController::class, 'storeExamSession'])
         ->middleware(['role:Admin|Principal', 'permission:generate_results'])

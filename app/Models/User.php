@@ -135,4 +135,9 @@ class User extends Authenticatable
         return $this->hasMany(AdmitCardOverride::class, 'approved_by');
     }
 
+    public function generatedExamSeatingPlans(): HasMany
+    {
+        return $this->hasMany(ExamSeatingPlan::class, 'generated_by');
+    }
+
 }
