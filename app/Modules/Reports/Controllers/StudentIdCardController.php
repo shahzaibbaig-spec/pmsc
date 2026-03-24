@@ -143,13 +143,31 @@ class StudentIdCardController extends Controller
 
             return 'data:image/png;base64,'.base64_encode($png);
         } catch (Throwable) {
-            $svg = QrCode::format('svg')
-                ->size(180)
-                ->margin(1)
-                ->generate($payload);
+            try {
+                $svg = QrCode::format('svg')
+                    ->size(180)
+                    ->margin(1)
+                    ->generate($payload);
 
-            return 'data:image/svg+xml;base64,'.base64_encode($svg);
+                return 'data:image/svg+xml;base64,'.base64_encode($svg);
+            } catch (Throwable) {
+                return $this->qrFallbackDataUri($payload);
+            }
         }
+    }
+
+    private function qrFallbackDataUri(string $payload): string
+    {
+        $label = htmlspecialchars((string) Str::of($payload)->limit(40, '...'), ENT_QUOTES, 'UTF-8');
+
+        $svg = '<svg xmlns="http://www.w3.org/2000/svg" width="180" height="180" viewBox="0 0 180 180">'
+            .'<rect width="180" height="180" fill="#ffffff"/>'
+            .'<rect x="4" y="4" width="172" height="172" fill="none" stroke="#111111" stroke-width="2"/>'
+            .'<text x="90" y="74" font-size="12" text-anchor="middle" fill="#111111" font-family="Arial, sans-serif">QR unavailable</text>'
+            .'<text x="90" y="94" font-size="8" text-anchor="middle" fill="#444444" font-family="Arial, sans-serif">'.$label.'</text>'
+            .'</svg>';
+
+        return 'data:image/svg+xml;base64,'.base64_encode($svg);
     }
 
     private function hasQrTokenColumn(): bool
