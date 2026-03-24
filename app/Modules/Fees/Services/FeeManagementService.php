@@ -297,6 +297,10 @@ class FeeManagementService
      */
     public function createInstallmentPlan(array $attributes, ?int $createdBy): FeeInstallmentPlan
     {
+        if (! $this->installmentPlanTablesExist()) {
+            throw new RuntimeException('Installment tables are missing. Please run migrations.');
+        }
+
         $planType = strtolower(trim((string) $attributes['plan_type']));
         if (! in_array($planType, $this->installmentPlanTypes(), true)) {
             throw new RuntimeException('Invalid installment plan type.');
@@ -381,6 +385,10 @@ class FeeManagementService
      */
     public function addStudentArrear(array $attributes, ?int $addedBy): StudentArrear
     {
+        if (! $this->studentArrearTableExists()) {
+            throw new RuntimeException('Student arrears table is missing. Please run migrations.');
+        }
+
         $amount = round((float) $attributes['amount'], 2);
         if ($amount <= 0) {
             throw new RuntimeException('Arrear amount must be greater than zero.');
@@ -409,6 +417,10 @@ class FeeManagementService
 
     public function recordInstallmentPayment(FeeInstallment $installment, float $amountPaid): FeeInstallment
     {
+        if (! $this->installmentPlanTablesExist()) {
+            throw new RuntimeException('Installment tables are missing. Please run migrations.');
+        }
+
         if ($amountPaid <= 0) {
             throw new RuntimeException('Payment amount must be greater than zero.');
         }
@@ -443,6 +455,10 @@ class FeeManagementService
 
     public function recordArrearPayment(StudentArrear $arrear, float $amountPaid): StudentArrear
     {
+        if (! $this->studentArrearTableExists()) {
+            throw new RuntimeException('Student arrears table is missing. Please run migrations.');
+        }
+
         if ($amountPaid <= 0) {
             throw new RuntimeException('Payment amount must be greater than zero.');
         }
@@ -480,42 +496,48 @@ class FeeManagementService
      */
     public function dueSummaryForStudent(int $studentId, ?string $session = null): array
     {
-        $installments = FeeInstallment::query()
-            ->where('student_id', $studentId)
-            ->whereIn('status', [
-                self::INSTALLMENT_STATUS_PENDING,
-                self::INSTALLMENT_STATUS_PARTIAL,
-            ])
-            ->whereHas('plan', function ($query) use ($session): void {
-                $query->where('is_active', true);
+        $installmentDue = 0.0;
+        if ($this->installmentPlanTablesExist()) {
+            $installments = FeeInstallment::query()
+                ->where('student_id', $studentId)
+                ->whereIn('status', [
+                    self::INSTALLMENT_STATUS_PENDING,
+                    self::INSTALLMENT_STATUS_PARTIAL,
+                ])
+                ->whereHas('plan', function ($query) use ($session): void {
+                    $query->where('is_active', true);
 
-                if ($session !== null && $session !== '') {
-                    $query->where('session', $session);
-                }
-            })
-            ->get(['amount', 'paid_amount']);
+                    if ($session !== null && $session !== '') {
+                        $query->where('session', $session);
+                    }
+                })
+                ->get(['amount', 'paid_amount']);
 
-        $installmentDue = round((float) $installments->sum(function (FeeInstallment $installment): float {
-            return $this->lineRemainingAmount((float) $installment->amount, (float) $installment->paid_amount);
-        }), 2);
+            $installmentDue = round((float) $installments->sum(function (FeeInstallment $installment): float {
+                return $this->lineRemainingAmount((float) $installment->amount, (float) $installment->paid_amount);
+            }), 2);
+        }
 
-        $arrears = StudentArrear::query()
-            ->where('student_id', $studentId)
-            ->whereIn('status', [
-                self::ARREAR_STATUS_PENDING,
-                self::ARREAR_STATUS_PARTIAL,
-            ])
-            ->when($session !== null && $session !== '', function ($query) use ($session): void {
-                $query->where(function ($nested) use ($session): void {
-                    $nested->whereNull('session')
-                        ->orWhere('session', $session);
-                });
-            })
-            ->get(['amount', 'paid_amount']);
+        $arrearsDue = 0.0;
+        if ($this->studentArrearTableExists()) {
+            $arrears = StudentArrear::query()
+                ->where('student_id', $studentId)
+                ->whereIn('status', [
+                    self::ARREAR_STATUS_PENDING,
+                    self::ARREAR_STATUS_PARTIAL,
+                ])
+                ->when($session !== null && $session !== '', function ($query) use ($session): void {
+                    $query->where(function ($nested) use ($session): void {
+                        $nested->whereNull('session')
+                            ->orWhere('session', $session);
+                    });
+                })
+                ->get(['amount', 'paid_amount']);
 
-        $arrearsDue = round((float) $arrears->sum(function (StudentArrear $arrear): float {
-            return $this->lineRemainingAmount((float) $arrear->amount, (float) $arrear->paid_amount);
-        }), 2);
+            $arrearsDue = round((float) $arrears->sum(function (StudentArrear $arrear): float {
+                return $this->lineRemainingAmount((float) $arrear->amount, (float) $arrear->paid_amount);
+            }), 2);
+        }
 
         return [
             'installment_due' => $installmentDue,
@@ -529,6 +551,10 @@ class FeeManagementService
      */
     public function installmentScheduleForStudent(int $studentId): Collection
     {
+        if (! $this->installmentPlanTablesExist()) {
+            return collect();
+        }
+
         return FeeInstallment::query()
             ->with('plan:id,session,plan_name,plan_type,is_active')
             ->where('student_id', $studentId)
@@ -553,6 +579,10 @@ class FeeManagementService
      */
     public function arrearsForStudent(int $studentId): Collection
     {
+        if (! $this->studentArrearTableExists()) {
+            return collect();
+        }
+
         return StudentArrear::query()
             ->where('student_id', $studentId)
             ->orderByDesc('created_at')
@@ -707,25 +737,28 @@ class FeeManagementService
         }
 
         $studentIds = $students->pluck('id');
-        $activePlansByStudent = FeeInstallmentPlan::query()
-            ->where('session', $session)
-            ->where('is_active', true)
-            ->whereIn('student_id', $studentIds)
-            ->orderByDesc('id')
-            ->get([
-                'id',
-                'student_id',
-                'session',
-                'plan_type',
-                'is_active',
-            ])
-            ->groupBy('student_id')
-            ->map(fn (Collection $rows): ?FeeInstallmentPlan => $rows->first());
+        $activePlansByStudent = collect();
+        if ($this->installmentPlanTablesExist()) {
+            $activePlansByStudent = FeeInstallmentPlan::query()
+                ->where('session', $session)
+                ->where('is_active', true)
+                ->whereIn('student_id', $studentIds)
+                ->orderByDesc('id')
+                ->get([
+                    'id',
+                    'student_id',
+                    'session',
+                    'plan_type',
+                    'is_active',
+                ])
+                ->groupBy('student_id')
+                ->map(fn (Collection $rows): ?FeeInstallmentPlan => $rows->first());
+        }
 
         $monthEndDate = Carbon::createFromFormat('Y-m', $month)->endOfMonth()->toDateString();
         $installmentsByPlan = collect();
         $planIds = $activePlansByStudent->pluck('id')->filter()->values();
-        if ($planIds->isNotEmpty()) {
+        if ($planIds->isNotEmpty() && $this->installmentPlanTablesExist()) {
             $installmentsByPlan = FeeInstallment::query()
                 ->whereIn('fee_installment_plan_id', $planIds)
                 ->whereIn('status', [
@@ -749,28 +782,31 @@ class FeeManagementService
                 ->groupBy('fee_installment_plan_id');
         }
 
-        $manualArrearsByStudent = StudentArrear::query()
-            ->whereIn('student_id', $studentIds)
-            ->whereIn('status', [
-                self::ARREAR_STATUS_PENDING,
-                self::ARREAR_STATUS_PARTIAL,
-            ])
-            ->where(function ($query) use ($session): void {
-                $query->whereNull('session')
-                    ->orWhere('session', $session);
-            })
-            ->orderBy('due_date')
-            ->orderBy('id')
-            ->get([
-                'id',
-                'student_id',
-                'title',
-                'amount',
-                'paid_amount',
-                'due_date',
-                'status',
-            ])
-            ->groupBy('student_id');
+        $manualArrearsByStudent = collect();
+        if ($this->studentArrearTableExists()) {
+            $manualArrearsByStudent = StudentArrear::query()
+                ->whereIn('student_id', $studentIds)
+                ->whereIn('status', [
+                    self::ARREAR_STATUS_PENDING,
+                    self::ARREAR_STATUS_PARTIAL,
+                ])
+                ->where(function ($query) use ($session): void {
+                    $query->whereNull('session')
+                        ->orWhere('session', $session);
+                })
+                ->orderBy('due_date')
+                ->orderBy('id')
+                ->get([
+                    'id',
+                    'student_id',
+                    'title',
+                    'amount',
+                    'paid_amount',
+                    'due_date',
+                    'status',
+                ])
+                ->groupBy('student_id');
+        }
 
         $feeStructures = FeeStructure::query()
             ->where('session', $session)
@@ -923,15 +959,14 @@ class FeeManagementService
                                     ? (string) $installment->title
                                     : 'Installment '.$installment->installment_no;
 
-                                $items[] = [
-                                    'fee_structure_id' => null,
-                                    'fee_installment_id' => (int) $installment->id,
-                                    'student_arrear_id' => null,
-                                    'title' => sprintf('%s (Due: %s)', $title, $dueLabel),
-                                    'fee_type' => 'installment',
-                                    'amount' => round($lineAmount, 2),
-                                    'paid_amount' => 0,
-                                ];
+                                $items[] = $this->makeChallanItemData(
+                                    null,
+                                    sprintf('%s (Due: %s)', $title, $dueLabel),
+                                    'installment',
+                                    $lineAmount,
+                                    (int) $installment->id,
+                                    null
+                                );
                                 $totalAmount += $lineAmount;
                             }
                         } else {
@@ -968,15 +1003,14 @@ class FeeManagementService
                                     continue;
                                 }
 
-                                $items[] = [
-                                    'fee_structure_id' => (int) $structure->id,
-                                    'fee_installment_id' => null,
-                                    'student_arrear_id' => null,
-                                    'title' => $structure->title,
-                                    'fee_type' => $structure->fee_type,
-                                    'amount' => round($lineAmount, 2),
-                                    'paid_amount' => 0,
-                                ];
+                                $items[] = $this->makeChallanItemData(
+                                    (int) $structure->id,
+                                    (string) $structure->title,
+                                    (string) $structure->fee_type,
+                                    $lineAmount,
+                                    null,
+                                    null
+                                );
                                 $totalAmount += $lineAmount;
                             }
                         }
@@ -1000,15 +1034,14 @@ class FeeManagementService
                                 $title .= ' (Due: '.$dueLabel.')';
                             }
 
-                            $items[] = [
-                                'fee_structure_id' => null,
-                                'fee_installment_id' => null,
-                                'student_arrear_id' => (int) $arrear->id,
-                                'title' => $title,
-                                'fee_type' => 'arrear',
-                                'amount' => round($lineAmount, 2),
-                                'paid_amount' => 0,
-                            ];
+                            $items[] = $this->makeChallanItemData(
+                                null,
+                                $title,
+                                'arrear',
+                                $lineAmount,
+                                null,
+                                (int) $arrear->id
+                            );
 
                             $manualArrearAmount += $lineAmount;
                             $totalAmount += $lineAmount;
@@ -1327,6 +1360,10 @@ class FeeManagementService
 
     private function syncLinkedBalancesForChallan(FeeChallan $challan): void
     {
+        if (! $this->challanItemLinkColumnsExist()) {
+            return;
+        }
+
         $challanId = (int) $challan->id;
         $items = FeeChallanItem::query()
             ->where('fee_challan_id', $challanId)
@@ -1614,6 +1651,62 @@ class FeeManagementService
         $monthKey = str_replace('-', '', $month);
 
         return sprintf('CH-%s-%s-%06d', $sessionKey, $monthKey, $studentId);
+    }
+
+    /**
+     * @return array{
+     *   fee_structure_id:int|null,
+     *   title:string,
+     *   fee_type:string,
+     *   amount:float,
+     *   fee_installment_id?:int|null,
+     *   student_arrear_id?:int|null,
+     *   paid_amount?:float|int
+     * }
+     */
+    private function makeChallanItemData(
+        ?int $feeStructureId,
+        string $title,
+        string $feeType,
+        float $amount,
+        ?int $feeInstallmentId = null,
+        ?int $studentArrearId = null
+    ): array {
+        $data = [
+            'fee_structure_id' => $feeStructureId,
+            'title' => $title,
+            'fee_type' => $feeType,
+            'amount' => round($amount, 2),
+        ];
+
+        if ($this->challanItemLinkColumnsExist()) {
+            $data['fee_installment_id'] = $feeInstallmentId;
+            $data['student_arrear_id'] = $studentArrearId;
+            $data['paid_amount'] = 0;
+        }
+
+        return $data;
+    }
+
+    private function installmentPlanTablesExist(): bool
+    {
+        return Schema::hasTable('fee_installment_plans') && Schema::hasTable('fee_installments');
+    }
+
+    private function studentArrearTableExists(): bool
+    {
+        return Schema::hasTable('student_arrears');
+    }
+
+    private function challanItemLinkColumnsExist(): bool
+    {
+        if (! Schema::hasTable('fee_challan_items')) {
+            return false;
+        }
+
+        return Schema::hasColumn('fee_challan_items', 'fee_installment_id')
+            && Schema::hasColumn('fee_challan_items', 'student_arrear_id')
+            && Schema::hasColumn('fee_challan_items', 'paid_amount');
     }
 
     private function studentCustomFeeTableExists(): bool

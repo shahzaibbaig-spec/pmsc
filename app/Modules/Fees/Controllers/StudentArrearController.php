@@ -9,6 +9,7 @@ use App\Models\StudentArrear;
 use App\Modules\Fees\Services\FeeManagementService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\View\View;
 use RuntimeException;
 
@@ -20,6 +21,12 @@ class StudentArrearController extends Controller
 
     public function index(Request $request): View
     {
+        if (! $this->arrearTableAvailable()) {
+            return redirect()
+                ->route('principal.fees.reports.arrears')
+                ->with('error', 'Student arrears table is missing. Please run migrations (php artisan migrate --force).');
+        }
+
         $filters = $request->validate([
             'session' => ['nullable', 'string', 'max:20'],
             'class_id' => ['nullable', 'integer', 'exists:school_classes,id'],
@@ -125,6 +132,10 @@ class StudentArrearController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
+        if (! $this->arrearTableAvailable()) {
+            return back()->with('error', 'Student arrears table is missing. Please run migrations (php artisan migrate --force).');
+        }
+
         $validated = $request->validate([
             'student_id' => ['required', 'integer', 'exists:students,id'],
             'session' => ['nullable', 'string', 'max:20'],
@@ -156,6 +167,10 @@ class StudentArrearController extends Controller
 
     public function pay(Request $request, StudentArrear $studentArrear): RedirectResponse
     {
+        if (! $this->arrearTableAvailable()) {
+            return back()->with('error', 'Student arrears table is missing. Please run migrations (php artisan migrate --force).');
+        }
+
         $validated = $request->validate([
             'amount_paid' => ['required', 'numeric', 'min:0.01'],
         ]);
@@ -173,5 +188,9 @@ class StudentArrearController extends Controller
 
         return back()->with('status', 'Arrear payment recorded successfully.');
     }
-}
 
+    private function arrearTableAvailable(): bool
+    {
+        return Schema::hasTable('student_arrears');
+    }
+}
