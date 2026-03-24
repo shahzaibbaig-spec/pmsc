@@ -3,7 +3,9 @@
 namespace App\Modules\Reports\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Models\FeeBlockOverride;
 use App\Models\SchoolClass;
+use App\Modules\Fees\Services\FeeDefaulterService;
 use App\Modules\Exams\Enums\ExamType;
 use App\Modules\Medical\Requests\MedicalReportRequest;
 use App\Modules\Medical\Services\MedicalService;
@@ -23,6 +25,7 @@ class ReportPdfController extends Controller
         private readonly ResultService $resultService,
         private readonly ReportService $reportService,
         private readonly MedicalService $medicalService,
+        private readonly FeeDefaulterService $feeDefaulterService,
     ) {
     }
 
@@ -45,10 +48,15 @@ class ReportPdfController extends Controller
 
     public function studentResultCardPdf(StudentResultPreviewRequest $request): Response
     {
+        $studentId = (int) $request->input('student_id');
+        $session = $request->string('session')->toString();
+
         try {
+            $this->ensureResultCardNotBlocked($studentId, $session);
+
             $result = $this->resultService->generateStudentResult(
-                (int) $request->input('student_id'),
-                $request->string('session')->toString(),
+                $studentId,
+                $session,
                 $request->string('exam_type')->toString()
             );
         } catch (RuntimeException $exception) {
@@ -90,10 +98,34 @@ class ReportPdfController extends Controller
 
     public function classResultCardsPdf(ClassResultPdfRequest $request): Response
     {
+        $classId = (int) $request->input('class_id');
+        $session = $request->string('session')->toString();
+
         try {
+            $this->feeDefaulterService->processSession($session);
+
+            $blocked = $this->feeDefaulterService->blockedStudentsForClass(
+                $classId,
+                $session,
+                FeeBlockOverride::TYPE_RESULT_CARD
+            );
+
+            if ($blocked->isNotEmpty()) {
+                $sample = $blocked
+                    ->take(3)
+                    ->map(fn (array $student): string => $student['name'].' ('.$student['student_id'].')')
+                    ->implode(', ');
+
+                throw new RuntimeException(sprintf(
+                    'Result cards are blocked for %d defaulter(s) in this class. %s',
+                    $blocked->count(),
+                    $sample !== '' ? 'Examples: '.$sample.'.' : ''
+                ));
+            }
+
             $payload = $this->resultService->generateClassResultCards(
-                (int) $request->input('class_id'),
-                $request->string('session')->toString(),
+                $classId,
+                $session,
                 $request->string('exam_type')->toString()
             );
         } catch (RuntimeException $exception) {
@@ -110,6 +142,21 @@ class ReportPdfController extends Controller
         $filename = 'class_result_cards_'.$request->input('class_id').'_'.$request->input('session').'_'.$request->input('exam_type').'.pdf';
 
         return $pdf->stream($filename);
+    }
+
+    private function ensureResultCardNotBlocked(int $studentId, string $session): void
+    {
+        if (! $this->feeDefaulterService->isStudentBlocked(FeeBlockOverride::TYPE_RESULT_CARD, $studentId, $session)) {
+            return;
+        }
+
+        $breakdown = $this->feeDefaulterService->dueBreakdownForStudent($studentId, $session);
+        $totalDue = round((float) ($breakdown['total_due'] ?? 0), 2);
+
+        throw new RuntimeException(sprintf(
+            'Official result card is blocked for this student due to unpaid dues (PKR %s).',
+            number_format($totalDue, 2)
+        ));
     }
 
     public function medicalReportPdf(MedicalReportRequest $request): Response

@@ -17,6 +17,7 @@ use App\Modules\Classes\Controllers\PrincipalDashboardController;
 use App\Modules\Exams\Controllers\TeacherExamController;
 use App\Modules\Exams\Controllers\TeacherMarkEntryController;
 use App\Modules\Fees\Controllers\FeeChallanController;
+use App\Modules\Fees\Controllers\FeeDefaulterController;
 use App\Modules\Fees\Controllers\FeeInstallmentPlanController;
 use App\Modules\Fees\Controllers\FeePaymentController;
 use App\Modules\Fees\Controllers\FeeReportController;
@@ -643,6 +644,26 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
     Route::get('/principal/fees/reports/arrears', [FeeReportController::class, 'arrears'])
         ->middleware(['role:Admin,Accountant', 'permission:view_fee_reports'])
         ->name('principal.fees.reports.arrears');
+
+    Route::get('/principal/fees/defaulters', [FeeDefaulterController::class, 'index'])
+        ->middleware(['role:Admin,Principal,Accountant'])
+        ->name('principal.fees.defaulters.index');
+
+    Route::post('/principal/fees/defaulters/{feeDefaulter}/send-reminder', [FeeDefaulterController::class, 'sendReminder'])
+        ->middleware(['role:Admin,Principal,Accountant'])
+        ->name('principal.fees.defaulters.send-reminder');
+
+    Route::post('/principal/fees/defaulters/{feeDefaulter}/note', [FeeDefaulterController::class, 'addNote'])
+        ->middleware(['role:Admin,Principal,Accountant'])
+        ->name('principal.fees.defaulters.add-note');
+
+    Route::post('/principal/fees/defaulters/{feeDefaulter}/override', [FeeDefaulterController::class, 'createOverride'])
+        ->middleware(['role:Admin,Principal'])
+        ->name('principal.fees.defaulters.create-override');
+
+    Route::post('/principal/fees/defaulters/{feeDefaulter}/waive-late-fee', [FeeDefaulterController::class, 'waiveLateFee'])
+        ->middleware(['role:Admin,Principal,Accountant'])
+        ->name('principal.fees.defaulters.waive-late-fee');
 
     Route::get('/principal/payroll/profiles', [PayrollProfileController::class, 'index'])
         ->middleware(['role:Admin,Accountant', 'permission:view_payroll'])

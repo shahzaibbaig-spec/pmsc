@@ -411,3 +411,7 @@ Schedule::command('academic-events:send-notifications')
 Schedule::command('fees:process-late-fees')
     ->dailyAt('00:30')
     ->withoutOverlapping();
+
+Schedule::command('fees:process-defaulters')
+    ->dailyAt('01:00')
+    ->withoutOverlapping();

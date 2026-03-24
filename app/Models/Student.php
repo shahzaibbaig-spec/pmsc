@@ -144,4 +144,19 @@ class Student extends Model
     {
         return $this->hasMany(StudentArrear::class);
     }
+
+    public function feeDefaulters(): HasMany
+    {
+        return $this->hasMany(FeeDefaulter::class);
+    }
+
+    public function feeReminders(): HasMany
+    {
+        return $this->hasMany(FeeReminder::class);
+    }
+
+    public function feeBlockOverrides(): HasMany
+    {
+        return $this->hasMany(FeeBlockOverride::class);
+    }
 }

@@ -3,8 +3,10 @@
 namespace App\Modules\Reports\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Models\FeeBlockOverride;
 use App\Models\SchoolClass;
 use App\Models\Student;
+use App\Modules\Fees\Services\FeeDefaulterService;
 use App\Modules\Reports\Services\ReportService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Response;
@@ -15,12 +17,20 @@ use Throwable;
 
 class StudentIdCardController extends Controller
 {
-    public function __construct(private readonly ReportService $reportService)
+    public function __construct(
+        private readonly ReportService $reportService,
+        private readonly FeeDefaulterService $feeDefaulterService,
+    )
     {
     }
 
     public function single(Student $student): Response
     {
+        $session = $this->feeDefaulterService->sessionFromDate();
+        if ($this->feeDefaulterService->isStudentBlocked(FeeBlockOverride::TYPE_ID_CARD, (int) $student->id, $session)) {
+            return response('Official ID card is blocked for this student due to unpaid dues.', 422);
+        }
+
         $student->loadMissing('classRoom:id,name,section');
 
         $school = $this->reportService->schoolMeta();
@@ -38,6 +48,23 @@ class StudentIdCardController extends Controller
 
     public function bulk(SchoolClass $class): Response
     {
+        $session = $this->feeDefaulterService->sessionFromDate();
+        $this->feeDefaulterService->processSession($session);
+
+        $blocked = $this->feeDefaulterService->blockedStudentsForClass((int) $class->id, $session, FeeBlockOverride::TYPE_ID_CARD);
+        if ($blocked->isNotEmpty()) {
+            $sample = $blocked
+                ->take(3)
+                ->map(fn (array $student): string => $student['name'].' ('.$student['student_id'].')')
+                ->implode(', ');
+
+            return response(sprintf(
+                'ID cards are blocked for %d defaulter(s) in this class. %s',
+                $blocked->count(),
+                $sample !== '' ? 'Examples: '.$sample.'.' : ''
+            ), 422);
+        }
+
         $studentColumns = ['id', 'student_id', 'name', 'father_name', 'class_id', 'photo_path', 'status'];
         if ($this->hasQrTokenColumn()) {
             $studentColumns[] = 'qr_token';

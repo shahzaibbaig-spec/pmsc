@@ -35,6 +35,7 @@
         if ($sidebarUser?->can('view_fee_reports')) {
             $menuItems[] = ['route' => 'principal.fees.reports.index', 'label' => 'Fee Reports'];
             $menuItems[] = ['route' => 'principal.fees.reports.arrears', 'label' => 'Arrears Report'];
+            $menuItems[] = ['route' => 'principal.fees.defaulters.index', 'label' => 'Fee Defaulters'];
             $menuItems[] = ['route' => 'principal.fees.add-arrears.index', 'label' => 'Add Arrears'];
         }
         $hasPayrollAccess = $sidebarUser?->can('view_payroll')
@@ -72,6 +73,7 @@
             ['route' => 'results.analyzer', 'label' => 'Result Analyzer'],
             ['route' => 'results.promotion-analyzer', 'label' => 'Promotion Analyzer'],
             ['route' => 'results.learning-profiles', 'label' => 'Learning Profiles'],
+            ['route' => 'principal.fees.defaulters.index', 'label' => 'Fee Defaulters'],
             ['route' => 'principal.analytics.teachers.index', 'label' => 'Teacher Analytics'],
             ['route' => 'principal.medical.referrals.index', 'label' => 'Medical Referrals'],
             ['route' => 'academic-calendar.index', 'label' => 'Academic Calendar'],
@@ -106,6 +108,7 @@
         if ($sidebarUser?->can('view_fee_reports')) {
             $menuItems[] = ['route' => 'principal.fees.reports.index', 'label' => 'Fee Reports'];
             $menuItems[] = ['route' => 'principal.fees.reports.arrears', 'label' => 'Arrears Report'];
+            $menuItems[] = ['route' => 'principal.fees.defaulters.index', 'label' => 'Fee Defaulters'];
             $menuItems[] = ['route' => 'principal.fees.add-arrears.index', 'label' => 'Add Arrears'];
         }
         if ($sidebarUser?->can('view_payroll') || $sidebarUser?->can('manage_payroll_profiles')) {

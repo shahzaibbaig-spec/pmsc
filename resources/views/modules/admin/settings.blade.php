@@ -55,6 +55,48 @@
                     </div>
                 @endif
 
+                @if($supportsDefaulterBlocks)
+                    <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                        <p class="text-sm font-semibold text-slate-900">Fee Defaulter Blocks</p>
+                        <p class="mt-1 text-xs text-slate-500">Control whether official cards are blocked for active fee defaulters.</p>
+
+                        <div class="mt-4 space-y-3">
+                            <label class="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2">
+                                <span class="text-sm text-slate-700">Block result cards for fee defaulters</span>
+                                <input
+                                    type="checkbox"
+                                    name="block_results_for_defaulters"
+                                    value="1"
+                                    @checked(old('block_results_for_defaulters', $setting->block_results_for_defaulters))
+                                    class="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                >
+                            </label>
+
+                            <label class="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2">
+                                <span class="text-sm text-slate-700">Block admit cards for fee defaulters</span>
+                                <input
+                                    type="checkbox"
+                                    name="block_admit_card_for_defaulters"
+                                    value="1"
+                                    @checked(old('block_admit_card_for_defaulters', $setting->block_admit_card_for_defaulters))
+                                    class="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                >
+                            </label>
+
+                            <label class="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2">
+                                <span class="text-sm text-slate-700">Block ID cards for fee defaulters</span>
+                                <input
+                                    type="checkbox"
+                                    name="block_id_card_for_defaulters"
+                                    value="1"
+                                    @checked(old('block_id_card_for_defaulters', $setting->block_id_card_for_defaulters))
+                                    class="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                >
+                            </label>
+                        </div>
+                    </div>
+                @endif
+
                 <div class="pt-2">
                     <x-ui.button type="submit">Save Settings</x-ui.button>
                 </div>
@@ -62,4 +104,3 @@
         </x-ui.card>
     </div>
 </x-app-layout>
-

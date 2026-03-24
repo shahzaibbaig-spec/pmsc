@@ -33,6 +33,7 @@
             <x-ui.button href="{{ route('principal.fees.payments.index') }}" variant="outline">Record Fee Payments</x-ui.button>
             <x-ui.button href="{{ route('principal.fees.reports.index') }}" variant="outline">Fee Reports</x-ui.button>
             <x-ui.button href="{{ route('principal.fees.reports.arrears') }}" variant="outline">Arrears Report</x-ui.button>
+            <x-ui.button href="{{ route('principal.fees.defaulters.index') }}" variant="outline">Fee Defaulters</x-ui.button>
             <x-ui.button href="{{ route('principal.payroll.profiles.index') }}" variant="outline">Payroll Profiles</x-ui.button>
             <x-ui.button href="{{ route('principal.payroll.generate.index') }}" variant="outline">Generate Payroll</x-ui.button>
             <x-ui.button href="{{ route('principal.payroll.slips.index') }}" variant="outline">Salary Slips</x-ui.button>

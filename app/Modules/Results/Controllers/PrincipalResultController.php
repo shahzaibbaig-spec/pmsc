@@ -3,21 +3,27 @@
 namespace App\Modules\Results\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Models\FeeBlockOverride;
 use App\Models\Mark;
 use App\Models\SchoolClass;
 use App\Models\Student;
 use App\Modules\Exams\Enums\ExamType;
 use App\Modules\Results\Requests\PublishResultsRequest;
 use App\Modules\Results\Requests\StudentResultPreviewRequest;
+use App\Modules\Fees\Services\FeeDefaulterService;
 use App\Modules\Results\Services\ResultService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Response;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 use RuntimeException;
 
 class PrincipalResultController extends Controller
 {
-    public function __construct(private readonly ResultService $resultService)
+    public function __construct(
+        private readonly ResultService $resultService,
+        private readonly FeeDefaulterService $feeDefaulterService,
+    )
     {
     }
 
@@ -110,13 +116,30 @@ class PrincipalResultController extends Controller
         return response()->json($payload);
     }
 
-    public function card(StudentResultPreviewRequest $request): View
+    public function card(StudentResultPreviewRequest $request): View|Response
     {
-        $payload = $this->resultService->generateStudentResult(
-            (int) $request->input('student_id'),
-            $request->string('session')->toString(),
-            $request->string('exam_type')->toString(),
-        );
+        $studentId = (int) $request->input('student_id');
+        $session = $request->string('session')->toString();
+
+        try {
+            if ($this->feeDefaulterService->isStudentBlocked(FeeBlockOverride::TYPE_RESULT_CARD, $studentId, $session)) {
+                $breakdown = $this->feeDefaulterService->dueBreakdownForStudent($studentId, $session);
+                $totalDue = round((float) ($breakdown['total_due'] ?? 0), 2);
+
+                throw new RuntimeException(sprintf(
+                    'Official result card is blocked for this student due to unpaid dues (PKR %s).',
+                    number_format($totalDue, 2)
+                ));
+            }
+
+            $payload = $this->resultService->generateStudentResult(
+                $studentId,
+                $session,
+                $request->string('exam_type')->toString(),
+            );
+        } catch (RuntimeException $exception) {
+            return response($exception->getMessage(), 422);
+        }
 
         return view('modules.reports.result-card', [
             'result' => $payload,
