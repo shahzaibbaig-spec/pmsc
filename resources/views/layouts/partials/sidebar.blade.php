@@ -12,6 +12,7 @@
             ['route' => 'principal.results.generator', 'label' => 'Results'],
             ['route' => 'principal.results.gazette', 'label' => 'Result Gazette'],
             ['route' => 'principal.results.tabulation', 'label' => 'Tabulation Sheet'],
+            ['route' => 'principal.promotions.index', 'label' => 'Class Promotions'],
             ['route' => 'principal.analytics.dashboard.index', 'label' => 'Principal Analytics'],
             ['route' => 'principal.admit-cards.index', 'label' => 'Admit Cards'],
             ['route' => 'principal.exams.seating-plans.index', 'label' => 'Seating Plan'],
@@ -80,6 +81,7 @@
             ['route' => 'principal.results.generator', 'label' => 'Results'],
             ['route' => 'principal.results.gazette', 'label' => 'Result Gazette'],
             ['route' => 'principal.results.tabulation', 'label' => 'Tabulation Sheet'],
+            ['route' => 'principal.promotions.index', 'label' => 'Class Promotions'],
             ['route' => 'principal.admit-cards.index', 'label' => 'Admit Cards'],
             ['route' => 'principal.exams.seating-plans.index', 'label' => 'Seating Plan'],
             ['route' => 'principal.exams.room-invigilators.index', 'label' => 'Room Invigilators'],
@@ -152,6 +154,7 @@
         if ($sidebarUser?->can('enter_marks')) {
             $menuItems[] = ['route' => 'teacher.exams.index', 'label' => 'Marks Entry'];
             $menuItems[] = ['route' => 'teacher.results.class', 'label' => 'Class Results'];
+            $menuItems[] = ['route' => 'teacher.promotions.index', 'label' => 'Class Promotions'];
             $menuItems[] = ['route' => 'results.promotion-analyzer', 'label' => 'Promotion Analyzer'];
             $menuItems[] = ['route' => 'results.learning-profiles', 'label' => 'Learning Profiles'];
         }

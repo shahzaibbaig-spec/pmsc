@@ -80,4 +80,24 @@ class SchoolClass extends Model
     {
         return $this->hasMany(ExamSeatAssignment::class, 'class_id');
     }
+
+    public function promotionCampaigns(): HasMany
+    {
+        return $this->hasMany(PromotionCampaign::class, 'class_id');
+    }
+
+    public function classHistories(): HasMany
+    {
+        return $this->hasMany(StudentClassHistory::class, 'class_id');
+    }
+
+    public function promotionMappingsFrom(): HasMany
+    {
+        return $this->hasMany(ClassPromotionMapping::class, 'from_class_id');
+    }
+
+    public function promotionMappingsTo(): HasMany
+    {
+        return $this->hasMany(ClassPromotionMapping::class, 'to_class_id');
+    }
 }

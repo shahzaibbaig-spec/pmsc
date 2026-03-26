@@ -145,4 +145,14 @@ class User extends Authenticatable
         return $this->hasMany(ExamAttendance::class, 'marked_by');
     }
 
+    public function createdPromotionCampaigns(): HasMany
+    {
+        return $this->hasMany(PromotionCampaign::class, 'created_by');
+    }
+
+    public function approvedPromotionCampaigns(): HasMany
+    {
+        return $this->hasMany(PromotionCampaign::class, 'approved_by');
+    }
+
 }

@@ -2,6 +2,9 @@
 
 use App\Http\Controllers\DashboardRedirectController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\Principal\AnalyticsExportController;
+use App\Http\Controllers\Principal\PrincipalPromotionController;
+use App\Http\Controllers\Teacher\TeacherPromotionController;
 use App\Modules\Academic\Controllers\AcademicCalendarController;
 use App\Modules\Academic\Controllers\AcademicNotificationController;
 use App\Modules\Accountant\Controllers\AccountantDashboardController;
@@ -488,6 +491,18 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
         ->middleware(['role:Admin,Principal'])
         ->name('principal.analytics.dashboard.index');
 
+    Route::get('/principal/analytics/export/pdf', [AnalyticsExportController::class, 'exportPdf'])
+        ->middleware(['role:Admin,Principal'])
+        ->name('principal.analytics.export.pdf');
+
+    Route::get('/principal/analytics/export/excel', [AnalyticsExportController::class, 'exportExcel'])
+        ->middleware(['role:Admin,Principal'])
+        ->name('principal.analytics.export.excel');
+
+    Route::get('/principal/analytics/export/board-summary-pdf', [AnalyticsExportController::class, 'boardSummaryPdf'])
+        ->middleware(['role:Admin,Principal'])
+        ->name('principal.analytics.export.board-summary-pdf');
+
     Route::get('/principal/analytics/class/{schoolClass}', [PrincipalAnalyticsDashboardController::class, 'classDrilldown'])
         ->middleware(['role:Admin,Principal'])
         ->name('principal.analytics.dashboard.class');
@@ -535,6 +550,30 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
     Route::get('/principal/results/card', [PrincipalResultController::class, 'card'])
         ->middleware(['role:Admin|Principal', 'permission:generate_results'])
         ->name('principal.results.card');
+
+    Route::get('/principal/promotions', [PrincipalPromotionController::class, 'index'])
+        ->middleware(['role:Admin|Principal', 'permission:generate_results'])
+        ->name('principal.promotions.index');
+
+    Route::get('/principal/promotions/{promotionCampaign}', [PrincipalPromotionController::class, 'show'])
+        ->middleware(['role:Admin|Principal', 'permission:generate_results'])
+        ->name('principal.promotions.show');
+
+    Route::put('/principal/promotions/{promotionCampaign}/review', [PrincipalPromotionController::class, 'review'])
+        ->middleware(['role:Admin|Principal', 'permission:generate_results'])
+        ->name('principal.promotions.review');
+
+    Route::post('/principal/promotions/{promotionCampaign}/approve', [PrincipalPromotionController::class, 'approve'])
+        ->middleware(['role:Admin|Principal', 'permission:generate_results'])
+        ->name('principal.promotions.approve');
+
+    Route::post('/principal/promotions/{promotionCampaign}/reject', [PrincipalPromotionController::class, 'reject'])
+        ->middleware(['role:Admin|Principal', 'permission:generate_results'])
+        ->name('principal.promotions.reject');
+
+    Route::post('/principal/promotions/{promotionCampaign}/execute', [PrincipalPromotionController::class, 'execute'])
+        ->middleware(['role:Admin|Principal', 'permission:generate_results'])
+        ->name('principal.promotions.execute');
 
     Route::get('/results/analyzer', [ClassResultAnalyzerController::class, 'index'])
         ->middleware(['role:Principal,Teacher'])
@@ -955,6 +994,26 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
     Route::post('/teacher/exams/save', [TeacherExamController::class, 'save'])
         ->middleware(['role:Teacher', 'permission:enter_marks'])
         ->name('teacher.exams.save');
+
+    Route::get('/teacher/promotions', [TeacherPromotionController::class, 'index'])
+        ->middleware(['role:Teacher', 'permission:enter_marks'])
+        ->name('teacher.promotions.index');
+
+    Route::post('/teacher/promotions', [TeacherPromotionController::class, 'store'])
+        ->middleware(['role:Teacher', 'permission:enter_marks'])
+        ->name('teacher.promotions.store');
+
+    Route::get('/teacher/promotions/{promotionCampaign}', [TeacherPromotionController::class, 'show'])
+        ->middleware(['role:Teacher', 'permission:enter_marks'])
+        ->name('teacher.promotions.show');
+
+    Route::put('/teacher/promotions/{promotionCampaign}', [TeacherPromotionController::class, 'update'])
+        ->middleware(['role:Teacher', 'permission:enter_marks'])
+        ->name('teacher.promotions.update');
+
+    Route::post('/teacher/promotions/{promotionCampaign}/submit', [TeacherPromotionController::class, 'submit'])
+        ->middleware(['role:Teacher', 'permission:enter_marks'])
+        ->name('teacher.promotions.submit');
 
     Route::get('/teacher/results/class', [TeacherResultController::class, 'classResults'])
         ->middleware(['role:Teacher', 'permission:enter_marks'])

@@ -174,4 +174,14 @@ class Student extends Model
     {
         return $this->hasMany(ExamAttendance::class);
     }
+
+    public function promotions(): HasMany
+    {
+        return $this->hasMany(StudentPromotion::class);
+    }
+
+    public function classHistories(): HasMany
+    {
+        return $this->hasMany(StudentClassHistory::class);
+    }
 }

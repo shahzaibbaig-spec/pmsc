@@ -19,6 +19,7 @@ use RuntimeException;
 class AnalyticsService
 {
     private const PASS_PERCENTAGE = 60.0;
+    private const EXAM_TYPES = ['class_test', 'bimonthly_test', 'first_term', 'final_term'];
 
     /**
      * @return array<int, string>
@@ -44,8 +45,9 @@ class AnalyticsService
             ->get(['id', 'name', 'section']);
     }
 
-    public function dashboard(string $session, ?int $classId = null): array
+    public function dashboard(string $session, ?int $classId = null, ?string $examType = null): array
     {
+        $exam = $this->normalizeExamType($examType);
         $className = null;
         if ($classId !== null) {
             $classRoom = SchoolClass::query()->find($classId, ['id', 'name', 'section']);
@@ -58,25 +60,101 @@ class AnalyticsService
 
         [$sessionStart, $sessionEnd] = $this->sessionDateRange($session);
 
-        $studentPerformance = $this->studentPerformanceRows($session, $classId);
+        $studentPerformance = $this->studentPerformanceRows($session, $classId, $exam);
         $attendanceByStudent = $this->studentAttendanceRows($sessionStart, $sessionEnd, $classId)
             ->keyBy('student_id');
 
         return [
             'session' => $session,
             'class_id' => $classId,
+            'exam' => $exam,
             'class_name' => $className,
             'kpis' => $this->kpis($session, $classId, $studentPerformance, $attendanceByStudent),
             'top_performers' => $this->topPerformers($studentPerformance),
             'weak_students' => $this->weakStudents($studentPerformance, $attendanceByStudent, $classId),
-            'subject_performance' => $this->subjectPerformanceRows($session, $classId)->all(),
-            'teacher_performance' => $this->teacherPerformanceRows($session, $classId)->take(15)->values()->all(),
-            'class_comparison' => $this->classComparisonRows($session, $classId)->values()->all(),
+            'subject_performance' => $this->subjectPerformanceRows($session, $classId, $exam)->all(),
+            'teacher_performance' => $this->teacherPerformanceRows($session, $classId, $exam)->take(15)->values()->all(),
+            'class_comparison' => $this->classComparisonRows($session, $classId, $exam)->values()->all(),
             'charts' => [
                 'attendance_trend' => $this->attendanceTrend($session, $classId),
-                'exam_comparison' => $this->examComparison($session, $classId),
+                'exam_comparison' => $this->examComparison($session, $classId, null, $exam),
             ],
         ];
+    }
+
+    public function getDashboardSummary(string $session, ?string $examType = null, ?int $classId = null): array
+    {
+        return $this->dashboard($session, $classId, $examType)['kpis'];
+    }
+
+    public function getTopPerformers(string $session, ?string $examType = null, ?int $classId = null): array
+    {
+        $exam = $this->normalizeExamType($examType);
+
+        return $this->topPerformers($this->studentPerformanceRows($session, $classId, $exam));
+    }
+
+    public function getWeakStudents(string $session, ?string $examType = null, ?int $classId = null): array
+    {
+        $exam = $this->normalizeExamType($examType);
+        [$sessionStart, $sessionEnd] = $this->sessionDateRange($session);
+
+        $studentPerformance = $this->studentPerformanceRows($session, $classId, $exam);
+        $attendanceByStudent = $this->studentAttendanceRows($sessionStart, $sessionEnd, $classId)->keyBy('student_id');
+
+        return $this->weakStudents($studentPerformance, $attendanceByStudent, $classId);
+    }
+
+    public function getSubjectPerformance(string $session, ?string $examType = null, ?int $classId = null): array
+    {
+        $exam = $this->normalizeExamType($examType);
+
+        return $this->subjectPerformanceRows($session, $classId, $exam)->all();
+    }
+
+    public function getTeacherPerformance(string $session, ?string $examType = null, ?int $classId = null): array
+    {
+        $exam = $this->normalizeExamType($examType);
+
+        return $this->teacherPerformanceRows($session, $classId, $exam)->values()->all();
+    }
+
+    public function getAttendanceTrend(string $session, ?string $examType = null, ?int $classId = null): array
+    {
+        return $this->attendanceTrend($session, $classId);
+    }
+
+    public function getFeeDefaulterSummary(string $session, ?string $examType = null, ?int $classId = null): array
+    {
+        if (! Schema::hasTable('fee_defaulters')) {
+            return [
+                'active_count' => 0,
+                'total_due' => 0.0,
+                'oldest_due_date' => null,
+            ];
+        }
+
+        $query = FeeDefaulter::query()
+            ->join('students as s', 's.id', '=', 'fee_defaulters.student_id')
+            ->where('fee_defaulters.session', $session)
+            ->where('fee_defaulters.is_active', true)
+            ->where('fee_defaulters.total_due', '>', 0)
+            ->whereNull('s.deleted_at')
+            ->where('s.status', 'active')
+            ->when($classId !== null, fn ($subQuery) => $subQuery->where('s.class_id', $classId));
+
+        return [
+            'active_count' => (clone $query)->count(),
+            'total_due' => round((float) ((clone $query)->sum('fee_defaulters.total_due') ?? 0), 2),
+            'oldest_due_date' => (clone $query)->min('fee_defaulters.oldest_due_date'),
+        ];
+    }
+
+    public function getClassComparison(string $session, ?string $examType = null, ?int $classId = null): array
+    {
+        $exam = $this->normalizeExamType($examType);
+
+        return $this->classComparisonRows($session, $classId, $exam)->values()->all();
     }
 
     public function classDrilldown(int $classId, string $session): array
@@ -231,15 +309,19 @@ class AnalyticsService
         ];
     }
 
-    public function studentPerformanceRows(string $session, ?int $classId = null): Collection
+    public function studentPerformanceRows(string $session, ?int $classId = null, ?string $examType = null): Collection
     {
+        $exam = $this->normalizeExamType($examType);
+
         return Mark::query()
+            ->join('exams as e', 'e.id', '=', 'marks.exam_id')
             ->join('students as s', 's.id', '=', 'marks.student_id')
             ->join('school_classes as c', 'c.id', '=', 's.class_id')
             ->where('marks.session', $session)
             ->whereNull('s.deleted_at')
             ->where('s.status', 'active')
             ->when($classId !== null, fn ($query) => $query->where('s.class_id', $classId))
+            ->when($exam !== null, fn ($query) => $query->where('e.exam_type', $exam))
             ->selectRaw('
                 marks.student_id as student_id,
                 s.student_id as student_code,
@@ -290,8 +372,10 @@ class AnalyticsService
             ->values();
     }
 
-    public function subjectPerformanceRows(string $session, ?int $classId = null): Collection
+    public function subjectPerformanceRows(string $session, ?int $classId = null, ?string $examType = null): Collection
     {
+        $exam = $this->normalizeExamType($examType);
+
         return Mark::query()
             ->join('exams as e', 'e.id', '=', 'marks.exam_id')
             ->join('subjects as sub', 'sub.id', '=', 'e.subject_id')
@@ -300,6 +384,7 @@ class AnalyticsService
             ->whereNull('s.deleted_at')
             ->where('s.status', 'active')
             ->when($classId !== null, fn ($query) => $query->where('e.class_id', $classId))
+            ->when($exam !== null, fn ($query) => $query->where('e.exam_type', $exam))
             ->selectRaw("
                 e.subject_id as subject_id,
                 sub.name as subject_name,
@@ -350,8 +435,10 @@ class AnalyticsService
             ->values();
     }
 
-    public function teacherPerformanceRows(string $session, ?int $classId = null): Collection
+    public function teacherPerformanceRows(string $session, ?int $classId = null, ?string $examType = null): Collection
     {
+        $exam = $this->normalizeExamType($examType);
+
         $teachers = TeacherSubjectAssignment::query()
             ->join('teachers as t', 't.id', '=', 'teacher_subject_assignments.teacher_id')
             ->join('users as u', 'u.id', '=', 't.user_id')
@@ -383,6 +470,7 @@ class AnalyticsService
                 ->where('s.status', 'active')
                 ->whereIn('marks.teacher_id', $teacherIds)
                 ->when($classId !== null, fn ($query) => $query->where('e.class_id', $classId))
+                ->when($exam !== null, fn ($query) => $query->where('e.exam_type', $exam))
                 ->selectRaw("
                     marks.teacher_id as teacher_id,
                     AVG((marks.obtained_marks * 100.0) / NULLIF(marks.total_marks, 0)) as average_score,
@@ -427,8 +515,9 @@ class AnalyticsService
         return $this->rankRowsByMetric($rows, 'average_score');
     }
 
-    public function classComparisonRows(string $session, ?int $classId = null): Collection
+    public function classComparisonRows(string $session, ?int $classId = null, ?string $examType = null): Collection
     {
+        $exam = $this->normalizeExamType($examType);
         $classes = $this->classMap($classId);
         if ($classes->isEmpty()) {
             return collect();
@@ -436,7 +525,7 @@ class AnalyticsService
 
         [$sessionStart, $sessionEnd] = $this->sessionDateRange($session);
 
-        $studentPerformanceByClass = $this->studentPerformanceRows($session, $classId)->groupBy('class_id');
+        $studentPerformanceByClass = $this->studentPerformanceRows($session, $classId, $exam)->groupBy('class_id');
         $attendanceByClass = Attendance::query()
             ->join('students as s', 's.id', '=', 'attendance.student_id')
             ->whereNull('s.deleted_at')
@@ -497,6 +586,10 @@ class AnalyticsService
     public function attendanceTrend(string $session, ?int $classId = null): array
     {
         [$sessionStart, $sessionEnd] = $this->sessionDateRange($session);
+        $driver = DB::connection()->getDriverName();
+        $monthKeyExpression = $driver === 'sqlite'
+            ? "strftime('%Y-%m', attendance.date)"
+            : "DATE_FORMAT(attendance.date, '%Y-%m')";
 
         $monthKeys = [];
         $cursor = $sessionStart->copy();
@@ -511,12 +604,10 @@ class AnalyticsService
             ->where('s.status', 'active')
             ->whereBetween('attendance.date', [$sessionStart->toDateString(), $sessionEnd->toDateString()])
             ->when($classId !== null, fn ($query) => $query->where('attendance.class_id', $classId))
-            ->selectRaw("
-                DATE_FORMAT(attendance.date, '%Y-%m') as month_key,
-                SUM(CASE WHEN attendance.status = 'present' THEN 1 ELSE 0 END) as present_count,
-                COUNT(*) as total_count
-            ")
-            ->groupBy('month_key')
+            ->selectRaw($monthKeyExpression." as month_key")
+            ->selectRaw("SUM(CASE WHEN attendance.status = 'present' THEN 1 ELSE 0 END) as present_count")
+            ->selectRaw('COUNT(*) as total_count')
+            ->groupByRaw($monthKeyExpression)
             ->get()
             ->keyBy('month_key');
 
@@ -540,8 +631,15 @@ class AnalyticsService
         ];
     }
 
-    public function examComparison(string $session, ?int $classId = null, ?int $teacherId = null): array
+    public function examComparison(
+        string $session,
+        ?int $classId = null,
+        ?int $teacherId = null,
+        ?string $examType = null
+    ): array
     {
+        $exam = $this->normalizeExamType($examType);
+
         $rows = Mark::query()
             ->join('exams as e', 'e.id', '=', 'marks.exam_id')
             ->join('students as s', 's.id', '=', 'marks.student_id')
@@ -550,6 +648,7 @@ class AnalyticsService
             ->where('s.status', 'active')
             ->when($classId !== null, fn ($query) => $query->where('e.class_id', $classId))
             ->when($teacherId !== null, fn ($query) => $query->where('marks.teacher_id', $teacherId))
+            ->when($exam !== null, fn ($query) => $query->where('e.exam_type', $exam))
             ->selectRaw("
                 e.exam_type as exam_type,
                 AVG((marks.obtained_marks * 100.0) / NULLIF(marks.total_marks, 0)) as average_percentage,
@@ -920,5 +1019,15 @@ class AnalyticsService
             ->mapWithKeys(fn (SchoolClass $classRoom): array => [
                 (int) $classRoom->id => $this->classLabel((string) $classRoom->name, $classRoom->section),
             ]);
+    }
+
+    private function normalizeExamType(?string $examType): ?string
+    {
+        $candidate = trim((string) $examType);
+        if ($candidate === '') {
+            return null;
+        }
+
+        return in_array($candidate, self::EXAM_TYPES, true) ? $candidate : null;
     }
 }

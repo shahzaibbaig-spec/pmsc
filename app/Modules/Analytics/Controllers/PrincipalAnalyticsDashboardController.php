@@ -22,6 +22,7 @@ class PrincipalAnalyticsDashboardController extends Controller
 
         $validated = $request->validate([
             'session' => ['nullable', 'regex:/^\d{4}-\d{4}$/'],
+            'exam' => ['nullable', 'in:class_test,bimonthly_test,first_term,final_term'],
             'class_id' => ['nullable', 'integer', 'exists:school_classes,id'],
         ]);
 
@@ -29,14 +30,18 @@ class PrincipalAnalyticsDashboardController extends Controller
             isset($validated['session']) ? (string) $validated['session'] : null,
             $defaultSession
         );
+        $selectedExam = isset($validated['exam']) && trim((string) $validated['exam']) !== ''
+            ? (string) $validated['exam']
+            : null;
         $selectedClassId = isset($validated['class_id']) ? (int) $validated['class_id'] : null;
 
-        return view('modules.principal.analytics.dashboard', [
+        return view('principal.analytics.index', [
             'sessions' => $sessions,
             'classes' => $this->analyticsService->classOptions(),
             'selectedSession' => $selectedSession,
+            'selectedExam' => $selectedExam,
             'selectedClassId' => $selectedClassId,
-            'dashboard' => $this->analyticsService->dashboard($selectedSession, $selectedClassId),
+            'dashboard' => $this->analyticsService->dashboard($selectedSession, $selectedClassId, $selectedExam),
         ]);
     }
 
@@ -108,4 +113,3 @@ class PrincipalAnalyticsDashboardController extends Controller
         return $candidate;
     }
 }
-
