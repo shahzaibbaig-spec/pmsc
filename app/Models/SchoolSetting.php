@@ -38,22 +38,39 @@ class SchoolSetting extends Model
 
     public static function cached(): ?self
     {
-        return Cache::remember(self::CACHE_KEY, now()->addMinutes(60), function (): ?self {
+        $payload = Cache::remember(self::CACHE_KEY, now()->addMinutes(60), function (): ?array {
+            if (! Schema::hasTable('school_settings')) {
+                return null;
+            }
+
             $columns = ['id', 'school_name', 'logo_path', 'address', 'phone', 'email'];
 
-            if (Schema::hasTable('school_settings') && Schema::hasColumn('school_settings', 'block_results_for_defaulters')) {
-                $columns[] = 'block_results_for_defaulters';
+            foreach ([
+                'block_results_for_defaulters',
+                'block_admit_card_for_defaulters',
+                'block_id_card_for_defaulters',
+            ] as $column) {
+                if (Schema::hasColumn('school_settings', $column)) {
+                    $columns[] = $column;
+                }
             }
 
-            if (Schema::hasTable('school_settings') && Schema::hasColumn('school_settings', 'block_admit_card_for_defaulters')) {
-                $columns[] = 'block_admit_card_for_defaulters';
-            }
-
-            if (Schema::hasTable('school_settings') && Schema::hasColumn('school_settings', 'block_id_card_for_defaulters')) {
-                $columns[] = 'block_id_card_for_defaulters';
-            }
-
-            return self::query()->first($columns);
+            return self::query()->first($columns)?->toArray();
         });
+
+        // Backward-compatibility for old cache entries that stored full model instances.
+        if ($payload instanceof self) {
+            return $payload;
+        }
+
+        if (! is_array($payload) || $payload === []) {
+            return null;
+        }
+
+        $setting = new self();
+        $setting->setRawAttributes($payload, true);
+        $setting->exists = true;
+
+        return $setting;
     }
 }
