@@ -125,6 +125,7 @@ class TeacherPromotionController extends Controller
             'campaign' => $campaign,
             'rows' => $payload['rows'],
             'summary' => $payload['summary'],
+            'isTerminalClass' => (bool) ($payload['is_terminal_class'] ?? false),
             'nextClassLabel' => $payload['next_class_label'],
             'isEditable' => in_array($campaign->status, [PromotionCampaign::STATUS_DRAFT, PromotionCampaign::STATUS_REJECTED], true),
         ]);

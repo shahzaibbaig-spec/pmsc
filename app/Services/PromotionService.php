@@ -78,9 +78,11 @@ class PromotionService
      *     total_students:int,
      *     passed_students:int,
      *     promoted:int,
+     *     passed_out:int,
      *     conditional_promoted:int,
      *     retained:int
      *   },
+     *   is_terminal_class:bool,
      *   next_class_id:?int,
      *   next_class_label:?string
      * }
@@ -104,6 +106,16 @@ class PromotionService
 
         $nextClassId = $this->resolveNextClassId((int) $campaign->class_id);
         $nextClassLabel = $nextClassId !== null ? $this->classLabel($nextClassId) : null;
+        $isTerminalClass = $nextClassId === null;
+        $passedOutCount = $rows->filter(function (StudentPromotion $row) use ($isTerminalClass): bool {
+            return $isTerminalClass
+                && $row->teacher_decision === StudentPromotion::DECISION_PROMOTE
+                && (bool) $row->is_passed;
+        })->count();
+        $promotedCount = $rows->filter(function (StudentPromotion $row) use ($isTerminalClass): bool {
+            return $row->teacher_decision === StudentPromotion::DECISION_PROMOTE
+                && (! $isTerminalClass || ! (bool) $row->is_passed);
+        })->count();
 
         return [
             'campaign' => $campaign->fresh([
@@ -115,10 +127,12 @@ class PromotionService
             'summary' => [
                 'total_students' => $rows->count(),
                 'passed_students' => $rows->where('is_passed', true)->count(),
-                'promoted' => $rows->where('teacher_decision', StudentPromotion::DECISION_PROMOTE)->count(),
+                'promoted' => $promotedCount,
+                'passed_out' => $passedOutCount,
                 'conditional_promoted' => $rows->where('teacher_decision', StudentPromotion::DECISION_CONDITIONAL_PROMOTE)->count(),
                 'retained' => $rows->where('teacher_decision', StudentPromotion::DECISION_RETAIN)->count(),
             ],
+            'is_terminal_class' => $isTerminalClass,
             'next_class_id' => $nextClassId,
             'next_class_label' => $nextClassLabel,
         ];
@@ -169,8 +183,12 @@ class PromotionService
                     $nextClassId
                 );
 
-                if (in_array($decision, [StudentPromotion::DECISION_PROMOTE, StudentPromotion::DECISION_CONDITIONAL_PROMOTE], true)
-                    && $record->to_class_id === null) {
+                if ($decision === StudentPromotion::DECISION_CONDITIONAL_PROMOTE && $nextClassId === null) {
+                    throw new RuntimeException('Terminal classes cannot use conditional promotion.');
+                }
+
+                if ($decision === StudentPromotion::DECISION_PROMOTE && $record->to_class_id === null
+                    && ! $this->isTerminalPassedOutDecision($decision, (bool) $record->is_passed, $nextClassId)) {
                     throw new RuntimeException('Class promotion mapping is missing. Configure next class mapping before saving this decision.');
                 }
 
@@ -241,8 +259,12 @@ class PromotionService
                     $nextClassId
                 );
 
-                if (in_array($decision, [StudentPromotion::DECISION_PROMOTE, StudentPromotion::DECISION_CONDITIONAL_PROMOTE], true)
-                    && $row->to_class_id === null) {
+                if ($decision === StudentPromotion::DECISION_CONDITIONAL_PROMOTE && $nextClassId === null) {
+                    throw new RuntimeException('Terminal classes cannot use conditional promotion.');
+                }
+
+                if ($decision === StudentPromotion::DECISION_PROMOTE && $row->to_class_id === null
+                    && ! $this->isTerminalPassedOutDecision($decision, (bool) $row->is_passed, $nextClassId)) {
                     throw new RuntimeException('Class promotion mapping is missing for selected class. Add mapping before submit.');
                 }
 
@@ -306,8 +328,12 @@ class PromotionService
                         $nextClassId
                     );
 
-                    if (in_array($principalDecision, [StudentPromotion::DECISION_PROMOTE, StudentPromotion::DECISION_CONDITIONAL_PROMOTE], true)
-                        && $record->to_class_id === null) {
+                    if ($principalDecision === StudentPromotion::DECISION_CONDITIONAL_PROMOTE && $nextClassId === null) {
+                        throw new RuntimeException('Terminal classes cannot use conditional promotion.');
+                    }
+
+                    if ($principalDecision === StudentPromotion::DECISION_PROMOTE && $record->to_class_id === null
+                        && ! $this->isTerminalPassedOutDecision($principalDecision, (bool) $record->is_passed, $nextClassId)) {
                         throw new RuntimeException('Class promotion mapping is missing. Add mapping before principal review.');
                     }
                 }
@@ -365,8 +391,12 @@ class PromotionService
                     $nextClassId
                 );
 
-                if (in_array($decision, [StudentPromotion::DECISION_PROMOTE, StudentPromotion::DECISION_CONDITIONAL_PROMOTE], true)
-                    && $row->to_class_id === null) {
+                if ($decision === StudentPromotion::DECISION_CONDITIONAL_PROMOTE && $nextClassId === null) {
+                    throw new RuntimeException('Terminal classes cannot use conditional promotion.');
+                }
+
+                if ($decision === StudentPromotion::DECISION_PROMOTE && $row->to_class_id === null
+                    && ! $this->isTerminalPassedOutDecision($decision, (bool) $row->is_passed, $nextClassId)) {
                     throw new RuntimeException('Class promotion mapping is missing. Add class mapping before approval.');
                 }
 
@@ -450,13 +480,23 @@ class PromotionService
                     throw new RuntimeException('Execution failed because some students do not have an approved decision.');
                 }
 
+                if ($decision === StudentPromotion::DECISION_CONDITIONAL_PROMOTE && $nextClassId === null) {
+                    throw new RuntimeException('Terminal classes cannot use conditional promotion.');
+                }
+
+                $isTerminalPassedOut = $this->isTerminalPassedOutDecision(
+                    $decision,
+                    (bool) $row->is_passed,
+                    $nextClassId
+                );
+
                 $targetClassId = $row->to_class_id ?: $this->targetClassIdForDecision(
                     $decision,
                     (int) $row->from_class_id,
                     $nextClassId
                 );
 
-                if ($targetClassId === null) {
+                if ($targetClassId === null && ! $isTerminalPassedOut) {
                     throw new RuntimeException('Class promotion mapping is missing. Add mapping before execution.');
                 }
 
@@ -468,16 +508,19 @@ class PromotionService
                 $this->syncClassHistoryForExecution(
                     student: $student,
                     fromClassId: (int) $row->from_class_id,
-                    toClassId: (int) $targetClassId,
+                    toClassId: $isTerminalPassedOut ? null : (int) $targetClassId,
                     fromSession: (string) $campaign->from_session,
                     toSession: (string) $campaign->to_session,
-                    decision: (string) $decision
+                    decision: (string) $decision,
+                    isPassedOut: $isTerminalPassedOut
                 );
 
-                $student->class_id = (int) $targetClassId;
-                $student->save();
+                if (! $isTerminalPassedOut) {
+                    $student->class_id = (int) $targetClassId;
+                    $student->save();
+                }
 
-                $row->to_class_id = (int) $targetClassId;
+                $row->to_class_id = $isTerminalPassedOut ? null : (int) $targetClassId;
                 $row->final_status = StudentPromotion::STATUS_EXECUTED;
                 $row->save();
             }
@@ -496,9 +539,18 @@ class PromotionService
 
     public function resolveNextClassId(int $fromClassId): ?int
     {
-        return ClassPromotionMapping::query()
+        $mappings = ClassPromotionMapping::query()
             ->where('from_class_id', $fromClassId)
-            ->value('to_class_id');
+            ->pluck('to_class_id')
+            ->map(fn ($id): int => (int) $id)
+            ->unique()
+            ->values();
+
+        if ($mappings->count() > 1) {
+            throw new RuntimeException('Multiple promotion mappings found for one class. Keep one mapping per class.');
+        }
+
+        return $mappings->first();
     }
 
     private function syncStudentPromotions(PromotionCampaign $campaign): void
@@ -678,15 +730,17 @@ class PromotionService
     private function syncClassHistoryForExecution(
         Student $student,
         int $fromClassId,
-        int $toClassId,
+        ?int $toClassId,
         string $fromSession,
         string $toSession,
-        string $decision
+        string $decision,
+        bool $isPassedOut = false
     ): void {
-        $fromStatus = match ($decision) {
-            StudentPromotion::DECISION_PROMOTE => StudentClassHistory::STATUS_PROMOTED,
-            StudentPromotion::DECISION_CONDITIONAL_PROMOTE => StudentClassHistory::STATUS_CONDITIONAL_PROMOTED,
-            StudentPromotion::DECISION_RETAIN => StudentClassHistory::STATUS_RETAINED,
+        $fromStatus = match (true) {
+            $isPassedOut => StudentClassHistory::STATUS_COMPLETED,
+            $decision === StudentPromotion::DECISION_PROMOTE => StudentClassHistory::STATUS_PROMOTED,
+            $decision === StudentPromotion::DECISION_CONDITIONAL_PROMOTE => StudentClassHistory::STATUS_CONDITIONAL_PROMOTED,
+            $decision === StudentPromotion::DECISION_RETAIN => StudentClassHistory::STATUS_RETAINED,
             default => StudentClassHistory::STATUS_COMPLETED,
         };
 
@@ -703,6 +757,10 @@ class PromotionService
         $fromHistory->status = $fromStatus;
         $fromHistory->left_on = now()->toDateString();
         $fromHistory->save();
+
+        if ($toClassId === null || $isPassedOut) {
+            return;
+        }
 
         $toHistory = StudentClassHistory::query()->firstOrNew([
             'student_id' => (int) $student->id,
@@ -731,6 +789,13 @@ class PromotionService
         if ($to['start'] !== $from['end'] || $to['end'] !== ($to['start'] + 1)) {
             throw new RuntimeException('To session must immediately follow from session.');
         }
+    }
+
+    private function isTerminalPassedOutDecision(?string $decision, bool $isPassed, ?int $nextClassId): bool
+    {
+        return $decision === StudentPromotion::DECISION_PROMOTE
+            && $isPassed
+            && $nextClassId === null;
     }
 
     /**

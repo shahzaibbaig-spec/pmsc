@@ -19,6 +19,7 @@ class DatabaseSeeder extends Seeder
             SubjectModuleSeeder::class,
             FederalBoardSubjectSeeder::class,
             TeacherModuleSeeder::class,
+            ClassPromotionMappingSeeder::class,
             ClassSectionSeeder::class,
             TimeSlotSeeder::class,
         ]);

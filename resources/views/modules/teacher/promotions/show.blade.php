@@ -5,7 +5,7 @@
                 <h2 class="text-xl font-semibold text-slate-900">Promotion Campaign Detail</h2>
                 <p class="mt-1 text-sm text-slate-500">
                     {{ trim(($campaign->classRoom?->name ?? 'Class').' '.($campaign->classRoom?->section ?? '')) }}
-                    | {{ $campaign->from_session }} → {{ $campaign->to_session }}
+                    | {{ $campaign->from_session }} -> {{ $campaign->to_session }}
                 </p>
             </div>
             <a
@@ -40,9 +40,9 @@
             </div>
         @endif
 
-        @if (!$nextClassLabel)
+        @if ($isTerminalClass)
             <div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                Next class mapping is not configured for this class. Promote/Conditional decisions will require class mapping before submit.
+                This is a terminal class. Normal promotion is disabled and passed students are treated as Passed Out.
             </div>
         @endif
 
@@ -60,8 +60,8 @@
                 <p class="mt-2 text-2xl font-semibold text-emerald-800">{{ (int) ($summary['passed_students'] ?? 0) }}</p>
             </article>
             <article class="rounded-2xl border border-indigo-200 bg-indigo-50 p-4 shadow-sm">
-                <p class="text-xs font-semibold uppercase tracking-wide text-indigo-700">Promote</p>
-                <p class="mt-2 text-2xl font-semibold text-indigo-800">{{ (int) ($summary['promoted'] ?? 0) }}</p>
+                <p class="text-xs font-semibold uppercase tracking-wide text-indigo-700">{{ $isTerminalClass ? 'Passed Out' : 'Promote' }}</p>
+                <p class="mt-2 text-2xl font-semibold text-indigo-800">{{ (int) ($isTerminalClass ? ($summary['passed_out'] ?? 0) : ($summary['promoted'] ?? 0)) }}</p>
             </article>
             <article class="rounded-2xl border border-rose-200 bg-rose-50 p-4 shadow-sm">
                 <p class="text-xs font-semibold uppercase tracking-wide text-rose-700">Retain</p>
@@ -82,7 +82,7 @@
                             type="button"
                             class="inline-flex min-h-10 items-center rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
                         >
-                            Auto Promote Passed
+                            {{ $isTerminalClass ? 'Auto Mark Passed Out' : 'Auto Promote Passed' }}
                         </button>
                     @endif
                     @if ($nextClassLabel)
@@ -115,8 +115,14 @@
                             @forelse($rows as $index => $row)
                                 @php
                                     $isPassed = (bool) $row->is_passed;
-                                    $decisionValue = old("rows.$index.teacher_decision", $row->teacher_decision ?: ($isPassed ? 'promote' : ''));
+                                    $defaultDecision = $row->teacher_decision ?: ($isPassed ? 'promote' : '');
+                                    $decisionValue = old("rows.$index.teacher_decision", $defaultDecision);
                                     $noteValue = old("rows.$index.teacher_note", (string) ($row->teacher_note ?? ''));
+                                    $principalDecisionLabel = $row->principal_decision
+                                        ? ($isTerminalClass && $isPassed && $row->principal_decision === 'promote'
+                                            ? 'Passed Out'
+                                            : str_replace('_', ' ', ucfirst($row->principal_decision)))
+                                        : null;
                                 @endphp
                                 <tr data-is-passed="{{ $isPassed ? 1 : 0 }}">
                                     <td class="px-4 py-3 text-sm text-slate-800">
@@ -138,16 +144,23 @@
                                         </span>
                                     </td>
                                     <td class="px-4 py-3 text-sm">
-                                        <select
-                                            name="rows[{{ $index }}][teacher_decision]"
-                                            class="teacher-decision block min-h-10 w-44 rounded-lg border-slate-300 text-xs shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                            @disabled(! $isEditable)
-                                        >
-                                            <option value="">Select</option>
-                                            <option value="promote" @selected($decisionValue === 'promote')>Promote</option>
-                                            <option value="conditional_promote" @selected($decisionValue === 'conditional_promote')>Conditional Promote</option>
-                                            <option value="retain" @selected($decisionValue === 'retain')>Retain</option>
-                                        </select>
+                                        @if($isTerminalClass && $isPassed)
+                                            <input type="hidden" name="rows[{{ $index }}][teacher_decision]" value="promote">
+                                            <span class="inline-flex rounded-full bg-indigo-100 px-2.5 py-1 text-xs font-semibold text-indigo-800">Passed Out</span>
+                                        @else
+                                            <select
+                                                name="rows[{{ $index }}][teacher_decision]"
+                                                class="teacher-decision block min-h-10 w-44 rounded-lg border-slate-300 text-xs shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                                @disabled(! $isEditable)
+                                            >
+                                                <option value="">Select</option>
+                                                @if(! $isTerminalClass)
+                                                    <option value="promote" @selected($decisionValue === 'promote')>Promote</option>
+                                                    <option value="conditional_promote" @selected($decisionValue === 'conditional_promote')>Conditional Promote</option>
+                                                @endif
+                                                <option value="retain" @selected($decisionValue === 'retain')>Retain</option>
+                                            </select>
+                                        @endif
                                     </td>
                                     <td class="px-4 py-3 text-sm">
                                         <textarea
@@ -155,12 +168,12 @@
                                             rows="2"
                                             class="block w-64 rounded-lg border-slate-300 text-xs shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                                             placeholder="Required for conditional/retain"
-                                            @disabled(! $isEditable)
+                                            @disabled(! $isEditable || ($isTerminalClass && $isPassed))
                                         >{{ $noteValue }}</textarea>
                                     </td>
                                     <td class="px-4 py-3 text-xs text-slate-600">
-                                        @if($row->principal_decision)
-                                            <span class="font-semibold">{{ str_replace('_', ' ', ucfirst($row->principal_decision)) }}</span>
+                                        @if($principalDecisionLabel)
+                                            <span class="font-semibold">{{ $principalDecisionLabel }}</span>
                                             @if($row->principal_note)
                                                 <div class="mt-1 text-[11px] text-slate-500">{{ $row->principal_note }}</div>
                                             @endif

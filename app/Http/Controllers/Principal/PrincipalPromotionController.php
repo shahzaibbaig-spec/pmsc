@@ -106,6 +106,7 @@ class PrincipalPromotionController extends Controller
             'campaign' => $campaign,
             'rows' => $payload['rows'],
             'summary' => $payload['summary'],
+            'isTerminalClass' => (bool) ($payload['is_terminal_class'] ?? false),
             'nextClassLabel' => $payload['next_class_label'],
         ]);
     }

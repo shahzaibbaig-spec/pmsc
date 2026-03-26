@@ -120,7 +120,7 @@
                                     {{ trim(($campaign->classRoom?->name ?? 'Class').' '.($campaign->classRoom?->section ?? '')) }}
                                 </td>
                                 <td class="px-4 py-3 text-sm text-slate-700">
-                                    {{ $campaign->from_session }} → {{ $campaign->to_session }}
+                                    {{ $campaign->from_session }} -> {{ $campaign->to_session }}
                                 </td>
                                 <td class="px-4 py-3 text-sm">
                                     <span class="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold {{ $statusColors }}">
@@ -154,4 +154,3 @@
         </section>
     </div>
 </x-app-layout>
-

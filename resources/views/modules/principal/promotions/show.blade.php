@@ -5,7 +5,7 @@
                 <h2 class="text-xl font-semibold text-slate-900">Review Promotion Campaign</h2>
                 <p class="mt-1 text-sm text-slate-500">
                     {{ trim(($campaign->classRoom?->name ?? 'Class').' '.($campaign->classRoom?->section ?? '')) }}
-                    | {{ $campaign->from_session }} → {{ $campaign->to_session }}
+                    | {{ $campaign->from_session }} -> {{ $campaign->to_session }}
                 </p>
             </div>
             <a
@@ -47,9 +47,9 @@
             </div>
         @endif
 
-        @if (!$nextClassLabel)
+        @if ($isTerminalClass)
             <div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                Promotion mapping is not configured for this class. Approve/Execute will fail for promote decisions until mapping is added.
+                This is a terminal class. Normal promotion is disabled and passed students are treated as Passed Out.
             </div>
         @endif
 
@@ -67,8 +67,8 @@
                 <p class="mt-2 text-2xl font-semibold text-slate-900">{{ (int) ($summary['total_students'] ?? 0) }}</p>
             </article>
             <article class="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
-                <p class="text-xs font-semibold uppercase tracking-wide text-emerald-700">Promote</p>
-                <p class="mt-2 text-2xl font-semibold text-emerald-800">{{ (int) ($summary['promoted'] ?? 0) }}</p>
+                <p class="text-xs font-semibold uppercase tracking-wide text-emerald-700">{{ $isTerminalClass ? 'Passed Out' : 'Promote' }}</p>
+                <p class="mt-2 text-2xl font-semibold text-emerald-800">{{ (int) ($isTerminalClass ? ($summary['passed_out'] ?? 0) : ($summary['promoted'] ?? 0)) }}</p>
             </article>
             <article class="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
                 <p class="text-xs font-semibold uppercase tracking-wide text-amber-700">Conditional</p>
@@ -133,7 +133,7 @@
                     </form>
                 @endif
 
-                @if (!$canApprove && !$canReject && !$canExecute)
+                @if (! $canApprove && ! $canReject && ! $canExecute)
                     <div class="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
                         No action is available for current campaign status.
                     </div>
@@ -147,7 +147,7 @@
                     <p><span class="font-semibold">Approved:</span> {{ $campaign->approved_at?->format('d M Y h:i A') ?: '-' }}</p>
                     <p><span class="font-semibold">Executed:</span> {{ $campaign->executed_at?->format('d M Y h:i A') ?: '-' }}</p>
                     <p><span class="font-semibold">Principal Note:</span> {{ $campaign->principal_note ?: '-' }}</p>
-                    <p><span class="font-semibold">Next Class Mapping:</span> {{ $nextClassLabel ?: 'Not configured' }}</p>
+                    <p><span class="font-semibold">Next Class Mapping:</span> {{ $nextClassLabel ?: 'Terminal Class' }}</p>
                 </div>
             </article>
         </section>
@@ -179,9 +179,20 @@
                         <tbody class="divide-y divide-slate-100 bg-white">
                             @forelse($rows as $index => $row)
                                 @php
+                                    $isPassed = (bool) $row->is_passed;
+                                    $teacherDecisionLabel = $row->teacher_decision
+                                        ? ($isTerminalClass && $isPassed && $row->teacher_decision === 'promote'
+                                            ? 'Passed Out'
+                                            : str_replace('_', ' ', ucfirst($row->teacher_decision)))
+                                        : '-';
                                     $principalDecision = old("rows.$index.principal_decision", $row->principal_decision);
                                     $principalNote = old("rows.$index.principal_note", $row->principal_note);
-                                    $effectiveDecision = $row->principal_decision ?? $row->teacher_decision;
+                                    $effectiveDecisionRaw = $row->principal_decision ?? $row->teacher_decision;
+                                    $effectiveDecisionLabel = $effectiveDecisionRaw
+                                        ? ($isTerminalClass && $isPassed && $effectiveDecisionRaw === 'promote'
+                                            ? 'Passed Out'
+                                            : str_replace('_', ' ', ucfirst($effectiveDecisionRaw)))
+                                        : '-';
                                 @endphp
                                 <tr>
                                     <td class="px-4 py-3 text-sm text-slate-800">
@@ -196,7 +207,7 @@
                                             -
                                         @endif
                                     </td>
-                                    <td class="px-4 py-3 text-sm font-semibold text-slate-900">{{ $row->teacher_decision ? str_replace('_', ' ', ucfirst($row->teacher_decision)) : '-' }}</td>
+                                    <td class="px-4 py-3 text-sm font-semibold text-slate-900">{{ $teacherDecisionLabel }}</td>
                                     <td class="px-4 py-3 text-xs text-slate-600">{{ $row->teacher_note ?: '-' }}</td>
                                     <td class="px-4 py-3 text-sm">
                                         <select
@@ -205,9 +216,15 @@
                                             @disabled(! $canReview)
                                         >
                                             <option value="">Use Teacher Decision</option>
-                                            <option value="promote" @selected($principalDecision === 'promote')>Promote</option>
-                                            <option value="conditional_promote" @selected($principalDecision === 'conditional_promote')>Conditional Promote</option>
-                                            <option value="retain" @selected($principalDecision === 'retain')>Retain</option>
+                                            @if($isTerminalClass && $isPassed)
+                                                <option value="promote" @selected($principalDecision === 'promote')>Passed Out</option>
+                                            @elseif(! $isTerminalClass)
+                                                <option value="promote" @selected($principalDecision === 'promote')>Promote</option>
+                                                <option value="conditional_promote" @selected($principalDecision === 'conditional_promote')>Conditional Promote</option>
+                                                <option value="retain" @selected($principalDecision === 'retain')>Retain</option>
+                                            @else
+                                                <option value="retain" @selected($principalDecision === 'retain')>Retain</option>
+                                            @endif
                                         </select>
                                     </td>
                                     <td class="px-4 py-3 text-sm">
@@ -216,11 +233,11 @@
                                             rows="2"
                                             class="block w-64 rounded-lg border-slate-300 text-xs shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                                             placeholder="Required for conditional/retain"
-                                            @disabled(! $canReview)
+                                            @disabled(! $canReview || ($isTerminalClass && $isPassed))
                                         >{{ $principalNote }}</textarea>
                                     </td>
                                     <td class="px-4 py-3 text-xs font-semibold text-slate-700">
-                                        {{ $effectiveDecision ? str_replace('_', ' ', ucfirst($effectiveDecision)) : '-' }}
+                                        {{ $effectiveDecisionLabel }}
                                     </td>
                                     <td class="px-4 py-3 text-xs font-semibold text-slate-700">
                                         {{ ucfirst($row->final_status) }}
