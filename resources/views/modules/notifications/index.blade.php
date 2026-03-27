@@ -110,13 +110,28 @@
             messageBox.textContent = '';
         }
 
-        function urlBase64ToUint8Array(base64String) {
-            const padding = '='.repeat((4 - base64String.length % 4) % 4);
-            const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-            const rawData = window.atob(base64);
-            const outputArray = new Uint8Array(rawData.length);
+        function urlBase64ToUint8Array(input) {
+            const normalized = String(input || '').trim().replace(/\s+/g, '');
+            if (!normalized) {
+                throw new Error('VAPID public key is empty.');
+            }
 
-            for (let i = 0; i < rawData.length; ++i) {
+            if (!/^[A-Za-z0-9\-_]+$/.test(normalized)) {
+                throw new Error('VAPID public key format is invalid.');
+            }
+
+            const padding = '='.repeat((4 - normalized.length % 4) % 4);
+            const base64 = (normalized + padding).replace(/-/g, '+').replace(/_/g, '/');
+
+            let rawData = '';
+            try {
+                rawData = window.atob(base64);
+            } catch (_) {
+                throw new Error('VAPID public key could not be decoded. Please regenerate and re-save it in .env.');
+            }
+
+            const outputArray = new Uint8Array(rawData.length);
+            for (let i = 0; i < rawData.length; i++) {
                 outputArray[i] = rawData.charCodeAt(i);
             }
 
