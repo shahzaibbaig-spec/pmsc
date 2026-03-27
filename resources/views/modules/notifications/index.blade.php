@@ -111,17 +111,24 @@
         }
 
         function urlBase64ToUint8Array(input) {
-            const normalized = String(input || '').trim().replace(/\s+/g, '');
+            const normalized = String(input ?? '')
+                .trim()
+                .replace(/^["']+|["']+$/g, '')
+                .replace(/\s+/g, '');
+
             if (!normalized) {
                 throw new Error('VAPID public key is empty.');
             }
 
-            if (!/^[A-Za-z0-9\-_]+$/.test(normalized)) {
+            // Accept both base64url and standard base64 VAPID public key formats.
+            const base64Like = normalized.replace(/-/g, '+').replace(/_/g, '/');
+            if (!/^[A-Za-z0-9+/=]+$/.test(base64Like)) {
                 throw new Error('VAPID public key format is invalid.');
             }
 
-            const padding = '='.repeat((4 - normalized.length % 4) % 4);
-            const base64 = (normalized + padding).replace(/-/g, '+').replace(/_/g, '/');
+            const withoutPadding = base64Like.replace(/=+$/g, '');
+            const padding = '='.repeat((4 - (withoutPadding.length % 4)) % 4);
+            const base64 = withoutPadding + padding;
 
             let rawData = '';
             try {
@@ -133,6 +140,10 @@
             const outputArray = new Uint8Array(rawData.length);
             for (let i = 0; i < rawData.length; i++) {
                 outputArray[i] = rawData.charCodeAt(i);
+            }
+
+            if (outputArray.length !== 65) {
+                throw new Error('VAPID public key length is invalid. It must decode to 65 bytes.');
             }
 
             return outputArray;
