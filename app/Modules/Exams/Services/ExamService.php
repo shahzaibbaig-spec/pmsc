@@ -5,10 +5,9 @@ namespace App\Modules\Exams\Services;
 use App\Models\Exam;
 use App\Models\Mark;
 use App\Models\Student;
-use App\Models\StudentSubject;
-use App\Models\Subject;
 use App\Models\Teacher;
 use App\Models\TeacherAssignment;
+use App\Services\TeacherStudentVisibilityService;
 use App\Modules\Exams\Enums\ExamType;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -17,6 +16,11 @@ use RuntimeException;
 
 class ExamService
 {
+    public function __construct(
+        private readonly TeacherStudentVisibilityService $visibilityService
+    ) {
+    }
+
     public function optionsForTeacher(int $userId): array
     {
         $teacher = $this->resolveTeacher($userId);
@@ -47,25 +51,23 @@ class ExamService
             ->groupBy('class_id')
             ->pluck('total', 'class_id');
 
-        $subjectScopedCounts = StudentSubject::query()
-            ->join('students', 'students.id', '=', 'student_subjects.student_id')
-            ->whereIn('students.class_id', $classIds)
-            ->where('students.status', 'active')
-            ->selectRaw('students.class_id, student_subjects.subject_id, student_subjects.session, count(*) as total')
-            ->groupBy('students.class_id', 'student_subjects.subject_id', 'student_subjects.session')
-            ->get();
-
-        $subjectScopedCountMap = $subjectScopedCounts
-            ->mapWithKeys(function ($row): array {
-                $key = $row->class_id.'|'.$row->subject_id.'|'.$row->session;
-
-                return [$key => (int) $row->total];
-            });
-
         return [
             'sessions' => $assignments->pluck('session')->unique()->values()->all(),
-            'assignments' => $assignments->map(function (TeacherAssignment $assignment) use ($classActiveStudentCount, $subjectScopedCountMap): array {
-                $subjectKey = $assignment->class_id.'|'.$assignment->subject_id.'|'.$assignment->session;
+            'assignments' => $assignments->map(function (TeacherAssignment $assignment) use ($classActiveStudentCount, $teacher): array {
+                $classRequiresFiltering = $this->visibilityService->classRequiresSubjectFiltering($assignment->classRoom);
+                $classStudents = (int) ($classActiveStudentCount->get($assignment->class_id) ?? 0);
+                $subjectStudents = $classStudents;
+
+                if ($classRequiresFiltering) {
+                    $subjectStudents = $this->visibilityService
+                        ->getVisibleStudentsForSubjectTeacher(
+                            (int) $teacher->id,
+                            (int) $assignment->class_id,
+                            (int) $assignment->subject_id,
+                            (string) $assignment->session
+                        )
+                        ->count();
+                }
 
                 return [
                     'class_id' => $assignment->class_id,
@@ -73,8 +75,8 @@ class ExamService
                     'subject_id' => $assignment->subject_id,
                     'subject_name' => $assignment->subject?->name ?? '',
                     'session' => $assignment->session,
-                    'class_students' => (int) ($classActiveStudentCount->get($assignment->class_id) ?? 0),
-                    'subject_students' => (int) ($subjectScopedCountMap->get($subjectKey) ?? 0),
+                    'class_students' => $classStudents,
+                    'subject_students' => $subjectStudents,
                 ];
             })->values()->all(),
             'exam_types' => ExamType::options(),
@@ -93,8 +95,9 @@ class ExamService
             ->where('exam_type', $examType)
             ->first();
 
-        $students = $this->studentsForExam($classId, $subjectId, $session);
+        $students = $this->studentsForExam($teacher->id, $classId, $subjectId, $session);
         $studentIds = $students->pluck('id');
+        $requiresSubjectFiltering = $this->visibilityService->classRequiresSubjectFiltering($classId);
 
         $marksMap = collect();
         if ($exam && $studentIds->isNotEmpty()) {
@@ -121,6 +124,9 @@ class ExamService
                     'obtained_marks' => $marksMap->has($student->id) ? (int) $marksMap->get($student->id) : null,
                 ];
             })->values()->all(),
+            'message' => $students->isEmpty() && $requiresSubjectFiltering
+                ? 'No students are currently assigned to this subject in the selected class.'
+                : null,
         ];
     }
 
@@ -136,9 +142,13 @@ class ExamService
         $teacher = $this->resolveTeacherOrFail($userId);
         $this->ensureTeacherAssignment($teacher->id, $classId, $subjectId, $session);
 
-        $allowedStudents = $this->studentsForExam($classId, $subjectId, $session)->keyBy('id');
+        $allowedStudents = $this->studentsForExam($teacher->id, $classId, $subjectId, $session)->keyBy('id');
         if ($allowedStudents->isEmpty()) {
-            throw new RuntimeException('No students found for this class/subject/session.');
+            $message = $this->visibilityService->classRequiresSubjectFiltering($classId)
+                ? 'No students are currently assigned to this subject in the selected class.'
+                : 'No students found for this class/subject/session.';
+
+            throw new RuntimeException($message);
         }
 
         $recordStudentIds = collect($records)->pluck('student_id')->map(fn ($id) => (int) $id)->unique();
@@ -248,31 +258,10 @@ class ExamService
         }
     }
 
-    private function studentsForExam(int $classId, int $subjectId, string $session): Collection
+    private function studentsForExam(int $teacherId, int $classId, int $subjectId, string $session): Collection
     {
-        $subjectAssignedStudentIds = StudentSubject::query()
-            ->where('subject_id', $subjectId)
-            ->where('session', $session)
-            ->whereHas('student', function ($query) use ($classId): void {
-                $query->where('class_id', $classId)
-                    ->where('status', 'active');
-            })
-            ->pluck('student_id');
-
-        $query = Student::query()
-            ->where('class_id', $classId)
-            ->where('status', 'active')
-            ->orderBy('name')
-            ->orderBy('student_id')
-            ->select(['id', 'student_id', 'name', 'father_name']);
-
-        // If class-specific subject assignments exist for this session, limit to those students.
-        // Otherwise, fall back to all active students of the class to keep marks entry usable.
-        if ($subjectAssignedStudentIds->isNotEmpty()) {
-            $query->whereIn('id', $subjectAssignedStudentIds);
-        }
-
-        return $query->get();
+        return $this->visibilityService
+            ->getVisibleStudentsForSubjectTeacher($teacherId, $classId, $subjectId, $session);
     }
 
     private function isExamLocked(Exam $exam): bool

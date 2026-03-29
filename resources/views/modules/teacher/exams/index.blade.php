@@ -11,6 +11,7 @@
                 <div class="p-5 sm:p-6">
                     <h3 class="text-lg font-medium text-gray-900">Exam Setup</h3>
                     <p class="mt-1 text-sm text-gray-600">Select class, subject, exam type and session to load marks. Tables are compact and mobile-friendly.</p>
+                    <p class="mt-1 text-sm text-indigo-700">Only students enrolled in the selected subject are shown.</p>
                     @if (! $hasAssignments)
                         <div class="mt-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
                             No subject assignment found for your account. Ask Principal to assign your class + subject for the current session.
@@ -132,6 +133,7 @@
             locked: false,
             page: 1,
             per_page: 10,
+            emptyMessage: 'No students found for selected exam setup.',
         };
 
         function showMessage(message, type = 'success') {
@@ -244,7 +246,7 @@
 
         function renderStudents() {
             if (!state.students.length) {
-                marksBody.innerHTML = '<tr><td colspan="3" class="px-4 py-8 text-center text-sm text-gray-500">No students found for selected exam setup.</td></tr>';
+                marksBody.innerHTML = `<tr><td colspan="3" class="px-4 py-8 text-center text-sm text-gray-500">${window.NSMS.escapeHtml(state.emptyMessage)}</td></tr>`;
                 paginationInfo.textContent = 'No records';
                 prevPageBtn.disabled = true;
                 nextPageBtn.disabled = true;
@@ -364,6 +366,9 @@
                 }
 
                 state.students = result.students || [];
+                state.emptyMessage = (result.message && typeof result.message === 'string')
+                    ? result.message
+                    : 'No students found for selected exam setup.';
                 state.locked = Boolean(result.exam?.locked);
                 state.page = 1;
 
@@ -377,6 +382,10 @@
                 }
 
                 renderStudents();
+
+                if (!state.students.length && result.message) {
+                    showMessage(result.message, 'success');
+                }
 
                 if (state.locked && result.exam?.locked_message) {
                     showMessage(result.exam.locked_message, 'error');
@@ -489,6 +498,7 @@
         sessionInput.addEventListener('change', () => {
             buildClassOptions();
             state.students = [];
+            state.emptyMessage = 'No students found for selected exam setup.';
             state.page = 1;
             renderStudents();
         });
@@ -496,6 +506,7 @@
         classInput.addEventListener('change', () => {
             buildSubjectOptions();
             state.students = [];
+            state.emptyMessage = 'No students found for selected exam setup.';
             state.page = 1;
             renderStudents();
         });

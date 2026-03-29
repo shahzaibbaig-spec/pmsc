@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\DashboardRedirectController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\Principal\TeacherAssignmentController as PrincipalTeacherAssignmentController;
 use App\Http\Controllers\Principal\AnalyticsExportController;
 use App\Http\Controllers\Principal\PrincipalPromotionController;
 use App\Http\Controllers\Teacher\TeacherPromotionController;
@@ -55,7 +56,6 @@ use App\Modules\Students\Controllers\StudentManagementController;
 use App\Modules\Students\Controllers\StudentQrProfileController;
 use App\Modules\Subjects\Controllers\StudentSubjectAssignmentMatrixController;
 use App\Modules\Subjects\Controllers\SubjectManagementController;
-use App\Modules\Teachers\Controllers\TeacherAssignmentController;
 use App\Modules\Teachers\Controllers\TeacherDashboardController;
 use App\Modules\Teachers\Controllers\PrincipalTeacherListController;
 use App\Modules\Timetable\Controllers\SubjectPeriodRuleController;
@@ -443,9 +443,13 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
         ->middleware(['role:Principal'])
         ->name('principal.timetable.export.csv');
 
-    Route::get('/principal/teacher-assignments', [TeacherAssignmentController::class, 'index'])
-        ->middleware(['role:Principal', 'permission:assign_teachers'])
+    Route::get('/principal/teacher-assignments', [PrincipalTeacherAssignmentController::class, 'index'])
+        ->middleware(['role:Principal|Admin', 'permission:assign_teachers'])
         ->name('principal.teacher-assignments.index');
+
+    Route::get('/principal/teacher-assignments/create', [PrincipalTeacherAssignmentController::class, 'create'])
+        ->middleware(['role:Principal|Admin', 'permission:assign_teachers'])
+        ->name('principal.teacher-assignments.create');
 
     Route::get('/principal/teachers', [PrincipalTeacherListController::class, 'index'])
         ->middleware(['role:Principal'])
@@ -455,20 +459,13 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
         ->middleware(['role:Principal'])
         ->name('principal.teachers.data');
 
-    Route::get('/principal/teacher-assignments/options', [TeacherAssignmentController::class, 'options'])
-        ->middleware(['role:Principal', 'permission:assign_teachers'])
-        ->name('principal.teacher-assignments.options');
+    Route::post('/principal/teacher-assignments/bulk-store', [PrincipalTeacherAssignmentController::class, 'storeBulk'])
+        ->middleware(['role:Principal|Admin', 'permission:assign_teachers'])
+        ->name('principal.teacher-assignments.bulk-store');
 
-    Route::get('/principal/teacher-assignments/data', [TeacherAssignmentController::class, 'data'])
-        ->middleware(['role:Principal', 'permission:assign_teachers'])
-        ->name('principal.teacher-assignments.data');
-
-    Route::post('/principal/teacher-assignments', [TeacherAssignmentController::class, 'store'])
-        ->middleware(['role:Principal', 'permission:assign_teachers'])
-        ->name('principal.teacher-assignments.store');
-
-    Route::delete('/principal/teacher-assignments/{teacherAssignment}', [TeacherAssignmentController::class, 'destroy'])
-        ->middleware(['role:Principal', 'permission:assign_teachers'])
+    Route::delete('/principal/teacher-assignments/{assignment}', [PrincipalTeacherAssignmentController::class, 'destroy'])
+        ->middleware(['role:Principal|Admin', 'permission:assign_teachers'])
+        ->whereNumber('assignment')
         ->name('principal.teacher-assignments.destroy');
 
     Route::get('/principal/results', [PrincipalResultController::class, 'index'])

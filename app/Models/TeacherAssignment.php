@@ -29,6 +29,11 @@ class TeacherAssignment extends Model
 
     public function classRoom(): BelongsTo
     {
+        return $this->schoolClass();
+    }
+
+    public function schoolClass(): BelongsTo
+    {
         return $this->belongsTo(SchoolClass::class, 'class_id');
     }
 
@@ -37,4 +42,3 @@ class TeacherAssignment extends Model
         return $this->belongsTo(Subject::class);
     }
 }
-

@@ -90,6 +90,11 @@ class Student extends Model
         return $this->hasMany(StudentSubject::class);
     }
 
+    public function studentSubjects(): HasMany
+    {
+        return $this->hasMany(StudentSubject::class);
+    }
+
     public function subjectMatrixAssignments(): HasMany
     {
         return $this->hasMany(StudentSubjectAssignment::class);

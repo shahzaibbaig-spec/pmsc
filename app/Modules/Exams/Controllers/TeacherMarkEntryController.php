@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Mark;
 use App\Models\SchoolClass;
 use App\Models\Subject;
+use App\Services\TeacherStudentVisibilityService;
 use App\Modules\Exams\Enums\ExamType;
 use App\Modules\Exams\Services\TeacherMarkAuditService;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -16,9 +17,10 @@ use RuntimeException;
 
 class TeacherMarkEntryController extends Controller
 {
-    public function __construct(private readonly TeacherMarkAuditService $auditService)
-    {
-    }
+    public function __construct(
+        private readonly TeacherMarkAuditService $auditService,
+        private readonly TeacherStudentVisibilityService $visibilityService
+    ) {}
 
     public function index(Request $request): View
     {
@@ -140,6 +142,8 @@ class TeacherMarkEntryController extends Controller
             if ((int) $mark->teacher_id !== (int) $teacher->id) {
                 throw new AuthorizationException('You can edit only your own mark entries.');
             }
+
+            $this->assertMarkStudentVisibility($teacher->id, $mark);
         } catch (AuthorizationException $exception) {
             abort(403, $exception->getMessage());
         } catch (RuntimeException $exception) {
@@ -175,6 +179,9 @@ class TeacherMarkEntryController extends Controller
         ]);
 
         try {
+            $teacher = $this->auditService->resolveTeacherOrFail((int) auth()->id());
+            $this->assertMarkStudentVisibility($teacher->id, $mark);
+
             $this->auditService->updateMarkEntry(
                 (int) auth()->id(),
                 $mark,
@@ -201,6 +208,9 @@ class TeacherMarkEntryController extends Controller
         ]);
 
         try {
+            $teacher = $this->auditService->resolveTeacherOrFail((int) auth()->id());
+            $this->assertMarkStudentVisibility($teacher->id, $mark);
+
             $this->auditService->deleteMarkEntry(
                 (int) auth()->id(),
                 $mark,
@@ -241,5 +251,29 @@ class TeacherMarkEntryController extends Controller
         }
 
         return str_replace('_', ' ', ucfirst($raw));
+    }
+
+    private function assertMarkStudentVisibility(int $teacherId, Mark $mark): void
+    {
+        $mark->loadMissing('exam:id,subject_id');
+
+        $subjectId = (int) ($mark->exam?->subject_id ?? 0);
+        $studentId = (int) $mark->student_id;
+        $session = (string) $mark->session;
+
+        if ($subjectId <= 0 || $studentId <= 0 || $session === '') {
+            throw new AuthorizationException('You are not allowed to access this mark entry.');
+        }
+
+        $canAccess = $this->visibilityService->teacherCanAccessStudentForSubject(
+            $teacherId,
+            $studentId,
+            $subjectId,
+            $session
+        );
+
+        if (! $canAccess) {
+            throw new AuthorizationException('You are not allowed to access this student for the selected subject.');
+        }
     }
 }

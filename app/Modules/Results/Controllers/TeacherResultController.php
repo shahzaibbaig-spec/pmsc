@@ -9,12 +9,18 @@ use App\Models\SchoolClass;
 use App\Models\Subject;
 use App\Models\Teacher;
 use App\Models\TeacherAssignment;
+use App\Services\TeacherStudentVisibilityService;
 use App\Modules\Exams\Enums\ExamType;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class TeacherResultController extends Controller
 {
+    public function __construct(
+        private readonly TeacherStudentVisibilityService $visibilityService
+    ) {
+    }
+
     public function classResults(Request $request): View
     {
         $teacher = Teacher::query()
@@ -65,6 +71,9 @@ class TeacherResultController extends Controller
         $selectedClass = $selectedClassId !== null
             ? $classes->firstWhere('id', $selectedClassId)
             : null;
+        $selectedClassRequiresFiltering = $selectedClass
+            ? $this->visibilityService->classRequiresSubjectFiltering($selectedClass)
+            : false;
 
         $isClassTeacherView = $selectedClass
             ? (int) ($selectedClass->class_teacher_id ?? 0) === (int) $teacher->id
@@ -96,31 +105,45 @@ class TeacherResultController extends Controller
                     ->values()
                     ->all() ?? [];
 
+                if ($selectedClassRequiresFiltering) {
+                    $classSubjectIds = $teacherSubjectIds;
+
+                    if ($teacherSubjectIds === []) {
+                        $message = 'You are not assigned any subject for this class and session.';
+                    }
+                }
+
                 $mySubjectResults = $this->buildDataset(
+                    (int) $teacher->id,
                     (int) $selectedClassId,
                     $selectedSession,
                     $selectedExamType,
                     $teacherSubjectIds,
-                    $teacherSubjectIds
+                    $teacherSubjectIds,
+                    $selectedClassRequiresFiltering
                 );
 
                 $classResults = $this->buildDataset(
+                    (int) $teacher->id,
                     (int) $selectedClassId,
                     $selectedSession,
                     $selectedExamType,
                     $classSubjectIds,
-                    $teacherSubjectIds
+                    $teacherSubjectIds,
+                    $selectedClassRequiresFiltering
                 );
             } else {
                 if ($teacherSubjectIds === []) {
                     $message = 'You are not assigned any subject for this class and session.';
                 } else {
                     $mySubjectResults = $this->buildDataset(
+                        (int) $teacher->id,
                         (int) $selectedClassId,
                         $selectedSession,
                         $selectedExamType,
                         $teacherSubjectIds,
-                        $teacherSubjectIds
+                        $teacherSubjectIds,
+                        $selectedClassRequiresFiltering
                     );
                 }
             }
@@ -215,11 +238,13 @@ class TeacherResultController extends Controller
      * @param array<int, int> $editableSubjectIds
      */
     private function buildDataset(
+        int $teacherId,
         int $classId,
         string $session,
         string $examType,
         array $subjectIds,
-        array $editableSubjectIds
+        array $editableSubjectIds,
+        bool $requiresSubjectFiltering = false
     ): array {
         $normalizedSubjectIds = collect($subjectIds)
             ->map(fn ($id): int => (int) $id)
@@ -269,10 +294,31 @@ class TeacherResultController extends Controller
             })
             ->get(['id', 'exam_id', 'student_id', 'obtained_marks', 'total_marks', 'session']);
 
-        $rows = $marks->map(function (Mark $mark) use ($subjectLookup, $editableLookup, $classId, $session, $examType): ?array {
+        $rows = $marks->map(function (Mark $mark) use (
+            $teacherId,
+            $subjectLookup,
+            $editableLookup,
+            $classId,
+            $session,
+            $examType,
+            $requiresSubjectFiltering
+        ): ?array {
             $subjectId = (int) ($mark->exam?->subject_id ?? 0);
             if ($subjectId <= 0) {
                 return null;
+            }
+
+            if ($requiresSubjectFiltering) {
+                $canAccess = $this->visibilityService->teacherCanAccessStudentForSubject(
+                    $teacherId,
+                    (int) $mark->student_id,
+                    $subjectId,
+                    $session
+                );
+
+                if (! $canAccess) {
+                    return null;
+                }
             }
 
             $totalMarks = (float) ($mark->total_marks ?: $mark->exam?->total_marks ?: 0);
