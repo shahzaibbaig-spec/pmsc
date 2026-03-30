@@ -7,10 +7,13 @@ use App\Models\Student;
 use App\Models\StudentLearningProfile;
 use App\Models\User;
 use Illuminate\Database\QueryException;
+use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Log;
 
 class ReportCommentService
 {
+    private const LEGACY_COMMENT_FALLBACK_LIMIT = 250;
+
     public function generateCommentsForClass(int $classId, string $session, string $examType, ?int $generatedBy = null): array
     {
         $resolvedGeneratedBy = $this->resolveUserId($generatedBy);
@@ -99,7 +102,7 @@ class ReportCommentService
     {
         try {
             $comment->generated_by = $generatedBy;
-            $comment->save();
+            $this->saveWithCommentLengthFallback($comment);
         } catch (QueryException $exception) {
             if ($generatedBy !== null && $this->isGeneratedByForeignKeyViolation($exception)) {
                 Log::warning('User FK failed during report comment save; retrying without generator reference.', [
@@ -110,13 +113,56 @@ class ReportCommentService
                 ]);
 
                 $comment->generated_by = null;
-                $comment->save();
+                $this->saveWithCommentLengthFallback($comment);
 
                 return;
             }
 
             throw $exception;
         }
+    }
+
+    private function saveWithCommentLengthFallback(ReportComment $comment): void
+    {
+        try {
+            $comment->save();
+        } catch (QueryException $exception) {
+            if (! $this->isCommentLengthViolation($exception)) {
+                throw $exception;
+            }
+
+            Log::warning('Comment text exceeded legacy report_comments column size; retrying with truncated values.', [
+                'sql_state' => $exception->errorInfo[0] ?? null,
+                'driver_code' => $exception->errorInfo[1] ?? null,
+                'message' => $exception->getMessage(),
+                'student_id' => (int) $comment->student_id,
+                'session' => (string) $comment->session,
+                'exam_type' => (string) $comment->exam_type,
+            ]);
+
+            $comment->auto_comment = $this->truncateForLegacyColumn((string) ($comment->auto_comment ?? ''));
+            $comment->final_comment = $this->truncateForLegacyColumn((string) ($comment->final_comment ?? ''));
+            $comment->save();
+        }
+    }
+
+    private function truncateForLegacyColumn(string $value): string
+    {
+        return Str::limit(trim($value), self::LEGACY_COMMENT_FALLBACK_LIMIT, '');
+    }
+
+    private function isCommentLengthViolation(QueryException $exception): bool
+    {
+        $sqlState = $exception->errorInfo[0] ?? null;
+        $driverCode = (int) ($exception->errorInfo[1] ?? 0);
+        if ($sqlState !== '22001' || $driverCode !== 1406) {
+            return false;
+        }
+
+        $message = strtolower($exception->getMessage());
+
+        return str_contains($message, 'report_comments')
+            && (str_contains($message, 'auto_comment') || str_contains($message, 'final_comment'));
     }
 
     private function isGeneratedByForeignKeyViolation(QueryException $exception): bool
