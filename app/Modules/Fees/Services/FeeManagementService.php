@@ -846,14 +846,12 @@ class FeeManagementService
                 ->map(fn (Collection $rows) => $rows->pluck('fee_structure_id')->map(fn ($id) => (int) $id)->unique()->values()->all());
         }
 
-        $existingChallanKeys = FeeChallan::query()
+        $existingChallansByKey = FeeChallan::query()
             ->where('session', $session)
             ->where('month', $month)
             ->whereIn('student_id', $studentIds)
-            ->get(['student_id', 'session', 'month'])
-            ->mapWithKeys(fn (FeeChallan $challan): array => [
-                $challan->student_id.'|'.$challan->session.'|'.$challan->month => true,
-            ]);
+            ->get(['id', 'student_id', 'session', 'month', 'status'])
+            ->keyBy(fn (FeeChallan $challan): string => $challan->student_id.'|'.$challan->session.'|'.$challan->month);
 
         $legacyArrearsByStudent = FeeChallan::query()
             ->withSum('payments as paid_amount', 'amount_paid')
@@ -879,6 +877,7 @@ class FeeManagementService
             }), 2));
 
         $createdCount = 0;
+        $updatedExistingCount = 0;
         $skippedExistingCount = 0;
         $skippedNoItemsCount = 0;
         $totalArrearsAdded = 0.0;
@@ -894,13 +893,14 @@ class FeeManagementService
                 $dueDate,
                 $classId,
                 $alreadyBilledOneTime,
-                $existingChallanKeys,
+                $existingChallansByKey,
                 $legacyArrearsByStudent,
                 $activePlansByStudent,
                 $installmentsByPlan,
                 $manualArrearsByStudent,
                 $studentCustomFeeByStudent,
                 &$createdCount,
+                &$updatedExistingCount,
                 &$skippedExistingCount,
                 &$skippedNoItemsCount,
                 &$totalArrearsAdded
@@ -914,23 +914,21 @@ class FeeManagementService
                     $safeGeneratedBy,
                     $classId,
                     $alreadyBilledOneTime,
-                    $existingChallanKeys,
+                    $existingChallansByKey,
                     $legacyArrearsByStudent,
                     $activePlansByStudent,
                     $installmentsByPlan,
                     $manualArrearsByStudent,
                     $studentCustomFeeByStudent,
                     &$createdCount,
+                    &$updatedExistingCount,
                     &$skippedExistingCount,
                     &$skippedNoItemsCount,
                     &$totalArrearsAdded
                 ): void {
                     foreach ($students as $student) {
                         $challanKey = $student->id.'|'.$session.'|'.$month;
-                        if ($existingChallanKeys->has($challanKey)) {
-                            $skippedExistingCount++;
-                            continue;
-                        }
+                        $existingChallan = $existingChallansByKey->get($challanKey);
 
                         $blockedOneTime = collect($alreadyBilledOneTime->get($student->id, []))
                             ->map(fn ($id): int => (int) $id)
@@ -1061,6 +1059,28 @@ class FeeManagementService
                             continue;
                         }
 
+                        if ($existingChallan instanceof FeeChallan) {
+                            if (! $this->refreshExistingChallan(
+                                $existingChallan,
+                                $items,
+                                $classId,
+                                $session,
+                                $month,
+                                $dueDate,
+                                $arrearsAmount,
+                                $finalTotalAmount,
+                                $safeGeneratedBy
+                            )) {
+                                $skippedExistingCount++;
+                                continue;
+                            }
+
+                            $updatedExistingCount++;
+                            $totalArrearsAdded += round($arrearsAmount, 2);
+
+                            continue;
+                        }
+
                         $challan = FeeChallan::query()->create([
                             'challan_number' => $this->challanNumber($session, $month, (int) $student->id),
                             'student_id' => $student->id,
@@ -1095,6 +1115,7 @@ class FeeManagementService
             'month_label' => $this->monthLabel($month),
             'total_students' => $students->count(),
             'created' => $createdCount,
+            'updated_existing' => $updatedExistingCount,
             'skipped_existing' => $skippedExistingCount,
             'skipped_no_items' => $skippedNoItemsCount,
             'total_arrears_added' => round($totalArrearsAdded, 2),
@@ -1512,6 +1533,69 @@ class FeeManagementService
         return User::query()->useWritePdo()->whereKey($userId)->exists()
             ? $userId
             : null;
+    }
+
+    /**
+     * Replace an unpaid challan with fresh items so custom-fee changes can be reissued safely.
+     *
+     * @param array<int, array{
+     *   fee_structure_id:int|null,
+     *   title:string,
+     *   fee_type:string,
+     *   amount:float,
+     *   fee_installment_id?:int|null,
+     *   student_arrear_id?:int|null,
+     *   paid_amount?:float|int
+     * }> $items
+     */
+    private function refreshExistingChallan(
+        FeeChallan $challan,
+        array $items,
+        int $classId,
+        string $session,
+        string $month,
+        string $dueDate,
+        float $arrearsAmount,
+        float $totalAmount,
+        ?int $generatedBy
+    ): bool {
+        $locked = FeeChallan::query()->lockForUpdate()->find($challan->id);
+        if (! $locked) {
+            return false;
+        }
+
+        $paymentCount = (int) FeePayment::query()
+            ->where('fee_challan_id', $locked->id)
+            ->count();
+        $paidAmount = round((float) FeePayment::query()
+            ->where('fee_challan_id', $locked->id)
+            ->sum('amount_paid'), 2);
+
+        if ($paymentCount > 0 || $paidAmount > 0) {
+            return false;
+        }
+
+        $locked->items()->delete();
+        $locked->forceFill([
+            'class_id' => $classId,
+            'session' => $session,
+            'month' => $month,
+            'issue_date' => now()->toDateString(),
+            'due_date' => $dueDate,
+            'arrears' => round($arrearsAmount, 2),
+            'late_fee' => 0,
+            'late_fee_waived_at' => null,
+            'total_amount' => round($totalAmount, 2),
+            'status' => self::STATUS_UNPAID,
+            'generated_by' => $generatedBy,
+            'paid_at' => null,
+        ])->save();
+
+        foreach ($items as $item) {
+            $locked->items()->create($item);
+        }
+
+        return true;
     }
 
     private function lineAmountFromStudentCustomFee(?StudentFeeStructure $studentCustomFee, FeeStructure $structure): ?float

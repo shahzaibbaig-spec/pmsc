@@ -215,27 +215,33 @@ class FeeChallanController extends Controller
         }
 
         if ($request->expectsJson()) {
+            $message = sprintf(
+                'Challans generated. Created: %d, Updated existing unpaid: %d, Existing skipped: %d, No billable heads: %d, Arrears added: %.2f.',
+                $summary['created'],
+                (int) ($summary['updated_existing'] ?? 0),
+                $summary['skipped_existing'],
+                $summary['skipped_no_items'],
+                (float) ($summary['total_arrears_added'] ?? 0)
+            );
+
             return response()->json([
-                'message' => sprintf(
-                    'Challans generated. Created: %d, Existing skipped: %d, No billable heads: %d, Arrears added: %.2f.',
-                    $summary['created'],
-                    $summary['skipped_existing'],
-                    $summary['skipped_no_items'],
-                    (float) ($summary['total_arrears_added'] ?? 0)
-                ),
+                'message' => $message,
                 'summary' => $summary,
             ]);
         }
 
+        $message = sprintf(
+            'Challans generated. Created: %d, Updated existing unpaid: %d, Existing skipped: %d, No billable heads: %d, Arrears added: %.2f.',
+            $summary['created'],
+            (int) ($summary['updated_existing'] ?? 0),
+            $summary['skipped_existing'],
+            $summary['skipped_no_items'],
+            (float) ($summary['total_arrears_added'] ?? 0)
+        );
+
         return redirect()
             ->route('principal.fees.challans.generate')
-            ->with('status', sprintf(
-                'Challans generated. Created: %d, Existing skipped: %d, No billable heads: %d, Arrears added: %.2f.',
-                $summary['created'],
-                $summary['skipped_existing'],
-                $summary['skipped_no_items'],
-                (float) ($summary['total_arrears_added'] ?? 0)
-            ))
+            ->with('status', $message)
             ->with('latest_generation_summary', $summary);
     }
 

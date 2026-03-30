@@ -101,6 +101,10 @@
                                 <p class="text-xs uppercase tracking-wider text-emerald-700">Created</p>
                                 <p class="mt-1 text-xl font-semibold text-emerald-800">{{ $latestSummary['created'] }}</p>
                             </div>
+                            <div class="rounded-md border border-sky-200 bg-sky-50 p-4">
+                                <p class="text-xs uppercase tracking-wider text-sky-700">Updated Existing</p>
+                                <p class="mt-1 text-xl font-semibold text-sky-800">{{ (int) ($latestSummary['updated_existing'] ?? 0) }}</p>
+                            </div>
                             <div class="rounded-md border border-amber-200 bg-amber-50 p-4">
                                 <p class="text-xs uppercase tracking-wider text-amber-700">Skipped Existing</p>
                                 <p class="mt-1 text-xl font-semibold text-amber-800">{{ $latestSummary['skipped_existing'] }}</p>
