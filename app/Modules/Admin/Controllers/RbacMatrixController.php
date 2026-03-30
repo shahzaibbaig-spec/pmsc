@@ -58,6 +58,13 @@ class RbacMatrixController extends Controller
         'manage_payroll_profiles',
         'generate_payroll',
         'view_payroll_reports',
+        'view_own_inventory',
+        'create_inventory_demand',
+        'view_own_inventory_demands',
+        'review_inventory_demands',
+        'fulfill_inventory_demands',
+        'submit_device_declaration',
+        'review_device_declarations',
     ];
 
     public function index(): View

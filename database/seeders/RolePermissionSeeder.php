@@ -49,6 +49,13 @@ class RolePermissionSeeder extends Seeder
             'manage_payroll_profiles',
             'generate_payroll',
             'view_payroll_reports',
+            'view_own_inventory',
+            'create_inventory_demand',
+            'view_own_inventory_demands',
+            'review_inventory_demands',
+            'fulfill_inventory_demands',
+            'submit_device_declaration',
+            'review_device_declarations',
         ];
 
         foreach ($permissions as $permission) {
@@ -74,6 +81,9 @@ class RolePermissionSeeder extends Seeder
             'view_medical_requests',
             'create_medical_requests',
             'view_teacher_performance',
+            'review_inventory_demands',
+            'fulfill_inventory_demands',
+            'review_device_declarations',
         ]);
         $teacher->syncPermissions([
             'view_attendance',
@@ -82,6 +92,10 @@ class RolePermissionSeeder extends Seeder
             'view_own_mark_entries',
             'edit_own_mark_entries',
             'delete_own_mark_entries',
+            'view_own_inventory',
+            'create_inventory_demand',
+            'view_own_inventory_demands',
+            'submit_device_declaration',
         ]);
         $doctor->syncPermissions(['view_medical_requests']);
         $student->syncPermissions([]);

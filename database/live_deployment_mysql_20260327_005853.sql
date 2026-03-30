@@ -1528,7 +1528,7 @@ CREATE TABLE `student_learning_profiles` (
   `learning_pattern` TEXT,
   `attendance_percentage` DECIMAL(20,4),
   `overall_average` DECIMAL(20,4),
-  `subject_scores` TEXT,
+  `subject_scores` JSON NULL,
   `created_at` DATETIME,
   `updated_at` DATETIME,
   PRIMARY KEY (`id`),

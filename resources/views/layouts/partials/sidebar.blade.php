@@ -71,6 +71,12 @@
         if ($sidebarUser?->can('view_payroll') || $sidebarUser?->can('view_payroll_reports')) {
             $menuItems[] = ['route' => 'principal.payroll.reports.index', 'label' => 'Payroll Reports'];
         }
+        if ($sidebarUser?->can('review_inventory_demands')) {
+            $menuItems[] = ['route' => 'inventory.demands.index', 'label' => 'Inventory Demands'];
+        }
+        if ($sidebarUser?->can('review_device_declarations')) {
+            $menuItems[] = ['route' => 'inventory.device-declarations.index', 'label' => 'Device Declarations'];
+        }
     } elseif ($sidebarUser?->hasRole('Principal')) {
         $menuItems = [
             ['route' => 'principal.dashboard', 'label' => 'Dashboard'],
@@ -99,6 +105,12 @@
         ];
         if ($sidebarUser?->can('manage_subject_assignments')) {
             $menuItems[] = ['route' => 'principal.subject-matrix.index', 'label' => 'Subject Matrix'];
+        }
+        if ($sidebarUser?->can('review_inventory_demands')) {
+            $menuItems[] = ['route' => 'inventory.demands.index', 'label' => 'Inventory Demands'];
+        }
+        if ($sidebarUser?->can('review_device_declarations')) {
+            $menuItems[] = ['route' => 'inventory.device-declarations.index', 'label' => 'Device Declarations'];
         }
     } elseif ($sidebarUser?->hasRole('Accountant')) {
         $menuItems = [
@@ -164,6 +176,14 @@
         }
 
         $menuItems[] = ['route' => 'teacher.timetable.index', 'label' => 'Timetable'];
+        if (
+            $sidebarUser?->can('view_own_inventory')
+            || $sidebarUser?->can('view_own_inventory_demands')
+            || $sidebarUser?->can('create_inventory_demand')
+            || $sidebarUser?->can('submit_device_declaration')
+        ) {
+            $menuItems[] = ['route' => 'teacher.my-inventory.index', 'label' => 'My Inventory'];
+        }
         $menuItems[] = ['route' => 'academic-calendar.index', 'label' => 'Academic Calendar'];
         $menuItems[] = ['route' => 'notifications.index', 'label' => 'Notifications'];
     } elseif ($sidebarUser?->hasRole('Doctor')) {

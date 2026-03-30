@@ -64,4 +64,24 @@ class Teacher extends Model
     {
         return $this->hasMany(ExamRoomInvigilator::class);
     }
+
+    public function inventoryDemands(): HasMany
+    {
+        return $this->hasMany(InventoryDemand::class);
+    }
+
+    public function inventoryIssues(): HasMany
+    {
+        return $this->hasMany(InventoryIssue::class);
+    }
+
+    public function deviceDeclarations(): HasMany
+    {
+        return $this->hasMany(TeacherDeviceDeclaration::class);
+    }
+
+    public function issuedAssetUnits(): HasMany
+    {
+        return $this->hasMany(InventoryAssetUnit::class, 'issued_to_teacher_id');
+    }
 }

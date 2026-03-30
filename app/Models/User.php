@@ -155,4 +155,24 @@ class User extends Authenticatable
         return $this->hasMany(PromotionCampaign::class, 'approved_by');
     }
 
+    public function reviewedInventoryDemands(): HasMany
+    {
+        return $this->hasMany(InventoryDemand::class, 'reviewed_by');
+    }
+
+    public function issuedInventoryRecords(): HasMany
+    {
+        return $this->hasMany(InventoryIssue::class, 'issued_by');
+    }
+
+    public function reviewedDeviceDeclarations(): HasMany
+    {
+        return $this->hasMany(TeacherDeviceDeclaration::class, 'reviewed_by');
+    }
+
+    public function inventoryStockMovements(): HasMany
+    {
+        return $this->hasMany(InventoryStockMovement::class, 'moved_by');
+    }
+
 }

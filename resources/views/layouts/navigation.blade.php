@@ -34,6 +34,16 @@
                         <x-nav-link :href="route('admin.rbac-matrix.index')" :active="request()->routeIs('admin.rbac-matrix.*')">
                             {{ __('RBAC Matrix') }}
                         </x-nav-link>
+                        @can('review_inventory_demands')
+                            <x-nav-link :href="route('inventory.demands.index')" :active="request()->routeIs('inventory.demands.*')">
+                                {{ __('Inventory Demands') }}
+                            </x-nav-link>
+                        @endcan
+                        @can('review_device_declarations')
+                            <x-nav-link :href="route('inventory.device-declarations.index')" :active="request()->routeIs('inventory.device-declarations.*')">
+                                {{ __('Device Declarations') }}
+                            </x-nav-link>
+                        @endcan
                     @elseif (auth()->user()->hasRole('Principal'))
                         <x-nav-link :href="route('principal.dashboard')" :active="request()->routeIs('principal.dashboard')">
                             {{ __('Principal') }}
@@ -76,6 +86,16 @@
                         <x-nav-link :href="route('principal.medical.referrals.index')" :active="request()->routeIs('principal.medical.referrals.*')">
                             {{ __('Medical') }}
                         </x-nav-link>
+                        @can('review_inventory_demands')
+                            <x-nav-link :href="route('inventory.demands.index')" :active="request()->routeIs('inventory.demands.*')">
+                                {{ __('Inventory Demands') }}
+                            </x-nav-link>
+                        @endcan
+                        @can('review_device_declarations')
+                            <x-nav-link :href="route('inventory.device-declarations.index')" :active="request()->routeIs('inventory.device-declarations.*')">
+                                {{ __('Device Declarations') }}
+                            </x-nav-link>
+                        @endcan
                         <x-nav-link :href="route('reports.index')" :active="request()->routeIs('reports.index') || request()->routeIs('reports.pdf.*')">
                             {{ __('Reports') }}
                         </x-nav-link>
@@ -104,6 +124,16 @@
                         <x-nav-link :href="route('teacher.timetable.index')" :active="request()->routeIs('teacher.timetable.*')">
                             {{ __('Timetable') }}
                         </x-nav-link>
+                        @if (
+                            auth()->user()->can('view_own_inventory')
+                            || auth()->user()->can('view_own_inventory_demands')
+                            || auth()->user()->can('create_inventory_demand')
+                            || auth()->user()->can('submit_device_declaration')
+                        )
+                            <x-nav-link :href="route('teacher.my-inventory.index')" :active="request()->routeIs('teacher.my-inventory.*')">
+                                {{ __('My Inventory') }}
+                            </x-nav-link>
+                        @endif
                         <x-nav-link :href="route('notifications.index')" :active="request()->routeIs('notifications.*')">
                             {{ __('Notifications') }}
                         </x-nav-link>
@@ -273,6 +303,16 @@
                 <x-responsive-nav-link :href="route('admin.rbac-matrix.index')" :active="request()->routeIs('admin.rbac-matrix.*')">
                     {{ __('RBAC Matrix') }}
                 </x-responsive-nav-link>
+                @can('review_inventory_demands')
+                    <x-responsive-nav-link :href="route('inventory.demands.index')" :active="request()->routeIs('inventory.demands.*')">
+                        {{ __('Inventory Demands') }}
+                    </x-responsive-nav-link>
+                @endcan
+                @can('review_device_declarations')
+                    <x-responsive-nav-link :href="route('inventory.device-declarations.index')" :active="request()->routeIs('inventory.device-declarations.*')">
+                        {{ __('Device Declarations') }}
+                    </x-responsive-nav-link>
+                @endcan
             @elseif (auth()->user()->hasRole('Principal'))
                 <x-responsive-nav-link :href="route('principal.dashboard')" :active="request()->routeIs('principal.dashboard')">
                     {{ __('Principal') }}
@@ -315,6 +355,16 @@
                 <x-responsive-nav-link :href="route('principal.medical.referrals.index')" :active="request()->routeIs('principal.medical.referrals.*')">
                     {{ __('Medical') }}
                 </x-responsive-nav-link>
+                @can('review_inventory_demands')
+                    <x-responsive-nav-link :href="route('inventory.demands.index')" :active="request()->routeIs('inventory.demands.*')">
+                        {{ __('Inventory Demands') }}
+                    </x-responsive-nav-link>
+                @endcan
+                @can('review_device_declarations')
+                    <x-responsive-nav-link :href="route('inventory.device-declarations.index')" :active="request()->routeIs('inventory.device-declarations.*')">
+                        {{ __('Device Declarations') }}
+                    </x-responsive-nav-link>
+                @endcan
                 <x-responsive-nav-link :href="route('reports.index')" :active="request()->routeIs('reports.index') || request()->routeIs('reports.pdf.*')">
                     {{ __('Reports') }}
                 </x-responsive-nav-link>
@@ -343,6 +393,16 @@
                 <x-responsive-nav-link :href="route('teacher.timetable.index')" :active="request()->routeIs('teacher.timetable.*')">
                     {{ __('Timetable') }}
                 </x-responsive-nav-link>
+                @if (
+                    auth()->user()->can('view_own_inventory')
+                    || auth()->user()->can('view_own_inventory_demands')
+                    || auth()->user()->can('create_inventory_demand')
+                    || auth()->user()->can('submit_device_declaration')
+                )
+                    <x-responsive-nav-link :href="route('teacher.my-inventory.index')" :active="request()->routeIs('teacher.my-inventory.*')">
+                        {{ __('My Inventory') }}
+                    </x-responsive-nav-link>
+                @endif
                 <x-responsive-nav-link :href="route('notifications.index')" :active="request()->routeIs('notifications.*')">
                     {{ __('Notifications') }}
                 </x-responsive-nav-link>

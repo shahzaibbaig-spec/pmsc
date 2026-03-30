@@ -1,10 +1,15 @@
 <?php
 
 use App\Http\Controllers\DashboardRedirectController;
+use App\Http\Controllers\Inventory\DeviceDeclarationReviewController;
+use App\Http\Controllers\Inventory\InventoryDemandReviewController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\Principal\TeacherAssignmentController as PrincipalTeacherAssignmentController;
 use App\Http\Controllers\Principal\AnalyticsExportController;
 use App\Http\Controllers\Principal\PrincipalPromotionController;
+use App\Http\Controllers\Teacher\TeacherDeviceDeclarationController;
+use App\Http\Controllers\Teacher\TeacherInventoryController;
+use App\Http\Controllers\Teacher\TeacherInventoryDemandController;
 use App\Http\Controllers\Teacher\TeacherPromotionController;
 use App\Modules\Academic\Controllers\AcademicCalendarController;
 use App\Modules\Academic\Controllers\AcademicNotificationController;
@@ -467,6 +472,39 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
         ->middleware(['role:Principal|Admin', 'permission:assign_teachers'])
         ->whereNumber('assignment')
         ->name('principal.teacher-assignments.destroy');
+
+    Route::prefix('inventory')
+        ->name('inventory.')
+        ->middleware(['role:Admin,Principal'])
+        ->group(function (): void {
+            Route::get('/demands', [InventoryDemandReviewController::class, 'index'])
+                ->middleware(['permission:review_inventory_demands'])
+                ->name('demands.index');
+
+            Route::get('/demands/{demand}', [InventoryDemandReviewController::class, 'show'])
+                ->middleware(['permission:review_inventory_demands'])
+                ->name('demands.show');
+
+            Route::post('/demands/{demand}/review', [InventoryDemandReviewController::class, 'review'])
+                ->middleware(['permission:review_inventory_demands'])
+                ->name('demands.review');
+
+            Route::post('/demands/{demand}/fulfill', [InventoryDemandReviewController::class, 'fulfill'])
+                ->middleware(['permission:fulfill_inventory_demands'])
+                ->name('demands.fulfill');
+
+            Route::get('/device-declarations', [DeviceDeclarationReviewController::class, 'index'])
+                ->middleware(['permission:review_device_declarations'])
+                ->name('device-declarations.index');
+
+            Route::get('/device-declarations/{declaration}', [DeviceDeclarationReviewController::class, 'show'])
+                ->middleware(['permission:review_device_declarations'])
+                ->name('device-declarations.show');
+
+            Route::post('/device-declarations/{declaration}/review', [DeviceDeclarationReviewController::class, 'review'])
+                ->middleware(['permission:review_device_declarations'])
+                ->name('device-declarations.review');
+        });
 
     Route::get('/principal/results', [PrincipalResultController::class, 'index'])
         ->middleware(['role:Admin|Principal', 'permission:generate_results'])
@@ -955,6 +993,47 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
     Route::get('/teacher/dashboard', TeacherDashboardController::class)
         ->middleware('role:Teacher')
         ->name('teacher.dashboard');
+
+    Route::prefix('teacher/my-inventory')
+        ->name('teacher.my-inventory.')
+        ->middleware(['role:Teacher'])
+        ->group(function (): void {
+            Route::get('/', [TeacherInventoryController::class, 'index'])
+                ->middleware(['permission:view_own_inventory,view_own_inventory_demands,create_inventory_demand,submit_device_declaration'])
+                ->name('index');
+
+            Route::get('/demands', [TeacherInventoryDemandController::class, 'index'])
+                ->middleware(['permission:view_own_inventory_demands'])
+                ->name('demands.index');
+
+            Route::get('/demands/create', [TeacherInventoryDemandController::class, 'create'])
+                ->middleware(['permission:create_inventory_demand'])
+                ->name('demands.create');
+
+            Route::post('/demands', [TeacherInventoryDemandController::class, 'store'])
+                ->middleware(['permission:create_inventory_demand'])
+                ->name('demands.store');
+
+            Route::get('/demands/{demand}', [TeacherInventoryDemandController::class, 'show'])
+                ->middleware(['permission:view_own_inventory_demands'])
+                ->name('demands.show');
+
+            Route::put('/demands/{demand}', [TeacherInventoryDemandController::class, 'update'])
+                ->middleware(['permission:create_inventory_demand'])
+                ->name('demands.update');
+
+            Route::get('/devices', [TeacherDeviceDeclarationController::class, 'index'])
+                ->middleware(['permission:submit_device_declaration,view_own_inventory'])
+                ->name('devices.index');
+
+            Route::get('/devices/create', [TeacherDeviceDeclarationController::class, 'create'])
+                ->middleware(['permission:submit_device_declaration'])
+                ->name('devices.create');
+
+            Route::post('/devices', [TeacherDeviceDeclarationController::class, 'store'])
+                ->middleware(['permission:submit_device_declaration'])
+                ->name('devices.store');
+        });
 
     Route::get('/teacher/attendance', [TeacherAttendanceController::class, 'index'])
         ->middleware(['role:Teacher', 'permission:mark_attendance'])

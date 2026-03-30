@@ -28,6 +28,14 @@
                 <x-ui.button href="{{ route('teacher.marks.entries.index') }}" variant="secondary">My Mark Entries</x-ui.button>
             @endcan
             <x-ui.button href="{{ route('teacher.timetable.index') }}" variant="secondary">View Timetable</x-ui.button>
+            @if (
+                auth()->user()->can('view_own_inventory')
+                || auth()->user()->can('view_own_inventory_demands')
+                || auth()->user()->can('create_inventory_demand')
+                || auth()->user()->can('submit_device_declaration')
+            )
+                <x-ui.button href="{{ route('teacher.my-inventory.index') }}" variant="secondary">My Inventory</x-ui.button>
+            @endif
             <x-ui.button href="{{ route('notifications.index') }}" variant="outline">Notifications</x-ui.button>
         </div>
     </x-ui.card>
