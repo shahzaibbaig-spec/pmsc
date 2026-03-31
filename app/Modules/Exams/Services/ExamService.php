@@ -7,6 +7,7 @@ use App\Models\Mark;
 use App\Models\Student;
 use App\Models\Teacher;
 use App\Models\TeacherAssignment;
+use App\Services\ClassAssessmentModeService;
 use App\Services\TeacherStudentVisibilityService;
 use App\Modules\Exams\Enums\ExamType;
 use Illuminate\Support\Carbon;
@@ -17,7 +18,8 @@ use RuntimeException;
 class ExamService
 {
     public function __construct(
-        private readonly TeacherStudentVisibilityService $visibilityService
+        private readonly TeacherStudentVisibilityService $visibilityService,
+        private readonly ClassAssessmentModeService $assessmentModeService
     ) {
     }
 
@@ -75,6 +77,7 @@ class ExamService
                     'subject_id' => $assignment->subject_id,
                     'subject_name' => $assignment->subject?->name ?? '',
                     'session' => $assignment->session,
+                    'uses_grade_system' => $this->assessmentModeService->classUsesGradeSystem($assignment->classRoom),
                     'class_students' => $classStudents,
                     'subject_students' => $subjectStudents,
                 ];
@@ -98,14 +101,15 @@ class ExamService
         $students = $this->studentsForExam($teacher->id, $classId, $subjectId, $session);
         $studentIds = $students->pluck('id');
         $requiresSubjectFiltering = $this->visibilityService->classRequiresSubjectFiltering($classId);
+        $usesGradeSystem = $this->assessmentModeService->classUsesGradeSystem($classId);
 
         $marksMap = collect();
         if ($exam && $studentIds->isNotEmpty()) {
             $marksMap = Mark::query()
                 ->where('exam_id', $exam->id)
                 ->whereIn('student_id', $studentIds)
-                ->get(['student_id', 'obtained_marks'])
-                ->pluck('obtained_marks', 'student_id');
+                ->get(['student_id', 'obtained_marks', 'grade'])
+                ->keyBy('student_id');
         }
 
         return [
@@ -115,13 +119,19 @@ class ExamService
                 'locked' => $exam ? $this->isExamLocked($exam) : false,
                 'locked_message' => ($exam && $this->isExamLocked($exam)) ? 'This exam is locked. Edit window (7 days) has expired.' : null,
             ],
+            'uses_grade_system' => $usesGradeSystem,
+            'grade_options' => $this->assessmentModeService->gradeScale(),
             'students' => $students->map(function (Student $student) use ($marksMap): array {
+                /** @var Mark|null $mark */
+                $mark = $marksMap->get($student->id);
+
                 return [
                     'id' => $student->id,
                     'student_id' => $student->student_id,
                     'name' => $student->name,
                     'father_name' => $student->father_name,
-                    'obtained_marks' => $marksMap->has($student->id) ? (int) $marksMap->get($student->id) : null,
+                    'obtained_marks' => $mark?->obtained_marks !== null ? (int) $mark->obtained_marks : null,
+                    'grade' => $mark?->grade,
                 ];
             })->values()->all(),
             'message' => $students->isEmpty() && $requiresSubjectFiltering
@@ -136,11 +146,12 @@ class ExamService
         int $subjectId,
         string $session,
         string $examType,
-        int $totalMarks,
+        ?int $totalMarks,
         array $records
     ): void {
         $teacher = $this->resolveTeacherOrFail($userId);
         $this->ensureTeacherAssignment($teacher->id, $classId, $subjectId, $session);
+        $usesGradeSystem = $this->assessmentModeService->classUsesGradeSystem($classId);
 
         $allowedStudents = $this->studentsForExam($teacher->id, $classId, $subjectId, $session)->keyBy('id');
         if ($allowedStudents->isEmpty()) {
@@ -156,7 +167,11 @@ class ExamService
             throw new RuntimeException('Invalid student records submitted for this exam sheet.');
         }
 
-        DB::transaction(function () use ($teacher, $classId, $subjectId, $session, $examType, $totalMarks, $records): void {
+        if (! $usesGradeSystem && ($totalMarks === null || $totalMarks <= 0)) {
+            throw new RuntimeException('Total marks are required and must be greater than 0.');
+        }
+
+        DB::transaction(function () use ($teacher, $classId, $subjectId, $session, $examType, $totalMarks, $records, $usesGradeSystem): void {
             $exam = Exam::query()
                 ->where('class_id', $classId)
                 ->where('subject_id', $subjectId)
@@ -170,7 +185,7 @@ class ExamService
                     'subject_id' => $subjectId,
                     'exam_type' => $examType,
                     'session' => $session,
-                    'total_marks' => $totalMarks,
+                    'total_marks' => $usesGradeSystem ? null : $totalMarks,
                     'teacher_id' => $teacher->id,
                 ]);
             } else {
@@ -178,27 +193,19 @@ class ExamService
                     throw new RuntimeException('Exam is locked after 7 days. You cannot edit marks.');
                 }
 
-                if ((int) $exam->total_marks !== $totalMarks) {
+                if ($usesGradeSystem) {
+                    if ($exam->total_marks !== null) {
+                        $exam->forceFill(['total_marks' => null])->save();
+                    }
+                } elseif ((int) $exam->total_marks !== $totalMarks) {
                     throw new RuntimeException('Total marks are already set for this exam and cannot be changed.');
                 }
             }
 
             foreach ($records as $row) {
                 $studentId = (int) $row['student_id'];
-                $obtainedRaw = $row['obtained_marks'];
-
-                if ($obtainedRaw === null || $obtainedRaw === '') {
-                    Mark::query()
-                        ->where('exam_id', $exam->id)
-                        ->where('student_id', $studentId)
-                        ->delete();
-                    continue;
-                }
-
-                $obtained = (int) round((float) $obtainedRaw);
-                if ($obtained < 0 || $obtained > $totalMarks) {
-                    throw new RuntimeException('Obtained marks must be between 0 and total marks.');
-                }
+                $obtainedRaw = $row['obtained_marks'] ?? null;
+                $gradeRaw = $row['grade'] ?? null;
 
                 $existingMark = Mark::query()
                     ->where('exam_id', $exam->id)
@@ -209,6 +216,51 @@ class ExamService
                     throw new RuntimeException('Some marks are older than 7 days and cannot be edited.');
                 }
 
+                if ($usesGradeSystem) {
+                    $grade = $this->assessmentModeService->normalizeGrade(is_string($gradeRaw) ? $gradeRaw : null);
+
+                    if ($grade === null) {
+                        Mark::query()
+                            ->where('exam_id', $exam->id)
+                            ->where('student_id', $studentId)
+                            ->delete();
+                        continue;
+                    }
+
+                    if (! $this->assessmentModeService->isValidGrade($grade)) {
+                        throw new RuntimeException('One or more grades are invalid for the selected class.');
+                    }
+
+                    Mark::query()->updateOrCreate(
+                        [
+                            'exam_id' => $exam->id,
+                            'student_id' => $studentId,
+                        ],
+                        [
+                            'obtained_marks' => null,
+                            'grade' => $grade,
+                            'total_marks' => null,
+                            'teacher_id' => $teacher->id,
+                            'session' => $session,
+                        ]
+                    );
+
+                    continue;
+                }
+
+                if ($obtainedRaw === null || $obtainedRaw === '') {
+                    Mark::query()
+                        ->where('exam_id', $exam->id)
+                        ->where('student_id', $studentId)
+                        ->delete();
+                    continue;
+                }
+
+                $obtained = (int) round((float) $obtainedRaw);
+                if ($obtained < 0 || $obtained > (int) $totalMarks) {
+                    throw new RuntimeException('Obtained marks must be between 0 and total marks.');
+                }
+
                 Mark::query()->updateOrCreate(
                     [
                         'exam_id' => $exam->id,
@@ -216,6 +268,7 @@ class ExamService
                     ],
                     [
                         'obtained_marks' => $obtained,
+                        'grade' => null,
                         'total_marks' => $totalMarks,
                         'teacher_id' => $teacher->id,
                         'session' => $session,

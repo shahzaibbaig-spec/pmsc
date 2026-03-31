@@ -16,6 +16,7 @@
         .table th, .table td { border: 1px solid #d1d5db; padding: 6px; font-size: 11px; }
         .table th { background: #f3f4f6; text-align: left; }
         .summary { margin-top: 10px; font-size: 12px; }
+        .summary p { margin: 4px 0; }
         .sign { margin-top: 28px; width: 100%; }
         .sign td { width: 50%; text-align: center; font-size: 12px; vertical-align: bottom; }
         .line { border-top: 1px solid #111827; width: 75%; margin: 0 auto 6px auto; }
@@ -25,7 +26,7 @@
     <div class="header">
         <div>
             <p class="title">{{ $report['school']['name'] }}</p>
-            <p class="sub">Class Result Report</p>
+            <p class="sub">{{ $report['uses_grade_system'] ? 'Early Years Grade Report' : 'Class Result Report' }}</p>
         </div>
         <div>
             @if(!empty($report['school']['logo_absolute_path']))
@@ -49,10 +50,15 @@
                 <th>Student ID</th>
                 <th>Student Name</th>
                 <th>Subjects</th>
-                <th>Total Marks</th>
-                <th>Obtained</th>
-                <th>%</th>
-                <th>Grade</th>
+                @if ($report['uses_grade_system'])
+                    <th>Overall Grade</th>
+                    <th>Description</th>
+                @else
+                    <th>Total Marks</th>
+                    <th>Obtained</th>
+                    <th>%</th>
+                    <th>Grade</th>
+                @endif
             </tr>
         </thead>
         <tbody>
@@ -61,14 +67,19 @@
                     <td>{{ $row['student_id'] }}</td>
                     <td>{{ $row['student_name'] }}</td>
                     <td>{{ $row['subjects_count'] }}</td>
-                    <td>{{ $row['total_marks'] }}</td>
-                    <td>{{ $row['obtained_marks'] }}</td>
-                    <td>{{ $row['percentage'] }}%</td>
-                    <td>{{ $row['grade'] }}</td>
+                    @if ($report['uses_grade_system'])
+                        <td>{{ $row['grade'] ?? '-' }}</td>
+                        <td>{{ $row['grade_label'] ?? '-' }}</td>
+                    @else
+                        <td>{{ $row['total_marks'] }}</td>
+                        <td>{{ $row['obtained_marks'] }}</td>
+                        <td>{{ $row['percentage'] }}%</td>
+                        <td>{{ $row['grade'] }}</td>
+                    @endif
                 </tr>
             @empty
                 <tr>
-                    <td colspan="7" style="text-align:center;">No result data found.</td>
+                    <td colspan="{{ $report['uses_grade_system'] ? 5 : 7 }}" style="text-align:center;">No result data found.</td>
                 </tr>
             @endforelse
         </tbody>
@@ -76,8 +87,12 @@
 
     <div class="summary">
         <p><strong>Students:</strong> {{ $report['summary']['students_count'] }}</p>
-        <p><strong>Total Marks:</strong> {{ $report['summary']['total_marks'] }} | <strong>Obtained:</strong> {{ $report['summary']['obtained_marks'] }}</p>
-        <p><strong>Overall %:</strong> {{ $report['summary']['overall_percentage'] }}% | <strong>Pass Rate:</strong> {{ $report['summary']['pass_rate'] }}%</p>
+        @if ($report['uses_grade_system'])
+            <p><strong>Assessment Mode:</strong> Grade-based reporting for early years.</p>
+        @else
+            <p><strong>Total Marks:</strong> {{ $report['summary']['total_marks'] }} | <strong>Obtained:</strong> {{ $report['summary']['obtained_marks'] }}</p>
+            <p><strong>Overall %:</strong> {{ $report['summary']['overall_percentage'] }}% | <strong>Pass Rate:</strong> {{ $report['summary']['pass_rate'] }}%</p>
+        @endif
     </div>
 
     <table class="sign">
@@ -96,4 +111,3 @@
     </table>
 </body>
 </html>
-

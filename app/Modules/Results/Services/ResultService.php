@@ -8,14 +8,20 @@ use App\Models\SchoolSetting;
 use App\Models\Student;
 use App\Models\TeacherAssignment;
 use App\Models\User;
+use App\Services\ClassAssessmentModeService;
 use App\Notifications\ResultsPublishedNotification;
 use App\Modules\Exams\Enums\ExamType;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Notification;
 use RuntimeException;
 
 class ResultService
 {
+    public function __construct(private readonly ClassAssessmentModeService $assessmentModeService)
+    {
+    }
+
     public function generateStudentResult(int $studentId, string $session, string $examType): array
     {
         $student = Student::query()
@@ -43,24 +49,34 @@ class ResultService
             throw new RuntimeException('No marks found for selected student, session, and exam type.');
         }
 
-        $rows = $marks->map(function (Mark $mark): array {
+        $usesGradeSystem = $this->assessmentModeService->classUsesGradeSystem($student->classRoom);
+
+        $rows = $marks->map(function (Mark $mark) use ($usesGradeSystem): array {
             $subjectName = $mark->exam?->subject?->name ?? 'Subject';
-            $total = (int) $mark->total_marks;
-            $obtained = (int) $mark->obtained_marks;
-            $percentage = $total > 0 ? round(($obtained / $total) * 100, 2) : 0.0;
+            $grade = $usesGradeSystem
+                ? $this->assessmentModeService->normalizeGrade($mark->grade)
+                : null;
+            $total = $usesGradeSystem ? null : (int) $mark->total_marks;
+            $obtained = $usesGradeSystem ? null : (int) $mark->obtained_marks;
+            $percentage = $usesGradeSystem
+                ? null
+                : ($total > 0 ? round(($obtained / $total) * 100, 2) : 0.0);
 
             return [
                 'subject' => $subjectName,
                 'total_marks' => $total,
                 'obtained_marks' => $obtained,
                 'percentage' => $percentage,
-                'grade' => $this->computeGrade($percentage),
+                'grade' => $usesGradeSystem ? $grade : $this->computeGrade((float) $percentage),
+                'grade_label' => $usesGradeSystem
+                    ? $this->assessmentModeService->gradeLabel($grade)
+                    : null,
             ];
         })->sortBy('subject')->values();
 
-        $totalMarks = (int) $rows->sum('total_marks');
-        $obtainedMarks = (int) $rows->sum('obtained_marks');
-        $overallPercentage = $totalMarks > 0 ? round(($obtainedMarks / $totalMarks) * 100, 2) : 0.0;
+        $summary = $usesGradeSystem
+            ? $this->gradeSummary($rows)
+            : $this->numericSummary($rows);
 
         $classTeacher = TeacherAssignment::query()
             ->with('teacher.user:id,name')
@@ -90,13 +106,9 @@ class ResultService
                 'exam_type_label' => $this->examTypeLabel($examType),
                 'generated_at' => now()->toDateString(),
             ],
+            'uses_grade_system' => $usesGradeSystem,
             'subjects' => $rows->all(),
-            'summary' => [
-                'total_marks' => $totalMarks,
-                'obtained_marks' => $obtainedMarks,
-                'percentage' => $overallPercentage,
-                'grade' => $this->computeGrade($overallPercentage),
-            ],
+            'summary' => $summary,
             'signatures' => [
                 'class_teacher' => $classTeacher?->teacher?->user?->name ?? 'Class Teacher',
                 'principal' => $principal?->name ?? 'Principal',
@@ -154,6 +166,7 @@ class ResultService
                 'exam_type_label' => $this->examTypeLabel($examType),
                 'generated_at' => now()->toDateString(),
             ],
+            'uses_grade_system' => $this->assessmentModeService->classUsesGradeSystem($classRoom),
             'summary' => [
                 'students_total' => $students->count(),
                 'cards_generated' => count($cards),
@@ -294,5 +307,35 @@ class ResultService
         $dob = $dateOfBirth instanceof Carbon ? $dateOfBirth : Carbon::parse($dateOfBirth);
 
         return $dob->age;
+    }
+
+    private function numericSummary(Collection $rows): array
+    {
+        $totalMarks = (int) $rows->sum('total_marks');
+        $obtainedMarks = (int) $rows->sum('obtained_marks');
+        $overallPercentage = $totalMarks > 0 ? round(($obtainedMarks / $totalMarks) * 100, 2) : 0.0;
+
+        return [
+            'total_marks' => $totalMarks,
+            'obtained_marks' => $obtainedMarks,
+            'percentage' => $overallPercentage,
+            'grade' => $this->computeGrade($overallPercentage),
+            'grade_label' => null,
+            'overall_performance' => null,
+        ];
+    }
+
+    private function gradeSummary(Collection $rows): array
+    {
+        $dominantGrade = $this->assessmentModeService->dominantGrade($rows->pluck('grade')->all());
+
+        return [
+            'total_marks' => null,
+            'obtained_marks' => null,
+            'percentage' => null,
+            'grade' => $dominantGrade,
+            'grade_label' => $this->assessmentModeService->gradeLabel($dominantGrade),
+            'overall_performance' => $this->assessmentModeService->overallPerformanceLabel($rows->pluck('grade')->all()),
+        ];
     }
 }

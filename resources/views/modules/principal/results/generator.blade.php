@@ -161,7 +161,7 @@
                     </div>
                 </section>
 
-                <section class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <section x-show="!result?.uses_grade_system" class="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                         <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Total Marks</p>
                         <p class="mt-2 text-2xl font-semibold text-slate-900" x-text="result?.summary?.total_marks ?? '-'"></p>
@@ -172,11 +172,30 @@
                     </article>
                     <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                         <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Overall Percentage</p>
-                        <p class="mt-2 text-2xl font-semibold text-slate-900" x-text="result?.summary ? `${result.summary.percentage}%` : '-'"></p>
+                        <p class="mt-2 text-2xl font-semibold text-slate-900" x-text="result?.summary?.percentage !== null && result?.summary?.percentage !== undefined ? `${result.summary.percentage}%` : '-'"></p>
                     </article>
                     <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                         <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Overall Grade</p>
                         <p class="mt-2 text-2xl font-semibold text-slate-900" x-text="result?.summary?.grade ?? '-'"></p>
+                    </article>
+                </section>
+
+                <section x-show="result?.uses_grade_system" class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                        <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Overall Grade</p>
+                        <p class="mt-2 text-2xl font-semibold text-slate-900" x-text="result?.summary?.grade ?? '-'"></p>
+                    </article>
+                    <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                        <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Descriptor</p>
+                        <p class="mt-2 text-2xl font-semibold text-slate-900" x-text="result?.summary?.grade_label ?? '-'"></p>
+                    </article>
+                    <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                        <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Overall Performance</p>
+                        <p class="mt-2 text-lg font-semibold text-slate-900" x-text="result?.summary?.overall_performance ?? '-'"></p>
+                    </article>
+                    <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                        <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Assessment Mode</p>
+                        <p class="mt-2 text-lg font-semibold text-indigo-700">Grade-based</p>
                     </article>
                 </section>
 
@@ -196,15 +215,36 @@
                         <div class="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700" x-text="result?.student?.class || '-'"></div>
                     </div>
 
+                    <div
+                        x-show="result?.uses_grade_system"
+                        class="mt-4 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-800"
+                    >
+                        Grade-based report for PG, Prep, Nursery, and Class 1. Totals, percentages, and positions are not used.
+                    </div>
+
                     <div class="mt-4 overflow-x-auto">
                         <table class="min-w-full divide-y divide-slate-200">
                             <thead class="bg-slate-50">
                                 <tr>
                                     <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Subject</th>
-                                    <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Total Marks</th>
-                                    <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Obtained</th>
-                                    <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Percentage</th>
-                                    <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Grade</th>
+                                    <template x-if="result?.uses_grade_system">
+                                        <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Grade</th>
+                                    </template>
+                                    <template x-if="result?.uses_grade_system">
+                                        <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Description</th>
+                                    </template>
+                                    <template x-if="!result?.uses_grade_system">
+                                        <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Total Marks</th>
+                                    </template>
+                                    <template x-if="!result?.uses_grade_system">
+                                        <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Obtained</th>
+                                    </template>
+                                    <template x-if="!result?.uses_grade_system">
+                                        <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Percentage</th>
+                                    </template>
+                                    <template x-if="!result?.uses_grade_system">
+                                        <th class="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Grade</th>
+                                    </template>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-100 bg-white">
@@ -215,16 +255,30 @@
                                 </template>
                                 <template x-if="!previewLoading && (!result || (result.subjects || []).length === 0)">
                                     <tr>
-                                        <td colspan="5" class="px-4 py-8 text-center text-sm text-slate-500">Preview a student result to view subject-wise marks.</td>
+                                        <td :colspan="result?.uses_grade_system ? 3 : 5" class="px-4 py-8 text-center text-sm text-slate-500">Preview a student result to view subject-wise results.</td>
                                     </tr>
                                 </template>
                                 <template x-for="row in (result?.subjects || [])" :key="`subject-${row.subject}`">
                                     <tr>
                                         <td class="px-4 py-2 text-sm text-slate-700" x-text="row.subject"></td>
-                                        <td class="px-4 py-2 text-sm text-slate-700" x-text="row.total_marks"></td>
-                                        <td class="px-4 py-2 text-sm text-slate-700" x-text="row.obtained_marks"></td>
-                                        <td class="px-4 py-2 text-sm text-slate-700" x-text="`${row.percentage}%`"></td>
-                                        <td class="px-4 py-2 text-sm font-semibold text-slate-900" x-text="row.grade"></td>
+                                        <template x-if="result?.uses_grade_system">
+                                            <td class="px-4 py-2 text-sm font-semibold text-slate-900" x-text="row.grade || '-'"></td>
+                                        </template>
+                                        <template x-if="result?.uses_grade_system">
+                                            <td class="px-4 py-2 text-sm text-slate-700" x-text="row.grade_label || '-'"></td>
+                                        </template>
+                                        <template x-if="!result?.uses_grade_system">
+                                            <td class="px-4 py-2 text-sm text-slate-700" x-text="row.total_marks"></td>
+                                        </template>
+                                        <template x-if="!result?.uses_grade_system">
+                                            <td class="px-4 py-2 text-sm text-slate-700" x-text="row.obtained_marks"></td>
+                                        </template>
+                                        <template x-if="!result?.uses_grade_system">
+                                            <td class="px-4 py-2 text-sm text-slate-700" x-text="row.percentage !== null && row.percentage !== undefined ? `${row.percentage}%` : '-'"></td>
+                                        </template>
+                                        <template x-if="!result?.uses_grade_system">
+                                            <td class="px-4 py-2 text-sm font-semibold text-slate-900" x-text="row.grade"></td>
+                                        </template>
                                     </tr>
                                 </template>
                             </tbody>

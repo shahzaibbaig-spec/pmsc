@@ -6,8 +6,10 @@ use App\Http\Controllers\Controller;
 use App\Models\Mark;
 use App\Models\SchoolClass;
 use App\Models\Subject;
+use App\Services\ClassAssessmentModeService;
 use App\Services\TeacherStudentVisibilityService;
 use App\Modules\Exams\Enums\ExamType;
+use App\Modules\Exams\Requests\UpdateMarkEntryRequest;
 use App\Modules\Exams\Services\TeacherMarkAuditService;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\RedirectResponse;
@@ -19,7 +21,8 @@ class TeacherMarkEntryController extends Controller
 {
     public function __construct(
         private readonly TeacherMarkAuditService $auditService,
-        private readonly TeacherStudentVisibilityService $visibilityService
+        private readonly TeacherStudentVisibilityService $visibilityService,
+        private readonly ClassAssessmentModeService $assessmentModeService
     ) {}
 
     public function index(Request $request): View
@@ -86,7 +89,11 @@ class TeacherMarkEntryController extends Controller
 
         $entries = $entriesQuery->paginate(15)->withQueryString();
         $entries->getCollection()->transform(function (Mark $mark): Mark {
+            $usesGradeSystem = $this->assessmentModeService->classUsesGradeSystem($mark->exam?->classRoom);
+
             $mark->setAttribute('can_edit', $this->auditService->canEdit($mark));
+            $mark->setAttribute('uses_grade_system', $usesGradeSystem);
+            $mark->setAttribute('grade_label', $usesGradeSystem ? $this->assessmentModeService->gradeLabel($mark->grade) : null);
 
             return $mark;
         });
@@ -155,28 +162,30 @@ class TeacherMarkEntryController extends Controller
         if (! $this->auditService->canEdit($mark)) {
             return redirect()
                 ->route('teacher.marks.entries.index')
-                ->with('error', 'Editing window has expired. You can edit marks only within 7 days of entry.');
+                ->with('error', 'Editing window has expired. You can edit entries only within 7 days of entry.');
         }
 
         $mark->load([
             'student:id,student_id,name',
-            'exam:id,class_id,subject_id,exam_type',
+            'exam:id,class_id,subject_id,exam_type,total_marks',
             'exam.classRoom:id,name,section',
             'exam.subject:id,name',
         ]);
 
+        $usesGradeSystem = $this->assessmentModeService->classUsesGradeSystem($mark->exam?->classRoom);
+
         return view('modules.teacher.marks.edit', [
             'mark' => $mark,
             'examTypeLabel' => $this->examTypeLabel($mark->exam?->exam_type),
+            'usesGradeSystem' => $usesGradeSystem,
+            'gradeOptions' => $this->assessmentModeService->gradeScale(),
+            'gradeLabel' => $usesGradeSystem ? $this->assessmentModeService->gradeLabel($mark->grade) : null,
         ]);
     }
 
-    public function update(Request $request, Mark $mark): RedirectResponse
+    public function update(UpdateMarkEntryRequest $request, Mark $mark): RedirectResponse
     {
-        $validated = $request->validate([
-            'obtained_marks' => ['required', 'integer', 'min:0'],
-            'edit_reason' => ['required', 'string', 'max:1000'],
-        ]);
+        $validated = $request->validated();
 
         try {
             $teacher = $this->auditService->resolveTeacherOrFail((int) auth()->id());
@@ -185,7 +194,10 @@ class TeacherMarkEntryController extends Controller
             $this->auditService->updateMarkEntry(
                 (int) auth()->id(),
                 $mark,
-                (int) $validated['obtained_marks'],
+                array_key_exists('obtained_marks', $validated) && $validated['obtained_marks'] !== null
+                    ? (int) $validated['obtained_marks']
+                    : null,
+                $validated['grade'] ?? null,
                 trim((string) $validated['edit_reason'])
             );
         } catch (AuthorizationException $exception) {
@@ -198,7 +210,7 @@ class TeacherMarkEntryController extends Controller
 
         return redirect()
             ->route('teacher.marks.entries.index')
-            ->with('status', 'Mark entry updated successfully.');
+            ->with('status', 'Assessment entry updated successfully.');
     }
 
     public function destroy(Request $request, Mark $mark): RedirectResponse
@@ -224,7 +236,7 @@ class TeacherMarkEntryController extends Controller
 
         return redirect()
             ->route('teacher.marks.entries.index')
-            ->with('status', 'Mark entry deleted successfully.');
+            ->with('status', 'Assessment entry deleted successfully.');
     }
 
     private function normalizedFilters(array $filters): array

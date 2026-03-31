@@ -1,7 +1,7 @@
 <x-app-layout>
     <x-slot name="header">
         <h2 class="font-semibold text-xl text-gray-800 leading-tight">
-            My Mark Entries
+            My Assessment Entries
         </h2>
     </x-slot>
 
@@ -111,8 +111,8 @@
                                 <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-600">Class</th>
                                 <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-600">Subject</th>
                                 <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-600">Exam</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-600">Obtained Marks</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-600">Total Marks</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-600">Recorded Result</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-600">Entry Mode</th>
                                 <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-600">Entered At</th>
                                 <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-600">Actions</th>
                             </tr>
@@ -125,6 +125,8 @@
                                     $examLabel = $examTypeLabels[$examTypeValue] ?? str_replace('_', ' ', ucfirst($examTypeValue));
                                     $classLabel = trim(($mark->exam?->classRoom?->name ?? 'Class').' '.($mark->exam?->classRoom?->section ?? ''));
                                     $canEdit = (bool) $mark->getAttribute('can_edit');
+                                    $usesGradeSystem = (bool) $mark->getAttribute('uses_grade_system');
+                                    $gradeLabel = $mark->getAttribute('grade_label');
                                 @endphp
                                 <tr>
                                     <td class="sticky left-0 z-10 bg-white px-4 py-3 text-sm text-gray-800">
@@ -137,8 +139,22 @@
                                         <div class="font-medium">{{ $examLabel }}</div>
                                         <div class="text-xs text-gray-500">{{ $mark->session }}</div>
                                     </td>
-                                    <td class="px-4 py-3 text-sm font-semibold text-gray-900">{{ $mark->obtained_marks }}</td>
-                                    <td class="px-4 py-3 text-sm text-gray-700">{{ $mark->total_marks }}</td>
+                                    <td class="px-4 py-3 text-sm text-gray-700">
+                                        @if ($usesGradeSystem)
+                                            <div class="font-semibold text-gray-900">{{ $mark->grade ?? '-' }}</div>
+                                            <div class="text-xs text-gray-500">{{ $gradeLabel ?? 'Grade-based entry' }}</div>
+                                        @else
+                                            <div class="font-semibold text-gray-900">{{ $mark->obtained_marks }}</div>
+                                            <div class="text-xs text-gray-500">out of {{ $mark->total_marks }}</div>
+                                        @endif
+                                    </td>
+                                    <td class="px-4 py-3 text-sm text-gray-700">
+                                        @if ($usesGradeSystem)
+                                            <span class="inline-flex rounded-full bg-indigo-100 px-2 py-1 text-xs font-semibold text-indigo-700">Grade</span>
+                                        @else
+                                            <span class="inline-flex rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">Marks</span>
+                                        @endif
+                                    </td>
                                     <td class="px-4 py-3 text-sm text-gray-700">{{ optional($mark->created_at)->format('Y-m-d H:i') }}</td>
                                     <td class="px-4 py-3 text-sm">
                                         <div class="flex flex-wrap items-center gap-2">
@@ -166,7 +182,7 @@
                             @empty
                                 <tr>
                                     <td colspan="8" class="px-4 py-8 text-center text-sm text-gray-500">
-                                        No mark entries found.
+                                        No assessment entries found.
                                     </td>
                                 </tr>
                             @endforelse

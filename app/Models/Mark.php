@@ -12,10 +12,19 @@ class Mark extends Model
         'exam_id',
         'student_id',
         'obtained_marks',
+        'grade',
         'total_marks',
         'teacher_id',
         'session',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'obtained_marks' => 'integer',
+            'total_marks' => 'integer',
+        ];
+    }
 
     public function exam(): BelongsTo
     {

@@ -15,6 +15,7 @@ class StudentResult extends Model
         'exam_name',
         'total_marks',
         'obtained_marks',
+        'grade',
         'result_date',
     ];
 
@@ -44,4 +45,3 @@ class StudentResult extends Model
         return round(((int) $this->obtained_marks / (int) $this->total_marks) * 100, 2);
     }
 }
-

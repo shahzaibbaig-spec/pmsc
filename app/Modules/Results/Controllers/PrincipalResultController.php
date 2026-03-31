@@ -29,20 +29,7 @@ class PrincipalResultController extends Controller
 
     public function index(): View
     {
-        $classes = SchoolClass::query()
-            ->orderBy('name')
-            ->orderBy('section')
-            ->get(['id', 'name', 'section']);
-
-        $sessions = $this->sessionOptions();
-
-        return view('modules.principal.results.index', [
-            'classes' => $classes,
-            'sessions' => $sessions,
-            'defaultSession' => $sessions[1] ?? ($sessions[0] ?? now()->year.'-'.(now()->year + 1)),
-            'examTypes' => ExamType::options(),
-            'hasMarks' => Mark::query()->exists(),
-        ]);
+        return $this->generator(request());
     }
 
     public function generator(Request $request): View

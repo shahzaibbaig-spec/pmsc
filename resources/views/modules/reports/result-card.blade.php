@@ -15,16 +15,20 @@
         .table th, .table td { border: 1px solid #d1d5db; padding: 8px; font-size: 12px; }
         .table th { background: #f3f4f6; text-align: left; }
         .summary { margin-top: 14px; font-size: 13px; }
+        .summary p { margin: 4px 0; }
         .signatures { margin-top: 36px; width: 100%; }
         .signatures td { width: 50%; vertical-align: bottom; text-align: center; font-size: 13px; }
         .line { border-top: 1px solid #111827; width: 75%; margin: 0 auto 6px auto; }
+        .note { margin: 8px 0 0; font-size: 12px; color: #4b5563; }
     </style>
 </head>
 <body>
     <div class="header">
         <div>
             <h1 class="school">{{ $result['school']['name'] }}</h1>
-            <p style="margin: 4px 0 0 0; font-size: 13px;">Student Result Card</p>
+            <p style="margin: 4px 0 0 0; font-size: 13px;">
+                {{ $result['uses_grade_system'] ? 'Early Years Grade Report' : 'Student Result Card' }}
+            </p>
         </div>
         <div>
             @if(!empty($result['school']['logo_absolute_path']))
@@ -54,28 +58,45 @@
         <thead>
             <tr>
                 <th>Subject</th>
-                <th>Total Marks</th>
-                <th>Obtained</th>
-                <th>Grade</th>
+                @if ($result['uses_grade_system'])
+                    <th>Grade</th>
+                    <th>Description</th>
+                @else
+                    <th>Total Marks</th>
+                    <th>Obtained</th>
+                    <th>Grade</th>
+                @endif
             </tr>
         </thead>
         <tbody>
             @foreach($result['subjects'] as $row)
                 <tr>
                     <td>{{ $row['subject'] }}</td>
-                    <td>{{ $row['total_marks'] }}</td>
-                    <td>{{ $row['obtained_marks'] }}</td>
-                    <td>{{ $row['grade'] }}</td>
+                    @if ($result['uses_grade_system'])
+                        <td>{{ $row['grade'] ?? '-' }}</td>
+                        <td>{{ $row['grade_label'] ?? '-' }}</td>
+                    @else
+                        <td>{{ $row['total_marks'] }}</td>
+                        <td>{{ $row['obtained_marks'] }}</td>
+                        <td>{{ $row['grade'] }}</td>
+                    @endif
                 </tr>
             @endforeach
         </tbody>
     </table>
 
     <div class="summary">
-        <p><strong>Total Marks:</strong> {{ $result['summary']['total_marks'] }}</p>
-        <p><strong>Obtained Marks:</strong> {{ $result['summary']['obtained_marks'] }}</p>
-        <p><strong>Overall Percentage:</strong> {{ $result['summary']['percentage'] }}%</p>
-        <p><strong>Overall Grade:</strong> {{ $result['summary']['grade'] }}</p>
+        @if ($result['uses_grade_system'])
+            <p><strong>Overall Grade:</strong> {{ $result['summary']['grade'] ?? '-' }}</p>
+            <p><strong>Descriptor:</strong> {{ $result['summary']['grade_label'] ?? '-' }}</p>
+            <p><strong>Overall Performance:</strong> {{ $result['summary']['overall_performance'] ?? '-' }}</p>
+            <p class="note">This internal report uses grade descriptors for PG, Prep, Nursery, and Class 1 instead of numeric marks.</p>
+        @else
+            <p><strong>Total Marks:</strong> {{ $result['summary']['total_marks'] }}</p>
+            <p><strong>Obtained Marks:</strong> {{ $result['summary']['obtained_marks'] }}</p>
+            <p><strong>Overall Percentage:</strong> {{ $result['summary']['percentage'] }}%</p>
+            <p><strong>Overall Grade:</strong> {{ $result['summary']['grade'] }}</p>
+        @endif
     </div>
 
     <table class="signatures">

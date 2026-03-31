@@ -23,6 +23,7 @@ class Exam extends Model
     {
         return [
             'exam_type' => ExamType::class,
+            'total_marks' => 'integer',
             'locked_at' => 'datetime',
         ];
     }
@@ -47,4 +48,3 @@ class Exam extends Model
         return $this->hasMany(Mark::class);
     }
 }
-

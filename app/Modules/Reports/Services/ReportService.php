@@ -9,6 +9,7 @@ use App\Models\SchoolSetting;
 use App\Models\Student;
 use App\Models\TeacherAssignment;
 use App\Models\User;
+use App\Services\ClassAssessmentModeService;
 use App\Modules\Exams\Enums\ExamType;
 use App\Modules\Results\Services\ResultService;
 use Illuminate\Support\Collection;
@@ -16,7 +17,10 @@ use RuntimeException;
 
 class ReportService
 {
-    public function __construct(private readonly ResultService $resultService)
+    public function __construct(
+        private readonly ResultService $resultService,
+        private readonly ClassAssessmentModeService $assessmentModeService
+    )
     {
     }
 
@@ -64,12 +68,16 @@ class ReportService
         }
 
         $grouped = $marks->groupBy('student_id');
+        $usesGradeSystem = $this->assessmentModeService->classUsesGradeSystem($classRoom);
 
-        $students = $grouped->map(function (Collection $rows): array {
+        $students = $grouped->map(function (Collection $rows) use ($usesGradeSystem): array {
             $student = $rows->first()?->student;
-            $totalMarks = (int) $rows->sum('total_marks');
-            $obtainedMarks = (int) $rows->sum('obtained_marks');
-            $percentage = $totalMarks > 0 ? round(($obtainedMarks / $totalMarks) * 100, 2) : 0.0;
+            $grade = $usesGradeSystem
+                ? $this->assessmentModeService->dominantGrade($rows->pluck('grade')->all())
+                : null;
+            $totalMarks = $usesGradeSystem ? null : (int) $rows->sum('total_marks');
+            $obtainedMarks = $usesGradeSystem ? null : (int) $rows->sum('obtained_marks');
+            $percentage = $usesGradeSystem || ! $totalMarks ? null : round(($obtainedMarks / $totalMarks) * 100, 2);
 
             return [
                 'student_id' => $student?->student_id ?? '-',
@@ -78,7 +86,8 @@ class ReportService
                 'total_marks' => $totalMarks,
                 'obtained_marks' => $obtainedMarks,
                 'percentage' => $percentage,
-                'grade' => $this->resultService->computeGrade($percentage),
+                'grade' => $usesGradeSystem ? $grade : $this->resultService->computeGrade((float) $percentage),
+                'grade_label' => $usesGradeSystem ? $this->assessmentModeService->gradeLabel($grade) : null,
             ];
         })->sortBy('student_name')->values()->all();
 
@@ -91,11 +100,17 @@ class ReportService
 
         $principal = User::role('Principal')->orderBy('id')->first(['id', 'name']);
 
-        $totalMarksAll = array_sum(array_column($students, 'total_marks'));
-        $obtainedMarksAll = array_sum(array_column($students, 'obtained_marks'));
-        $overallPercentage = $totalMarksAll > 0 ? round(($obtainedMarksAll / $totalMarksAll) * 100, 2) : 0.0;
-        $passCount = collect($students)->filter(fn (array $row): bool => $row['percentage'] >= 60)->count();
-        $passRate = count($students) > 0 ? round(($passCount / count($students)) * 100, 2) : 0.0;
+        $totalMarksAll = $usesGradeSystem ? null : array_sum(array_map(fn (array $row): int => (int) ($row['total_marks'] ?? 0), $students));
+        $obtainedMarksAll = $usesGradeSystem ? null : array_sum(array_map(fn (array $row): int => (int) ($row['obtained_marks'] ?? 0), $students));
+        $overallPercentage = ! $usesGradeSystem && $totalMarksAll > 0
+            ? round(($obtainedMarksAll / $totalMarksAll) * 100, 2)
+            : null;
+        $passCount = ! $usesGradeSystem
+            ? collect($students)->filter(fn (array $row): bool => (float) ($row['percentage'] ?? 0) >= 60)->count()
+            : null;
+        $passRate = ! $usesGradeSystem && count($students) > 0 && $passCount !== null
+            ? round(($passCount / count($students)) * 100, 2)
+            : null;
 
         return [
             'school' => $this->schoolMeta(),
@@ -109,6 +124,7 @@ class ReportService
                 'exam_type_label' => $this->examTypeLabel($examType),
                 'generated_at' => now()->toDateString(),
             ],
+            'uses_grade_system' => $usesGradeSystem,
             'students' => $students,
             'summary' => [
                 'students_count' => count($students),

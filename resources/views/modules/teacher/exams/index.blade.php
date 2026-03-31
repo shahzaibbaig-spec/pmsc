@@ -1,7 +1,7 @@
 <x-app-layout>
     <x-slot name="header">
         <h2 class="font-semibold text-xl text-gray-800 leading-tight">
-            Examination Marks Entry
+            Examination Assessment Entry
         </h2>
     </x-slot>
 
@@ -10,11 +10,11 @@
             <div class="overflow-hidden rounded-lg bg-white shadow-sm">
                 <div class="p-5 sm:p-6">
                     <h3 class="text-lg font-medium text-gray-900">Exam Setup</h3>
-                    <p class="mt-1 text-sm text-gray-600">Select class, subject, exam type and session to load marks. Tables are compact and mobile-friendly.</p>
+                    <p class="mt-1 text-sm text-gray-600">Select class, subject, exam type, and session to load the assessment sheet. PG, Prep, Nursery, and Class 1 use grades only; higher classes continue with numeric marks.</p>
                     <p class="mt-1 text-sm text-indigo-700">Only students enrolled in the selected subject are shown.</p>
                     @if (! $hasAssignments)
                         <div class="mt-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                            No subject assignment found for your account. Ask Principal to assign your class + subject for the current session.
+                            No subject assignment found for your account. Ask Principal to assign your class and subject for the current session.
                         </div>
                     @endif
 
@@ -47,10 +47,18 @@
                             </select>
                         </div>
 
-                        <div>
+                        <div id="totalMarksWrapper">
                             <x-input-label for="total_marks" value="Total Marks" />
                             <x-text-input id="total_marks" type="number" min="1" class="mt-1 block min-h-11 w-full" placeholder="100" />
                         </div>
+                    </div>
+
+                    <div id="assessmentModeBadge" class="mt-4 inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                        Numeric marks mode
+                    </div>
+
+                    <div id="gradeHelpBox" class="mt-3 hidden rounded-md border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm text-indigo-800">
+                        This class uses grade-based assessment only. Choose one of: A*, A, B, C, D, E, F, G, U.
                     </div>
 
                     <div class="mt-4 flex flex-wrap gap-2">
@@ -58,7 +66,7 @@
                             Load Students
                         </button>
                         <button id="saveMarksBtn" type="button" class="inline-flex min-h-11 items-center rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700">
-                            Save Marks
+                            Save Entries
                         </button>
                     </div>
 
@@ -86,7 +94,7 @@
                                 <tr>
                                     <th class="sticky left-0 z-20 bg-gray-50 px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-600">Student</th>
                                     <th class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-600">Father Name</th>
-                                    <th class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-600">Obtained Marks</th>
+                                    <th id="assessmentColumnHeader" class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-600">Obtained Marks</th>
                                 </tr>
                             </thead>
                             <tbody id="marksBody" class="divide-y divide-gray-200 bg-white">
@@ -119,6 +127,10 @@
         const subjectInput = document.getElementById('subject_id');
         const examTypeInput = document.getElementById('exam_type');
         const totalMarksInput = document.getElementById('total_marks');
+        const totalMarksWrapper = document.getElementById('totalMarksWrapper');
+        const assessmentModeBadge = document.getElementById('assessmentModeBadge');
+        const gradeHelpBox = document.getElementById('gradeHelpBox');
+        const assessmentColumnHeader = document.getElementById('assessmentColumnHeader');
         const loadSheetBtn = document.getElementById('loadSheetBtn');
         const saveMarksBtn = document.getElementById('saveMarksBtn');
         const marksBody = document.getElementById('marksBody');
@@ -134,6 +146,8 @@
             page: 1,
             per_page: 10,
             emptyMessage: 'No students found for selected exam setup.',
+            usesGradeSystem: false,
+            gradeOptions: [],
         };
 
         function showMessage(message, type = 'success') {
@@ -164,6 +178,61 @@
         function filteredAssignments() {
             const session = sessionInput.value;
             return assignments.filter(item => item.session === session);
+        }
+
+        function currentAssignment() {
+            const session = sessionInput.value;
+            const classId = Number(classInput.value);
+            const subjectId = Number(subjectInput.value);
+
+            return assignments.find(item =>
+                item.session === session &&
+                Number(item.class_id) === classId &&
+                Number(item.subject_id) === subjectId
+            ) || null;
+        }
+
+        function updateAssessmentModeUi() {
+            assessmentColumnHeader.textContent = state.usesGradeSystem ? 'Grade' : 'Obtained Marks';
+            totalMarksWrapper.classList.toggle('hidden', state.usesGradeSystem);
+            gradeHelpBox.classList.toggle('hidden', !state.usesGradeSystem);
+            assessmentModeBadge.textContent = state.usesGradeSystem
+                ? 'Grade-only mode for early classes'
+                : 'Numeric marks mode';
+            assessmentModeBadge.className = state.usesGradeSystem
+                ? 'mt-4 inline-flex rounded-full bg-indigo-100 px-3 py-1 text-xs font-semibold text-indigo-700'
+                : 'mt-4 inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700';
+
+            if (state.usesGradeSystem) {
+                totalMarksInput.value = '';
+                totalMarksInput.readOnly = true;
+                totalMarksInput.classList.add('bg-gray-100');
+            }
+        }
+
+        function applyAssessmentModeFromAssignment() {
+            const assignment = currentAssignment();
+            state.usesGradeSystem = Boolean(assignment?.uses_grade_system);
+            if (!state.gradeOptions.length) {
+                state.gradeOptions = [
+                    { code: 'A*', label: 'Excellent' },
+                    { code: 'A', label: 'Very Good' },
+                    { code: 'B', label: 'Good' },
+                    { code: 'C', label: 'Satisfactory' },
+                    { code: 'D', label: 'Basic' },
+                    { code: 'E', label: 'Needs Improvement' },
+                    { code: 'F', label: 'Weak' },
+                    { code: 'G', label: 'Very Weak' },
+                    { code: 'U', label: 'Ungraded / Not Assessed' },
+                ];
+            }
+
+            if (!state.usesGradeSystem) {
+                totalMarksInput.readOnly = false;
+                totalMarksInput.classList.remove('bg-gray-100');
+            }
+
+            updateAssessmentModeUi();
         }
 
         function buildClassOptions() {
@@ -241,7 +310,20 @@
             subjectInput.innerHTML = sortedSubjects
                 .map(([subjectId, subjectInfo]) => `<option value="${subjectId}">${window.NSMS.escapeHtml(subjectInfo.name)} (${subjectInfo.subject_students} students)</option>`)
                 .join('');
+
             loadSheetBtn.disabled = false;
+            saveMarksBtn.disabled = false;
+            applyAssessmentModeFromAssignment();
+        }
+
+        function gradeOptionsHtml(selectedGrade) {
+            return [
+                '<option value="">Select Grade</option>',
+                ...state.gradeOptions.map(option => {
+                    const selected = option.code === selectedGrade ? 'selected' : '';
+                    return `<option value="${window.NSMS.escapeHtml(option.code)}" ${selected}>${window.NSMS.escapeHtml(option.code)} - ${window.NSMS.escapeHtml(option.label)}</option>`;
+                })
+            ].join('');
         }
 
         function renderStudents() {
@@ -257,14 +339,18 @@
             const disabledAttr = state.locked ? 'disabled' : '';
             const rows = pagedStudents();
 
-            marksBody.innerHTML = rows.map(student => `
-                <tr>
-                    <td class="sticky left-0 z-10 bg-white px-4 py-2 text-sm text-gray-800">
-                        <div class="font-medium">${window.NSMS.escapeHtml(student.name)}</div>
-                        <div class="text-xs text-gray-500">${window.NSMS.escapeHtml(student.student_id)}</div>
-                    </td>
-                    <td class="px-4 py-2 text-sm text-gray-800">${window.NSMS.escapeHtml(student.father_name ?? '-')}</td>
-                    <td class="px-4 py-2 text-sm">
+            marksBody.innerHTML = rows.map(student => {
+                const assessmentInput = state.usesGradeSystem
+                    ? `
+                        <select
+                            data-student-id="${student.id}"
+                            class="grade-input min-h-11 w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500 disabled:bg-gray-100"
+                            ${disabledAttr}
+                        >
+                            ${gradeOptionsHtml(student.grade ?? '')}
+                        </select>
+                    `
+                    : `
                         <input
                             type="number"
                             min="0"
@@ -274,9 +360,19 @@
                             class="marks-input min-h-11 w-28 rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500 disabled:bg-gray-100"
                             ${disabledAttr}
                         />
-                    </td>
-                </tr>
-            `).join('');
+                    `;
+
+                return `
+                    <tr>
+                        <td class="sticky left-0 z-10 bg-white px-4 py-2 text-sm text-gray-800">
+                            <div class="font-medium">${window.NSMS.escapeHtml(student.name)}</div>
+                            <div class="text-xs text-gray-500">${window.NSMS.escapeHtml(student.student_id)}</div>
+                        </td>
+                        <td class="px-4 py-2 text-sm text-gray-800">${window.NSMS.escapeHtml(student.father_name ?? '-')}</td>
+                        <td class="px-4 py-2 text-sm">${assessmentInput}</td>
+                    </tr>
+                `;
+            }).join('');
 
             const pages = totalPages();
             paginationInfo.textContent = `Page ${state.page} of ${pages} | Total: ${state.students.length}`;
@@ -333,7 +429,7 @@
             const params = new URLSearchParams(payload);
             try {
                 const response = await fetch(`{{ route('teacher.exams.sheet') }}?${params.toString()}`, {
-                    headers: { 'Accept': 'application/json' }
+                    headers: { Accept: 'application/json' }
                 });
 
                 if (isLoginRedirect(response)) {
@@ -348,11 +444,11 @@
                         showMessage('Your session has expired. Please refresh and login again.', 'error');
                     } else if (result.errors) {
                         const message = Object.values(result.errors).flat().join(' ');
-                        showMessage(message || result.message || 'Failed to load marks sheet.', 'error');
+                        showMessage(message || result.message || 'Failed to load assessment sheet.', 'error');
                     } else if (result.message) {
                         showMessage(result.message, 'error');
                     } else {
-                        showMessage('Failed to load marks sheet.', 'error');
+                        showMessage('Failed to load assessment sheet.', 'error');
                     }
 
                     marksBody.innerHTML = '<tr><td colspan="3" class="px-4 py-8 text-center text-sm text-red-600">Failed to load students.</td></tr>';
@@ -360,7 +456,7 @@
                 }
 
                 if (!Array.isArray(result.students)) {
-                    showMessage('Invalid response while loading marks sheet. Please refresh page.', 'error');
+                    showMessage('Invalid response while loading assessment sheet. Please refresh page.', 'error');
                     marksBody.innerHTML = '<tr><td colspan="3" class="px-4 py-8 text-center text-sm text-red-600">Failed to load students.</td></tr>';
                     return;
                 }
@@ -371,16 +467,25 @@
                     : 'No students found for selected exam setup.';
                 state.locked = Boolean(result.exam?.locked);
                 state.page = 1;
+                state.usesGradeSystem = Boolean(result.uses_grade_system);
+                state.gradeOptions = Array.isArray(result.grade_options) && result.grade_options.length
+                    ? result.grade_options
+                    : state.gradeOptions;
 
-                if (result.exam?.total_marks) {
+                if (!state.usesGradeSystem && result.exam?.total_marks) {
                     totalMarksInput.value = result.exam.total_marks;
                     totalMarksInput.readOnly = true;
                     totalMarksInput.classList.add('bg-gray-100');
-                } else {
+                } else if (!state.usesGradeSystem) {
                     totalMarksInput.readOnly = false;
                     totalMarksInput.classList.remove('bg-gray-100');
+                } else {
+                    totalMarksInput.value = '';
+                    totalMarksInput.readOnly = true;
+                    totalMarksInput.classList.add('bg-gray-100');
                 }
 
+                updateAssessmentModeUi();
                 renderStudents();
 
                 if (!state.students.length && result.message) {
@@ -391,7 +496,7 @@
                     showMessage(result.exam.locked_message, 'error');
                 }
             } catch (error) {
-                showMessage('Unexpected error while loading marks sheet.', 'error');
+                showMessage('Unexpected error while loading assessment sheet.', 'error');
                 marksBody.innerHTML = '<tr><td colspan="3" class="px-4 py-8 text-center text-sm text-red-600">Failed to load students.</td></tr>';
             } finally {
                 loadSheetBtn.disabled = false;
@@ -403,36 +508,57 @@
             clearMessage();
 
             if (state.locked) {
-                showMessage('Exam is locked after 7 days. You cannot edit marks.', 'error');
+                showMessage('Exam is locked after 7 days. You cannot edit these entries.', 'error');
                 return;
             }
 
-            const totalMarks = Number(totalMarksInput.value || 0);
-            if (!totalMarks || totalMarks <= 0) {
-                showMessage('Total marks are required and must be greater than 0.', 'error');
-                return;
+            let records;
+            let payload;
+
+            if (state.usesGradeSystem) {
+                records = state.students.map(student => ({
+                    student_id: student.id,
+                    grade: student.grade ? String(student.grade).trim().toUpperCase() : null,
+                    obtained_marks: null,
+                }));
+
+                payload = {
+                    session: sessionInput.value,
+                    class_id: Number(classInput.value),
+                    subject_id: Number(subjectInput.value),
+                    exam_type: examTypeInput.value,
+                    total_marks: null,
+                    records,
+                };
+            } else {
+                const totalMarks = Number(totalMarksInput.value || 0);
+                if (!totalMarks || totalMarks <= 0) {
+                    showMessage('Total marks are required and must be greater than 0.', 'error');
+                    return;
+                }
+
+                records = state.students.map(student => ({
+                    student_id: student.id,
+                    obtained_marks: student.obtained_marks === '' || student.obtained_marks === null || student.obtained_marks === undefined
+                        ? null
+                        : Number(student.obtained_marks),
+                    grade: null,
+                }));
+
+                if (records.some(row => row.obtained_marks !== null && (Number.isNaN(row.obtained_marks) || row.obtained_marks < 0 || row.obtained_marks > totalMarks))) {
+                    showMessage('Each obtained mark must be between 0 and total marks.', 'error');
+                    return;
+                }
+
+                payload = {
+                    session: sessionInput.value,
+                    class_id: Number(classInput.value),
+                    subject_id: Number(subjectInput.value),
+                    exam_type: examTypeInput.value,
+                    total_marks: totalMarks,
+                    records,
+                };
             }
-
-            const records = state.students.map(student => ({
-                student_id: student.id,
-                obtained_marks: student.obtained_marks === '' || student.obtained_marks === null || student.obtained_marks === undefined
-                    ? null
-                    : Number(student.obtained_marks)
-            }));
-
-            if (records.some(row => row.obtained_marks !== null && (Number.isNaN(row.obtained_marks) || row.obtained_marks < 0 || row.obtained_marks > totalMarks))) {
-                showMessage('Each obtained mark must be between 0 and total marks.', 'error');
-                return;
-            }
-
-            const payload = {
-                session: sessionInput.value,
-                class_id: Number(classInput.value),
-                subject_id: Number(subjectInput.value),
-                exam_type: examTypeInput.value,
-                total_marks: totalMarks,
-                records
-            };
 
             saveMarksBtn.disabled = true;
             saveMarksBtn.textContent = 'Saving...';
@@ -461,22 +587,22 @@
                         showMessage('Your session has expired. Please refresh and login again.', 'error');
                     } else if (result.errors) {
                         const message = Object.values(result.errors).flat().join(' ');
-                        showMessage(message || 'Failed to save marks.', 'error');
+                        showMessage(message || 'Failed to save entries.', 'error');
                     } else if (result.message) {
                         showMessage(result.message, 'error');
                     } else {
-                        showMessage('Failed to save marks.', 'error');
+                        showMessage('Failed to save entries.', 'error');
                     }
                     return;
                 }
 
-                showMessage(result.message || 'Marks saved successfully.');
+                showMessage(result.message || 'Assessment entries saved successfully.');
                 await loadSheet();
             } catch (error) {
-                showMessage('Unexpected error while saving marks.', 'error');
+                showMessage('Unexpected error while saving assessment entries.', 'error');
             } finally {
                 saveMarksBtn.disabled = false;
-                saveMarksBtn.textContent = 'Save Marks';
+                saveMarksBtn.textContent = 'Save Entries';
             }
         }
 
@@ -495,20 +621,42 @@
             student.obtained_marks = target.value === '' ? null : Number(target.value);
         });
 
-        sessionInput.addEventListener('change', () => {
-            buildClassOptions();
+        marksBody.addEventListener('change', (event) => {
+            const target = event.target;
+            if (!target.classList.contains('grade-input')) {
+                return;
+            }
+
+            const studentId = Number(target.dataset.studentId);
+            const student = state.students.find(row => Number(row.id) === studentId);
+            if (!student) {
+                return;
+            }
+
+            student.grade = target.value === '' ? null : target.value;
+        });
+
+        function resetSheet() {
             state.students = [];
             state.emptyMessage = 'No students found for selected exam setup.';
             state.page = 1;
+            state.locked = false;
             renderStudents();
+        }
+
+        sessionInput.addEventListener('change', () => {
+            buildClassOptions();
+            resetSheet();
         });
 
         classInput.addEventListener('change', () => {
             buildSubjectOptions();
-            state.students = [];
-            state.emptyMessage = 'No students found for selected exam setup.';
-            state.page = 1;
-            renderStudents();
+            resetSheet();
+        });
+
+        subjectInput.addEventListener('change', () => {
+            applyAssessmentModeFromAssignment();
+            resetSheet();
         });
 
         perPageInput.addEventListener('change', () => {
@@ -536,10 +684,7 @@
         saveMarksBtn.addEventListener('click', saveMarks);
 
         buildClassOptions();
+        applyAssessmentModeFromAssignment();
         renderStudents();
-
-        if (!assignments.length) {
-            showMessage('No subject assignment found for your account. Contact Principal.', 'error');
-        }
     </script>
 </x-app-layout>

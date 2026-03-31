@@ -70,7 +70,7 @@ class TeacherExamController extends Controller
                 (int) $request->input('subject_id'),
                 $request->string('session')->toString(),
                 $request->string('exam_type')->toString(),
-                (int) $request->input('total_marks'),
+                $request->filled('total_marks') ? (int) $request->input('total_marks') : null,
                 $request->input('records', [])
             );
         } catch (RuntimeException $exception) {
@@ -81,10 +81,10 @@ class TeacherExamController extends Controller
             return response()->json([
                 'message' => config('app.debug')
                     ? $exception->getMessage()
-                    : 'Unexpected error while saving marks. Please contact admin.',
+                    : 'Unexpected error while saving assessment entries. Please contact admin.',
             ], 500);
         }
 
-        return response()->json(['message' => 'Marks saved successfully.']);
+        return response()->json(['message' => 'Assessment entries saved successfully.']);
     }
 }

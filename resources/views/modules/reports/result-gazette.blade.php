@@ -18,8 +18,12 @@
     </style>
 </head>
 <body>
+    @php
+        $usesGradeSystem = (bool) ($report['uses_grade_system'] ?? false);
+    @endphp
+
     <h1 class="title">{{ $school['name'] ?? 'School Management System' }}</h1>
-    <p class="subtitle">Result Gazette</p>
+    <p class="subtitle">{{ $usesGradeSystem ? 'Grade-Based Result Gazette' : 'Result Gazette' }}</p>
 
     <table class="meta">
         <tr>
@@ -35,41 +39,64 @@
             <td>{{ $report['summary']['students_count'] }}</td>
             <td class="label">Subjects</td>
             <td>{{ $report['summary']['subjects_count'] }}</td>
-            <td class="label">Class Avg</td>
-            <td>{{ number_format((float) $report['summary']['class_average_percentage'], 2) }}%</td>
+            <td class="label">{{ $usesGradeSystem ? 'Mode' : 'Class Avg' }}</td>
+            <td>{{ $usesGradeSystem ? 'Grade-based' : number_format((float) $report['summary']['class_average_percentage'], 2).'%' }}</td>
         </tr>
     </table>
 
     <table class="table">
         <thead>
             <tr>
-                <th>Pos</th>
+                @unless ($usesGradeSystem)
+                    <th>Pos</th>
+                @endunless
                 <th>Student</th>
                 @foreach($report['subjects'] as $subject)
-                    <th>{{ $subject['name'] }}<br>/{{ (int) $subject['total_marks'] }}</th>
+                    <th>
+                        {{ $subject['name'] }}
+                        @unless ($usesGradeSystem)
+                            <br>/{{ (int) $subject['total_marks'] }}
+                        @endunless
+                    </th>
                 @endforeach
-                <th>Total</th>
-                <th>Obtained</th>
-                <th>%</th>
-                <th>Grade</th>
+                @if ($usesGradeSystem)
+                    <th>Overall Grade</th>
+                    <th>Description</th>
+                @else
+                    <th>Total</th>
+                    <th>Obtained</th>
+                    <th>%</th>
+                    <th>Grade</th>
+                @endif
             </tr>
         </thead>
         <tbody>
             @foreach($report['rows'] as $row)
                 <tr>
-                    <td>{{ (int) $row['position'] }}</td>
+                    @unless ($usesGradeSystem)
+                        <td>{{ (int) $row['position'] }}</td>
+                    @endunless
                     <td class="student">{{ $row['student_name'] }}<br>{{ $row['student_code'] }}</td>
                     @foreach($report['subjects'] as $subject)
                         @php
                             $subjectId = (int) $subject['id'];
-                            $subjectMark = $row['subject_marks'][$subjectId] ?? ['obtained' => 0, 'total' => (int) $subject['total_marks']];
+                            $subjectMark = $row['subject_marks'][$subjectId] ?? ($usesGradeSystem
+                                ? ['grade' => null, 'label' => null]
+                                : ['obtained' => 0, 'total' => (int) $subject['total_marks']]);
                         @endphp
-                        <td>{{ (int) $subjectMark['obtained'] }}</td>
+                        <td>
+                            {{ $usesGradeSystem ? ($subjectMark['grade'] ?? '-') : (int) $subjectMark['obtained'] }}
+                        </td>
                     @endforeach
-                    <td>{{ (int) $row['total_marks'] }}</td>
-                    <td>{{ (int) $row['obtained_marks'] }}</td>
-                    <td>{{ number_format((float) $row['percentage'], 2) }}</td>
-                    <td>{{ $row['grade'] }}</td>
+                    @if ($usesGradeSystem)
+                        <td>{{ $row['grade'] ?? '-' }}</td>
+                        <td>{{ $row['grade_label'] ?? '-' }}</td>
+                    @else
+                        <td>{{ (int) $row['total_marks'] }}</td>
+                        <td>{{ (int) $row['obtained_marks'] }}</td>
+                        <td>{{ number_format((float) $row['percentage'], 2) }}</td>
+                        <td>{{ $row['grade'] }}</td>
+                    @endif
                 </tr>
             @endforeach
         </tbody>

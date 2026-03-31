@@ -7,12 +7,16 @@ use App\Models\Exam;
 use App\Models\Mark;
 use App\Models\SchoolClass;
 use App\Models\Student;
+use App\Services\ClassAssessmentModeService;
 use App\Modules\Exams\Enums\ExamType;
 use RuntimeException;
 
 class ResultSheetService
 {
-    public function __construct(private readonly ResultService $resultService)
+    public function __construct(
+        private readonly ResultService $resultService,
+        private readonly ClassAssessmentModeService $assessmentModeService
+    )
     {
     }
 
@@ -57,11 +61,13 @@ class ResultSheetService
             throw new RuntimeException('No exams found for selected class and session.');
         }
 
-        $subjects = $exams->map(function (Exam $exam): array {
+        $usesGradeSystem = $this->assessmentModeService->classUsesGradeSystem($classRoom);
+
+        $subjects = $exams->map(function (Exam $exam) use ($usesGradeSystem): array {
             return [
                 'id' => (int) $exam->subject_id,
                 'name' => (string) ($exam->subject?->name ?? 'Subject'),
-                'total_marks' => (int) $exam->total_marks,
+                'total_marks' => $usesGradeSystem ? null : (int) $exam->total_marks,
             ];
         })->sortBy('name')->values();
 
@@ -82,7 +88,7 @@ class ResultSheetService
         $marks = Mark::query()
             ->whereIn('exam_id', $exams->pluck('id'))
             ->whereIn('student_id', $students->pluck('id'))
-            ->get(['exam_id', 'student_id', 'obtained_marks', 'total_marks']);
+            ->get(['exam_id', 'student_id', 'obtained_marks', 'total_marks', 'grade']);
 
         $markLookup = $marks
             ->groupBy(fn (Mark $mark): int => (int) $mark->student_id)
@@ -95,8 +101,9 @@ class ResultSheetService
             $studentMarks = $markLookup->get((int) $student->id, collect());
 
             $subjectMarks = [];
-            $totalMarks = 0;
-            $obtainedMarks = 0;
+            $totalMarks = $usesGradeSystem ? null : 0;
+            $obtainedMarks = $usesGradeSystem ? null : 0;
+            $gradeBucket = [];
 
             foreach ($subjects as $subject) {
                 $subjectId = (int) $subject['id'];
@@ -108,34 +115,52 @@ class ResultSheetService
 
                 /** @var Mark|null $mark */
                 $mark = $studentMarks->get((int) $exam->id);
-                $subjectTotal = (int) ($mark?->total_marks ?? $exam->total_marks);
-                $subjectObtained = (int) ($mark?->obtained_marks ?? 0);
+                if ($usesGradeSystem) {
+                    $grade = $this->assessmentModeService->normalizeGrade($mark?->grade);
+                    $subjectMarks[$subjectId] = [
+                        'grade' => $grade,
+                        'label' => $this->assessmentModeService->gradeLabel($grade),
+                    ];
 
-                $subjectMarks[$subjectId] = [
-                    'obtained' => $subjectObtained,
-                    'total' => $subjectTotal,
-                ];
+                    if ($grade !== null) {
+                        $gradeBucket[] = $grade;
+                    }
+                } else {
+                    $subjectTotal = (int) ($mark?->total_marks ?? $exam->total_marks);
+                    $subjectObtained = (int) ($mark?->obtained_marks ?? 0);
 
-                $totalMarks += $subjectTotal;
-                $obtainedMarks += $subjectObtained;
+                    $subjectMarks[$subjectId] = [
+                        'obtained' => $subjectObtained,
+                        'total' => $subjectTotal,
+                    ];
+
+                    $totalMarks += $subjectTotal;
+                    $obtainedMarks += $subjectObtained;
+                }
             }
 
-            $percentage = $totalMarks > 0 ? round(($obtainedMarks / $totalMarks) * 100, 2) : 0.0;
+            $percentage = ! $usesGradeSystem && $totalMarks > 0
+                ? round(($obtainedMarks / $totalMarks) * 100, 2)
+                : null;
+            $overallGrade = $usesGradeSystem
+                ? $this->assessmentModeService->dominantGrade($gradeBucket)
+                : $this->resultService->computeGrade((float) $percentage);
 
             $rows[] = [
                 'student_id' => (int) $student->id,
                 'student_code' => (string) ($student->student_id ?: $student->id),
                 'student_name' => (string) $student->name,
-                'position' => 0,
+                'position' => $usesGradeSystem ? null : 0,
                 'subject_marks' => $subjectMarks,
                 'total_marks' => $totalMarks,
                 'obtained_marks' => $obtainedMarks,
                 'percentage' => $percentage,
-                'grade' => $this->resultService->computeGrade($percentage),
+                'grade' => $overallGrade,
+                'grade_label' => $usesGradeSystem ? $this->assessmentModeService->gradeLabel($overallGrade) : null,
             ];
         }
 
-        $rankedRows = $this->assignPositions($rows);
+        $rankedRows = $usesGradeSystem ? $rows : $this->assignPositions($rows);
 
         return [
             'class' => [
@@ -148,15 +173,16 @@ class ResultSheetService
                 'exam_type_label' => $this->examTypeLabel($resolvedExamType),
                 'generated_at' => now()->toDateString(),
             ],
+            'uses_grade_system' => $usesGradeSystem,
             'subjects' => $subjects->all(),
             'rows' => $rankedRows,
             'summary' => [
                 'students_count' => count($rankedRows),
                 'subjects_count' => $subjects->count(),
-                'total_marks_per_student' => (int) ($subjects->sum('total_marks')),
-                'class_average_percentage' => count($rankedRows) > 0
+                'total_marks_per_student' => $usesGradeSystem ? null : (int) ($subjects->sum('total_marks')),
+                'class_average_percentage' => ! $usesGradeSystem && count($rankedRows) > 0
                     ? round((float) collect($rankedRows)->avg('percentage'), 2)
-                    : 0.0,
+                    : null,
             ],
         ];
     }

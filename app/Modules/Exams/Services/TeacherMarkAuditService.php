@@ -6,6 +6,7 @@ use App\Models\Mark;
 use App\Models\MarkEditLog;
 use App\Models\Teacher;
 use App\Models\User;
+use App\Services\ClassAssessmentModeService;
 use App\Modules\Exams\Enums\ExamType;
 use App\Notifications\MarkEntryModifiedNotification;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -16,6 +17,10 @@ use RuntimeException;
 
 class TeacherMarkAuditService
 {
+    public function __construct(private readonly ClassAssessmentModeService $assessmentModeService)
+    {
+    }
+
     public function resolveTeacher(int $userId): ?Teacher
     {
         return Teacher::query()->where('user_id', $userId)->first();
@@ -40,40 +45,76 @@ class TeacherMarkAuditService
         return $mark->created_at->gte(now()->subDays(7));
     }
 
-    public function updateMarkEntry(int $userId, Mark $mark, int $newMarks, string $reason): void
+    public function updateMarkEntry(int $userId, Mark $mark, ?int $newMarks, ?string $newGrade, string $reason): void
     {
         $teacher = $this->resolveTeacherOrFail($userId);
         $this->assertOwnership($teacher, $mark);
 
         if (! $this->canEdit($mark)) {
-            throw new RuntimeException('Editing window has expired. You can edit marks only within 7 days of entry.');
-        }
-
-        $totalMarks = (int) $mark->total_marks;
-        if ($newMarks < 0 || $newMarks > $totalMarks) {
-            throw new RuntimeException('Obtained marks must be between 0 and total marks.');
+            throw new RuntimeException('Editing window has expired. You can edit entries only within 7 days of entry.');
         }
 
         $mark->loadMissing([
             'teacher.user:id,name',
             'student:id,name',
-            'exam:id,class_id,subject_id,exam_type',
+            'exam:id,class_id,subject_id,exam_type,total_marks',
             'exam.classRoom:id,name,section',
             'exam.subject:id,name',
         ]);
 
-        $oldMarks = (int) $mark->obtained_marks;
+        $usesGradeSystem = $this->assessmentModeService->classUsesGradeSystem($mark->exam?->classRoom);
+        $oldMarks = $mark->obtained_marks !== null ? (int) $mark->obtained_marks : null;
+        $oldGrade = $this->assessmentModeService->normalizeGrade($mark->grade);
         $editedAt = now();
+
+        if ($usesGradeSystem) {
+            $normalizedGrade = $this->assessmentModeService->normalizeGrade($newGrade);
+            if ($normalizedGrade === null || ! $this->assessmentModeService->isValidGrade($normalizedGrade)) {
+                throw new RuntimeException('A valid grade is required for this class.');
+            }
+
+            DB::transaction(function () use ($mark, $normalizedGrade, $userId, $reason, $oldMarks, $oldGrade, $editedAt): void {
+                $mark->forceFill([
+                    'obtained_marks' => null,
+                    'total_marks' => null,
+                    'grade' => $normalizedGrade,
+                ])->save();
+
+                MarkEditLog::query()->create([
+                    'mark_id' => $mark->id,
+                    'old_marks' => $oldMarks,
+                    'new_marks' => null,
+                    'old_grade' => $oldGrade,
+                    'new_grade' => $normalizedGrade,
+                    'edited_by' => $userId,
+                    'edit_reason' => $reason,
+                    'action_type' => 'edit',
+                    'edited_at' => $editedAt,
+                ]);
+            });
+
+            $this->dispatchUpdatedNotification($mark, 'grade', $oldMarks, null, $oldGrade, $normalizedGrade, $editedAt);
+
+            return;
+        }
+
+        $totalMarks = (int) ($mark->total_marks ?? $mark->exam?->total_marks ?? 0);
+        if ($newMarks === null || $newMarks < 0 || $newMarks > $totalMarks) {
+            throw new RuntimeException('Obtained marks must be between 0 and total marks.');
+        }
 
         DB::transaction(function () use ($mark, $newMarks, $userId, $reason, $oldMarks, $editedAt): void {
             $mark->forceFill([
                 'obtained_marks' => $newMarks,
+                'grade' => null,
             ])->save();
 
             MarkEditLog::query()->create([
                 'mark_id' => $mark->id,
                 'old_marks' => $oldMarks,
                 'new_marks' => $newMarks,
+                'old_grade' => null,
+                'new_grade' => null,
                 'edited_by' => $userId,
                 'edit_reason' => $reason,
                 'action_type' => 'edit',
@@ -81,17 +122,7 @@ class TeacherMarkAuditService
             ]);
         });
 
-        $mark->refresh()->loadMissing([
-            'teacher.user:id,name',
-            'student:id,name',
-            'exam:id,class_id,subject_id,exam_type',
-            'exam.classRoom:id,name,section',
-            'exam.subject:id,name',
-        ]);
-
-        $this->notifyPrincipals(
-            $this->buildNotificationPayload($mark, 'edit', $oldMarks, $newMarks, $editedAt)
-        );
+        $this->dispatchUpdatedNotification($mark, 'marks', $oldMarks, $newMarks, null, null, $editedAt);
     }
 
     public function deleteMarkEntry(int $userId, Mark $mark, string $reason): void
@@ -102,20 +133,33 @@ class TeacherMarkAuditService
         $mark->loadMissing([
             'teacher.user:id,name',
             'student:id,name',
-            'exam:id,class_id,subject_id,exam_type',
+            'exam:id,class_id,subject_id,exam_type,total_marks',
             'exam.classRoom:id,name,section',
             'exam.subject:id,name',
         ]);
 
-        $oldMarks = (int) $mark->obtained_marks;
+        $usesGradeSystem = $this->assessmentModeService->classUsesGradeSystem($mark->exam?->classRoom);
+        $oldMarks = $mark->obtained_marks !== null ? (int) $mark->obtained_marks : null;
+        $oldGrade = $this->assessmentModeService->normalizeGrade($mark->grade);
         $editedAt = now();
-        $notificationPayload = $this->buildNotificationPayload($mark, 'delete', $oldMarks, null, $editedAt);
+        $notificationPayload = $this->buildNotificationPayload(
+            $mark,
+            'delete',
+            $usesGradeSystem ? 'grade' : 'marks',
+            $oldMarks,
+            null,
+            $oldGrade,
+            null,
+            $editedAt
+        );
 
-        DB::transaction(function () use ($mark, $userId, $reason, $oldMarks, $editedAt): void {
+        DB::transaction(function () use ($mark, $userId, $reason, $oldMarks, $oldGrade, $editedAt): void {
             MarkEditLog::query()->create([
                 'mark_id' => $mark->id,
                 'old_marks' => $oldMarks,
                 'new_marks' => null,
+                'old_grade' => $oldGrade,
+                'new_grade' => null,
                 'edited_by' => $userId,
                 'edit_reason' => $reason,
                 'action_type' => 'delete',
@@ -126,6 +170,37 @@ class TeacherMarkAuditService
         });
 
         $this->notifyPrincipals($notificationPayload);
+    }
+
+    private function dispatchUpdatedNotification(
+        Mark $mark,
+        string $entryMode,
+        ?int $oldMarks,
+        ?int $newMarks,
+        ?string $oldGrade,
+        ?string $newGrade,
+        Carbon $editedAt
+    ): void {
+        $mark->refresh()->loadMissing([
+            'teacher.user:id,name',
+            'student:id,name',
+            'exam:id,class_id,subject_id,exam_type,total_marks',
+            'exam.classRoom:id,name,section',
+            'exam.subject:id,name',
+        ]);
+
+        $this->notifyPrincipals(
+            $this->buildNotificationPayload(
+                $mark,
+                'edit',
+                $entryMode,
+                $oldMarks,
+                $newMarks,
+                $oldGrade,
+                $newGrade,
+                $editedAt
+            )
+        );
     }
 
     private function assertOwnership(Teacher $teacher, Mark $mark): void
@@ -154,12 +229,23 @@ class TeacherMarkAuditService
     private function buildNotificationPayload(
         Mark $mark,
         string $actionType,
-        int $oldMarks,
+        string $entryMode,
+        ?int $oldMarks,
         ?int $newMarks,
+        ?string $oldGrade,
+        ?string $newGrade,
         Carbon $editedAt
     ): array {
+        $oldValue = $entryMode === 'grade'
+            ? ($oldGrade ?? '-')
+            : ($oldMarks === null ? '-' : (string) $oldMarks);
+        $newValue = $entryMode === 'grade'
+            ? ($newGrade ?? 'deleted')
+            : ($newMarks === null ? 'deleted' : (string) $newMarks);
+
         return [
             'action_type' => $actionType,
+            'entry_mode' => $entryMode,
             'teacher_name' => (string) ($mark->teacher?->user?->name ?? 'Teacher'),
             'student_name' => (string) ($mark->student?->name ?? 'Student'),
             'class_name' => trim((string) (($mark->exam?->classRoom?->name ?? 'Class').' '.($mark->exam?->classRoom?->section ?? ''))),
@@ -167,6 +253,10 @@ class TeacherMarkAuditService
             'exam_type' => $this->examTypeLabel($mark->exam?->exam_type),
             'old_marks' => $oldMarks,
             'new_marks' => $newMarks,
+            'old_grade' => $oldGrade,
+            'new_grade' => $newGrade,
+            'old_value' => $oldValue,
+            'new_value' => $newValue,
             'changed_at' => $editedAt->toDateTimeString(),
             'url' => route('notifications.index'),
         ];

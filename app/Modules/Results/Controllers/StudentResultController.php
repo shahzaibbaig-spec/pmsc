@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Mark;
 use App\Models\Student;
 use App\Models\StudentResult;
+use App\Services\ClassAssessmentModeService;
 use App\Modules\Exams\Enums\ExamType;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
@@ -13,6 +14,10 @@ use Illuminate\View\View;
 
 class StudentResultController extends Controller
 {
+    public function __construct(private readonly ClassAssessmentModeService $assessmentModeService)
+    {
+    }
+
     public function index(): View
     {
         $user = auth()->user();
@@ -26,6 +31,8 @@ class StudentResultController extends Controller
             ]);
         }
 
+        $usesGradeSystem = $this->assessmentModeService->classUsesGradeSystem($student->classRoom);
+
         $legacyResults = StudentResult::query()
             ->with('subject:id,name')
             ->where('student_id', (int) $student->id)
@@ -34,7 +41,7 @@ class StudentResultController extends Controller
             ->get();
 
         if ($legacyResults->isNotEmpty()) {
-            $groupedResults = $this->groupLegacyResults($legacyResults);
+            $groupedResults = $this->groupLegacyResults($legacyResults, $usesGradeSystem);
         } else {
             $marks = Mark::query()
                 ->with([
@@ -46,7 +53,7 @@ class StudentResultController extends Controller
                 ->orderByDesc('id')
                 ->get();
 
-            $groupedResults = $this->groupMarksResults($marks);
+            $groupedResults = $this->groupMarksResults($marks, $usesGradeSystem);
         }
 
         return view('modules.student.results', [
@@ -63,6 +70,7 @@ class StudentResultController extends Controller
 
         if ($emailLocal !== '') {
             $byStudentId = Student::query()
+                ->with('classRoom:id,name,section')
                 ->whereRaw('LOWER(student_id) = ?', [$emailLocal])
                 ->first();
 
@@ -73,6 +81,7 @@ class StudentResultController extends Controller
 
         if ($normalizedName !== '') {
             $byName = Student::query()
+                ->with('classRoom:id,name,section')
                 ->whereRaw('LOWER(name) = ?', [$normalizedName])
                 ->orderByDesc('id')
                 ->get();
@@ -85,34 +94,41 @@ class StudentResultController extends Controller
         return null;
     }
 
-    private function groupLegacyResults(Collection $results): Collection
+    private function groupLegacyResults(Collection $results, bool $usesGradeSystem): Collection
     {
         return $results
             ->groupBy(fn (StudentResult $row): string => (string) $row->exam_name)
-            ->map(function (Collection $items): array {
-                $rows = $items->map(function (StudentResult $result): array {
-                    $total = (int) $result->total_marks;
-                    $obtained = (int) $result->obtained_marks;
-                    $percentage = $total > 0 ? round(($obtained / $total) * 100, 2) : 0.0;
+            ->map(function (Collection $items) use ($usesGradeSystem): array {
+                $rows = $items->map(function (StudentResult $result) use ($usesGradeSystem): array {
+                    $grade = $usesGradeSystem
+                        ? $this->assessmentModeService->normalizeGrade($result->grade)
+                        : null;
+                    $total = $usesGradeSystem ? null : (int) $result->total_marks;
+                    $obtained = $usesGradeSystem ? null : (int) $result->obtained_marks;
+                    $percentage = $usesGradeSystem
+                        ? null
+                        : ($total > 0 ? round(($obtained / $total) * 100, 2) : 0.0);
 
                     return [
                         'subject' => (string) ($result->subject?->name ?? 'Subject'),
                         'total_marks' => $total,
                         'obtained_marks' => $obtained,
                         'percentage' => $percentage,
-                        'grade' => $this->grade($percentage),
+                        'grade' => $usesGradeSystem ? $grade : $this->grade((float) $percentage),
+                        'grade_label' => $usesGradeSystem ? $this->assessmentModeService->gradeLabel($grade) : null,
                         'result_date' => optional($result->result_date)?->format('Y-m-d'),
                     ];
                 })->values();
 
                 return [
+                    'uses_grade_system' => $usesGradeSystem,
                     'rows' => $rows,
-                    'summary' => $this->summaryFromRows($rows),
+                    'summary' => $this->summaryFromRows($rows, $usesGradeSystem),
                 ];
             });
     }
 
-    private function groupMarksResults(Collection $marks): Collection
+    private function groupMarksResults(Collection $marks, bool $usesGradeSystem): Collection
     {
         return $marks
             ->groupBy(function (Mark $mark): string {
@@ -125,31 +141,51 @@ class StudentResultController extends Controller
 
                 return implode(' | ', $parts);
             })
-            ->map(function (Collection $items): array {
-                $rows = $items->map(function (Mark $mark): array {
-                    $total = (int) ($mark->total_marks ?: $mark->exam?->total_marks ?: 0);
-                    $obtained = (int) $mark->obtained_marks;
-                    $percentage = $total > 0 ? round(($obtained / $total) * 100, 2) : 0.0;
+            ->map(function (Collection $items) use ($usesGradeSystem): array {
+                $rows = $items->map(function (Mark $mark) use ($usesGradeSystem): array {
+                    $grade = $usesGradeSystem
+                        ? $this->assessmentModeService->normalizeGrade($mark->grade)
+                        : null;
+                    $total = $usesGradeSystem ? null : (int) ($mark->total_marks ?: $mark->exam?->total_marks ?: 0);
+                    $obtained = $usesGradeSystem ? null : (int) $mark->obtained_marks;
+                    $percentage = $usesGradeSystem
+                        ? null
+                        : ($total > 0 ? round(($obtained / $total) * 100, 2) : 0.0);
 
                     return [
                         'subject' => (string) ($mark->exam?->subject?->name ?? 'Subject'),
                         'total_marks' => $total,
                         'obtained_marks' => $obtained,
                         'percentage' => $percentage,
-                        'grade' => $this->grade($percentage),
+                        'grade' => $usesGradeSystem ? $grade : $this->grade((float) $percentage),
+                        'grade_label' => $usesGradeSystem ? $this->assessmentModeService->gradeLabel($grade) : null,
                         'result_date' => optional($mark->created_at)?->format('Y-m-d'),
                     ];
                 })->values();
 
                 return [
+                    'uses_grade_system' => $usesGradeSystem,
                     'rows' => $rows,
-                    'summary' => $this->summaryFromRows($rows),
+                    'summary' => $this->summaryFromRows($rows, $usesGradeSystem),
                 ];
             });
     }
 
-    private function summaryFromRows(Collection $rows): array
+    private function summaryFromRows(Collection $rows, bool $usesGradeSystem): array
     {
+        if ($usesGradeSystem) {
+            $dominantGrade = $this->assessmentModeService->dominantGrade($rows->pluck('grade')->all());
+
+            return [
+                'total_marks' => null,
+                'obtained_marks' => null,
+                'percentage' => null,
+                'grade' => $dominantGrade,
+                'grade_label' => $this->assessmentModeService->gradeLabel($dominantGrade),
+                'overall_performance' => $this->assessmentModeService->overallPerformanceLabel($rows->pluck('grade')->all()),
+            ];
+        }
+
         $totalMarks = (int) $rows->sum('total_marks');
         $obtainedMarks = (int) $rows->sum('obtained_marks');
         $overall = $totalMarks > 0 ? round(($obtainedMarks / $totalMarks) * 100, 2) : 0.0;
@@ -159,6 +195,8 @@ class StudentResultController extends Controller
             'obtained_marks' => $obtainedMarks,
             'percentage' => $overall,
             'grade' => $this->grade($overall),
+            'grade_label' => null,
+            'overall_performance' => null,
         ];
     }
 

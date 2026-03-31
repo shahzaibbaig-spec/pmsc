@@ -6,14 +6,14 @@
     </x-slot>
 
     <div class="py-8">
-        <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
-            <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
+        <div class="max-w-7xl mx-auto space-y-6 sm:px-6 lg:px-8">
+            <div class="overflow-hidden bg-white shadow-sm sm:rounded-lg">
                 <div class="p-6">
                     @if ($message)
                         <div class="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
                             {{ $message }}
                         </div>
-                    @elseif (!$student)
+                    @elseif (! $student)
                         <div class="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
                             No student profile found.
                         </div>
@@ -40,15 +40,33 @@
                 </div>
             </div>
 
-            @if ($student && !$groupedResults->isEmpty())
+            @if ($student && ! $groupedResults->isEmpty())
                 @foreach ($groupedResults as $examName => $examResult)
-                    <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
+                    @php
+                        $usesGradeSystem = (bool) ($examResult['uses_grade_system'] ?? false);
+                    @endphp
+                    <div class="overflow-hidden bg-white shadow-sm sm:rounded-lg">
                         <div class="p-6">
                             <div class="flex flex-wrap items-center justify-between gap-3">
-                                <h3 class="text-lg font-semibold text-gray-900">{{ $examName }}</h3>
-                                <span class="inline-flex rounded-full bg-indigo-100 px-3 py-1 text-xs font-semibold text-indigo-700">
-                                    Overall: {{ $examResult['summary']['percentage'] }}% ({{ $examResult['summary']['grade'] }})
-                                </span>
+                                <div>
+                                    <h3 class="text-lg font-semibold text-gray-900">{{ $examName }}</h3>
+                                    @if ($usesGradeSystem)
+                                        <p class="mt-1 text-sm text-gray-500">Grade-based report for early years.</p>
+                                    @endif
+                                </div>
+
+                                @if ($usesGradeSystem)
+                                    <span class="inline-flex rounded-full bg-indigo-100 px-3 py-1 text-xs font-semibold text-indigo-700">
+                                        Overall: {{ $examResult['summary']['grade'] ?? '-' }}
+                                        @if (! empty($examResult['summary']['grade_label']))
+                                            - {{ $examResult['summary']['grade_label'] }}
+                                        @endif
+                                    </span>
+                                @else
+                                    <span class="inline-flex rounded-full bg-indigo-100 px-3 py-1 text-xs font-semibold text-indigo-700">
+                                        Overall: {{ $examResult['summary']['percentage'] }}% ({{ $examResult['summary']['grade'] }})
+                                    </span>
+                                @endif
                             </div>
 
                             <div class="mt-4 overflow-x-auto">
@@ -56,10 +74,15 @@
                                     <thead class="bg-gray-50">
                                         <tr>
                                             <th class="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">Subject</th>
-                                            <th class="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">Total</th>
-                                            <th class="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">Obtained</th>
-                                            <th class="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">%</th>
-                                            <th class="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">Grade</th>
+                                            @if ($usesGradeSystem)
+                                                <th class="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">Grade</th>
+                                                <th class="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">Description</th>
+                                            @else
+                                                <th class="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">Total</th>
+                                                <th class="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">Obtained</th>
+                                                <th class="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">%</th>
+                                                <th class="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">Grade</th>
+                                            @endif
                                             <th class="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">Date</th>
                                         </tr>
                                     </thead>
@@ -67,23 +90,37 @@
                                         @foreach ($examResult['rows'] as $row)
                                             <tr>
                                                 <td class="px-3 py-2 text-sm text-gray-900">{{ $row['subject'] }}</td>
-                                                <td class="px-3 py-2 text-sm text-gray-700">{{ $row['total_marks'] }}</td>
-                                                <td class="px-3 py-2 text-sm text-gray-700">{{ $row['obtained_marks'] }}</td>
-                                                <td class="px-3 py-2 text-sm text-gray-700">{{ $row['percentage'] }}</td>
-                                                <td class="px-3 py-2 text-sm text-gray-700">{{ $row['grade'] }}</td>
+                                                @if ($usesGradeSystem)
+                                                    <td class="px-3 py-2 text-sm font-semibold text-gray-900">{{ $row['grade'] ?? '-' }}</td>
+                                                    <td class="px-3 py-2 text-sm text-gray-700">{{ $row['grade_label'] ?? '-' }}</td>
+                                                @else
+                                                    <td class="px-3 py-2 text-sm text-gray-700">{{ $row['total_marks'] }}</td>
+                                                    <td class="px-3 py-2 text-sm text-gray-700">{{ $row['obtained_marks'] }}</td>
+                                                    <td class="px-3 py-2 text-sm text-gray-700">{{ $row['percentage'] }}</td>
+                                                    <td class="px-3 py-2 text-sm text-gray-700">{{ $row['grade'] }}</td>
+                                                @endif
                                                 <td class="px-3 py-2 text-sm text-gray-700">{{ $row['result_date'] ?? '-' }}</td>
                                             </tr>
                                         @endforeach
                                     </tbody>
                                     <tfoot class="bg-gray-50">
-                                        <tr>
-                                            <th class="px-3 py-2 text-left text-sm font-semibold text-gray-900">Totals</th>
-                                            <th class="px-3 py-2 text-left text-sm font-semibold text-gray-900">{{ $examResult['summary']['total_marks'] }}</th>
-                                            <th class="px-3 py-2 text-left text-sm font-semibold text-gray-900">{{ $examResult['summary']['obtained_marks'] }}</th>
-                                            <th class="px-3 py-2 text-left text-sm font-semibold text-gray-900">{{ $examResult['summary']['percentage'] }}</th>
-                                            <th class="px-3 py-2 text-left text-sm font-semibold text-gray-900">{{ $examResult['summary']['grade'] }}</th>
-                                            <th class="px-3 py-2 text-left text-sm font-semibold text-gray-900">-</th>
-                                        </tr>
+                                        @if ($usesGradeSystem)
+                                            <tr>
+                                                <th class="px-3 py-2 text-left text-sm font-semibold text-gray-900">Overall</th>
+                                                <th class="px-3 py-2 text-left text-sm font-semibold text-gray-900">{{ $examResult['summary']['grade'] ?? '-' }}</th>
+                                                <th class="px-3 py-2 text-left text-sm font-semibold text-gray-900">{{ $examResult['summary']['overall_performance'] ?? $examResult['summary']['grade_label'] ?? '-' }}</th>
+                                                <th class="px-3 py-2 text-left text-sm font-semibold text-gray-900">-</th>
+                                            </tr>
+                                        @else
+                                            <tr>
+                                                <th class="px-3 py-2 text-left text-sm font-semibold text-gray-900">Totals</th>
+                                                <th class="px-3 py-2 text-left text-sm font-semibold text-gray-900">{{ $examResult['summary']['total_marks'] }}</th>
+                                                <th class="px-3 py-2 text-left text-sm font-semibold text-gray-900">{{ $examResult['summary']['obtained_marks'] }}</th>
+                                                <th class="px-3 py-2 text-left text-sm font-semibold text-gray-900">{{ $examResult['summary']['percentage'] }}</th>
+                                                <th class="px-3 py-2 text-left text-sm font-semibold text-gray-900">{{ $examResult['summary']['grade'] }}</th>
+                                                <th class="px-3 py-2 text-left text-sm font-semibold text-gray-900">-</th>
+                                            </tr>
+                                        @endif
                                     </tfoot>
                                 </table>
                             </div>
@@ -91,7 +128,7 @@
                     </div>
                 @endforeach
             @elseif ($student)
-                <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
+                <div class="overflow-hidden bg-white shadow-sm sm:rounded-lg">
                     <div class="p-6 text-sm text-gray-600">
                         No results are available yet for your profile.
                     </div>
@@ -100,4 +137,3 @@
         </div>
     </div>
 </x-app-layout>
-

@@ -18,8 +18,12 @@
     </style>
 </head>
 <body>
+    @php
+        $usesGradeSystem = (bool) ($report['uses_grade_system'] ?? false);
+    @endphp
+
     <h1 class="title">{{ $school['name'] ?? 'School Management System' }}</h1>
-    <p class="subtitle">Tabulation Sheet</p>
+    <p class="subtitle">{{ $usesGradeSystem ? 'Grade-Based Tabulation Sheet' : 'Tabulation Sheet' }}</p>
 
     <table class="meta">
         <tr>
@@ -35,8 +39,8 @@
             <td>{{ $report['summary']['students_count'] }}</td>
             <td class="label">Subjects</td>
             <td>{{ $report['summary']['subjects_count'] }}</td>
-            <td class="label">Class Avg</td>
-            <td>{{ number_format((float) $report['summary']['class_average_percentage'], 2) }}%</td>
+            <td class="label">{{ $usesGradeSystem ? 'Mode' : 'Class Avg' }}</td>
+            <td>{{ $usesGradeSystem ? 'Grade-based' : number_format((float) $report['summary']['class_average_percentage'], 2).'%' }}</td>
         </tr>
     </table>
 
@@ -47,10 +51,15 @@
                 @foreach($report['subjects'] as $subject)
                     <th>{{ $subject['name'] }}</th>
                 @endforeach
-                <th>Total</th>
-                <th>Obtained</th>
-                <th>%</th>
-                <th>Grade</th>
+                @if ($usesGradeSystem)
+                    <th>Overall Grade</th>
+                    <th>Description</th>
+                @else
+                    <th>Total</th>
+                    <th>Obtained</th>
+                    <th>%</th>
+                    <th>Grade</th>
+                @endif
             </tr>
         </thead>
         <tbody>
@@ -60,14 +69,27 @@
                     @foreach($report['subjects'] as $subject)
                         @php
                             $subjectId = (int) $subject['id'];
-                            $subjectMark = $row['subject_marks'][$subjectId] ?? ['obtained' => 0, 'total' => (int) $subject['total_marks']];
+                            $subjectMark = $row['subject_marks'][$subjectId] ?? ($usesGradeSystem
+                                ? ['grade' => null, 'label' => null]
+                                : ['obtained' => 0, 'total' => (int) $subject['total_marks']]);
                         @endphp
-                        <td>{{ (int) $subjectMark['obtained'] }}/{{ (int) $subjectMark['total'] }}</td>
+                        <td>
+                            @if ($usesGradeSystem)
+                                {{ $subjectMark['grade'] ?? '-' }}
+                            @else
+                                {{ (int) $subjectMark['obtained'] }}/{{ (int) $subjectMark['total'] }}
+                            @endif
+                        </td>
                     @endforeach
-                    <td>{{ (int) $row['total_marks'] }}</td>
-                    <td>{{ (int) $row['obtained_marks'] }}</td>
-                    <td>{{ number_format((float) $row['percentage'], 2) }}</td>
-                    <td>{{ $row['grade'] }}</td>
+                    @if ($usesGradeSystem)
+                        <td>{{ $row['grade'] ?? '-' }}</td>
+                        <td>{{ $row['grade_label'] ?? '-' }}</td>
+                    @else
+                        <td>{{ (int) $row['total_marks'] }}</td>
+                        <td>{{ (int) $row['obtained_marks'] }}</td>
+                        <td>{{ number_format((float) $row['percentage'], 2) }}</td>
+                        <td>{{ $row['grade'] }}</td>
+                    @endif
                 </tr>
             @endforeach
         </tbody>

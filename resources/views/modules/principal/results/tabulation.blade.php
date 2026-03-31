@@ -3,7 +3,7 @@
         <div class="flex flex-wrap items-center justify-between gap-3">
             <div>
                 <h2 class="text-xl font-semibold text-slate-900">Tabulation Sheet</h2>
-                <p class="mt-1 text-sm text-slate-500">Subject-wise obtained/total marks for all students in class.</p>
+                <p class="mt-1 text-sm text-slate-500">Subject-wise result summary for all students in class.</p>
             </div>
             <a
                 href="{{ route('principal.results.gazette', ['class_id' => $filters['class_id'], 'session' => $filters['session']]) }}"
@@ -75,6 +75,16 @@
         </section>
 
         @if($report)
+            @php
+                $usesGradeSystem = (bool) ($report['uses_grade_system'] ?? false);
+            @endphp
+
+            @if ($usesGradeSystem)
+                <div class="rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-800">
+                    This tabulation sheet is shown in grade mode because the selected class uses grade-based reporting.
+                </div>
+            @endif
+
             <section class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
                 <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                     <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Class</p>
@@ -93,8 +103,10 @@
                     <p class="mt-2 text-2xl font-semibold text-slate-900">{{ (int) $report['summary']['subjects_count'] }}</p>
                 </article>
                 <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                    <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Class Average</p>
-                    <p class="mt-2 text-2xl font-semibold text-indigo-700">{{ number_format((float) $report['summary']['class_average_percentage'], 2) }}%</p>
+                    <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ $usesGradeSystem ? 'Assessment Mode' : 'Class Average' }}</p>
+                    <p class="mt-2 text-2xl font-semibold text-indigo-700">
+                        {{ $usesGradeSystem ? 'Grade-based' : number_format((float) $report['summary']['class_average_percentage'], 2).'%' }}
+                    </p>
                 </article>
             </section>
 
@@ -109,10 +121,15 @@
                                         {{ $subject['name'] }}
                                     </th>
                                 @endforeach
-                                <th class="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Total</th>
-                                <th class="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Obtained</th>
-                                <th class="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">%</th>
-                                <th class="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Grade</th>
+                                @if ($usesGradeSystem)
+                                    <th class="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Overall Grade</th>
+                                    <th class="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Description</th>
+                                @else
+                                    <th class="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Total</th>
+                                    <th class="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Obtained</th>
+                                    <th class="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">%</th>
+                                    <th class="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Grade</th>
+                                @endif
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-100 bg-white">
@@ -125,16 +142,27 @@
                                     @foreach($report['subjects'] as $subject)
                                         @php
                                             $subjectId = (int) $subject['id'];
-                                            $subjectMark = $row['subject_marks'][$subjectId] ?? ['obtained' => 0, 'total' => (int) $subject['total_marks']];
+                                            $subjectMark = $row['subject_marks'][$subjectId] ?? ($usesGradeSystem
+                                                ? ['grade' => null, 'label' => null]
+                                                : ['obtained' => 0, 'total' => (int) $subject['total_marks']]);
                                         @endphp
                                         <td class="px-3 py-2 text-sm text-slate-700">
-                                            {{ (int) $subjectMark['obtained'] }}/{{ (int) $subjectMark['total'] }}
+                                            @if ($usesGradeSystem)
+                                                {{ $subjectMark['grade'] ?? '-' }}
+                                            @else
+                                                {{ (int) $subjectMark['obtained'] }}/{{ (int) $subjectMark['total'] }}
+                                            @endif
                                         </td>
                                     @endforeach
-                                    <td class="px-3 py-2 text-sm font-semibold text-slate-900">{{ (int) $row['total_marks'] }}</td>
-                                    <td class="px-3 py-2 text-sm font-semibold text-indigo-700">{{ (int) $row['obtained_marks'] }}</td>
-                                    <td class="px-3 py-2 text-sm text-slate-700">{{ number_format((float) $row['percentage'], 2) }}</td>
-                                    <td class="px-3 py-2 text-sm font-semibold text-slate-900">{{ $row['grade'] }}</td>
+                                    @if ($usesGradeSystem)
+                                        <td class="px-3 py-2 text-sm font-semibold text-slate-900">{{ $row['grade'] ?? '-' }}</td>
+                                        <td class="px-3 py-2 text-sm text-slate-700">{{ $row['grade_label'] ?? '-' }}</td>
+                                    @else
+                                        <td class="px-3 py-2 text-sm font-semibold text-slate-900">{{ (int) $row['total_marks'] }}</td>
+                                        <td class="px-3 py-2 text-sm font-semibold text-indigo-700">{{ (int) $row['obtained_marks'] }}</td>
+                                        <td class="px-3 py-2 text-sm text-slate-700">{{ number_format((float) $row['percentage'], 2) }}</td>
+                                        <td class="px-3 py-2 text-sm font-semibold text-slate-900">{{ $row['grade'] }}</td>
+                                    @endif
                                 </tr>
                             @endforeach
                         </tbody>

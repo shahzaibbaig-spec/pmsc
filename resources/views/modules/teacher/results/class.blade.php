@@ -64,6 +64,12 @@
                 </div>
             @endif
 
+            @if ($usesGradeSystem)
+                <div class="rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-800">
+                    This class uses grade-based assessment only. Numeric totals, percentages, and rankings are hidden.
+                </div>
+            @endif
+
             <div x-data="{ tab: '{{ $isClassTeacherView ? 'class' : 'subject' }}' }" class="space-y-4">
                 <div class="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-1">
                     <button
@@ -91,11 +97,11 @@
                         <x-ui.card title="Subjects" subtitle="Visible in this tab">
                             <p class="text-2xl font-semibold text-slate-900">{{ count($mySubjectResults['subjects'] ?? []) }}</p>
                         </x-ui.card>
-                        <x-ui.card title="Result Rows" subtitle="Students with marks">
+                        <x-ui.card title="Result Rows" subtitle="{{ $usesGradeSystem ? 'Students with graded entries' : 'Students with marks' }}">
                             <p class="text-2xl font-semibold text-slate-900">{{ (int) ($mySubjectResults['total_rows'] ?? 0) }}</p>
                         </x-ui.card>
                         <x-ui.card title="Access Scope" subtitle="Edit only your taught subjects">
-                            <p class="text-sm font-medium text-slate-700">Subject Teacher Access</p>
+                            <p class="text-sm font-medium text-slate-700">{{ $usesGradeSystem ? 'Grade Entry Access' : 'Subject Teacher Access' }}</p>
                         </x-ui.card>
                     </div>
 
@@ -106,10 +112,15 @@
                                     <tr>
                                         <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Subject</th>
                                         <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Student</th>
-                                        <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Obtained</th>
-                                        <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Total</th>
-                                        <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">%</th>
-                                        <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Grade</th>
+                                        @if ($usesGradeSystem)
+                                            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Grade</th>
+                                            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Description</th>
+                                        @else
+                                            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Obtained</th>
+                                            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Total</th>
+                                            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">%</th>
+                                            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Grade</th>
+                                        @endif
                                         <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Action</th>
                                     </tr>
                                 </thead>
@@ -121,14 +132,19 @@
                                                 <div class="font-medium">{{ $row['student_name'] }}</div>
                                                 <div class="text-xs text-slate-500">{{ $row['student_id'] }}</div>
                                             </td>
-                                            <td class="px-4 py-3 text-sm text-slate-700">{{ number_format((float) $row['obtained_marks'], 2) }}</td>
-                                            <td class="px-4 py-3 text-sm text-slate-700">{{ number_format((float) $row['total_marks'], 2) }}</td>
-                                            <td class="px-4 py-3 text-sm text-slate-700">{{ number_format((float) $row['percentage'], 2) }}%</td>
-                                            <td class="px-4 py-3 text-sm font-semibold text-slate-900">{{ $row['grade'] }}</td>
+                                            @if ($usesGradeSystem)
+                                                <td class="px-4 py-3 text-sm font-semibold text-slate-900">{{ $row['grade'] ?? '-' }}</td>
+                                                <td class="px-4 py-3 text-sm text-slate-700">{{ $row['grade_label'] ?? '-' }}</td>
+                                            @else
+                                                <td class="px-4 py-3 text-sm text-slate-700">{{ number_format((float) $row['obtained_marks'], 2) }}</td>
+                                                <td class="px-4 py-3 text-sm text-slate-700">{{ number_format((float) $row['total_marks'], 2) }}</td>
+                                                <td class="px-4 py-3 text-sm text-slate-700">{{ number_format((float) $row['percentage'], 2) }}%</td>
+                                                <td class="px-4 py-3 text-sm font-semibold text-slate-900">{{ $row['grade'] }}</td>
+                                            @endif
                                             <td class="px-4 py-3 text-sm">
                                                 @if($row['can_edit'])
                                                     <a href="{{ $row['edit_url'] }}" class="inline-flex min-h-9 items-center rounded-md border border-emerald-300 px-3 text-xs font-medium text-emerald-700 hover:bg-emerald-50">
-                                                        Edit in Marks Entry
+                                                        Edit in Entry Screen
                                                     </a>
                                                 @else
                                                     <span class="inline-flex rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">View Only</span>
@@ -137,7 +153,7 @@
                                         </tr>
                                     @empty
                                         <tr>
-                                            <td colspan="7" class="px-4 py-8 text-center text-sm text-slate-500">No result records found for selected filters.</td>
+                                            <td colspan="{{ $usesGradeSystem ? 5 : 7 }}" class="px-4 py-8 text-center text-sm text-slate-500">No result records found for selected filters.</td>
                                         </tr>
                                     @endforelse
                                 </tbody>
@@ -155,7 +171,7 @@
                             <x-ui.card title="Class Subjects" subtitle="Subjects in selected class">
                                 <p class="text-2xl font-semibold text-slate-900">{{ count($classResults['subjects'] ?? []) }}</p>
                             </x-ui.card>
-                            <x-ui.card title="Result Rows" subtitle="Students with marks">
+                            <x-ui.card title="Result Rows" subtitle="{{ $usesGradeSystem ? 'Students with graded entries' : 'Students with marks' }}">
                                 <p class="text-2xl font-semibold text-slate-900">{{ (int) ($classResults['total_rows'] ?? 0) }}</p>
                             </x-ui.card>
                         </div>
@@ -167,10 +183,15 @@
                                         <tr>
                                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Subject</th>
                                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Student</th>
-                                            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Obtained</th>
-                                            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Total</th>
-                                            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">%</th>
-                                            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Grade</th>
+                                            @if ($usesGradeSystem)
+                                                <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Grade</th>
+                                                <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Description</th>
+                                            @else
+                                                <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Obtained</th>
+                                                <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Total</th>
+                                                <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">%</th>
+                                                <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Grade</th>
+                                            @endif
                                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Action</th>
                                         </tr>
                                     </thead>
@@ -182,14 +203,19 @@
                                                     <div class="font-medium">{{ $row['student_name'] }}</div>
                                                     <div class="text-xs text-slate-500">{{ $row['student_id'] }}</div>
                                                 </td>
-                                                <td class="px-4 py-3 text-sm text-slate-700">{{ number_format((float) $row['obtained_marks'], 2) }}</td>
-                                                <td class="px-4 py-3 text-sm text-slate-700">{{ number_format((float) $row['total_marks'], 2) }}</td>
-                                                <td class="px-4 py-3 text-sm text-slate-700">{{ number_format((float) $row['percentage'], 2) }}%</td>
-                                                <td class="px-4 py-3 text-sm font-semibold text-slate-900">{{ $row['grade'] }}</td>
+                                                @if ($usesGradeSystem)
+                                                    <td class="px-4 py-3 text-sm font-semibold text-slate-900">{{ $row['grade'] ?? '-' }}</td>
+                                                    <td class="px-4 py-3 text-sm text-slate-700">{{ $row['grade_label'] ?? '-' }}</td>
+                                                @else
+                                                    <td class="px-4 py-3 text-sm text-slate-700">{{ number_format((float) $row['obtained_marks'], 2) }}</td>
+                                                    <td class="px-4 py-3 text-sm text-slate-700">{{ number_format((float) $row['total_marks'], 2) }}</td>
+                                                    <td class="px-4 py-3 text-sm text-slate-700">{{ number_format((float) $row['percentage'], 2) }}%</td>
+                                                    <td class="px-4 py-3 text-sm font-semibold text-slate-900">{{ $row['grade'] }}</td>
+                                                @endif
                                                 <td class="px-4 py-3 text-sm">
                                                     @if($row['can_edit'])
                                                         <a href="{{ $row['edit_url'] }}" class="inline-flex min-h-9 items-center rounded-md border border-emerald-300 px-3 text-xs font-medium text-emerald-700 hover:bg-emerald-50">
-                                                            Edit in Marks Entry
+                                                            Edit in Entry Screen
                                                         </a>
                                                     @else
                                                         <span class="inline-flex rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">View Only</span>
@@ -198,7 +224,7 @@
                                             </tr>
                                         @empty
                                             <tr>
-                                                <td colspan="7" class="px-4 py-8 text-center text-sm text-slate-500">No class result records found for selected filters.</td>
+                                                <td colspan="{{ $usesGradeSystem ? 5 : 7 }}" class="px-4 py-8 text-center text-sm text-slate-500">No class result records found for selected filters.</td>
                                             </tr>
                                         @endforelse
                                     </tbody>

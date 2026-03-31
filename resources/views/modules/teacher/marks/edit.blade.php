@@ -1,7 +1,7 @@
 <x-app-layout>
     <x-slot name="header">
         <h2 class="font-semibold text-xl text-gray-800 leading-tight">
-            Edit Mark Entry
+            Edit Assessment Entry
         </h2>
     </x-slot>
 
@@ -56,32 +56,57 @@
                         @csrf
                         @method('PUT')
 
-                        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                            <div>
-                                <x-input-label for="obtained_marks" value="Obtained Marks" />
-                                <x-text-input
-                                    id="obtained_marks"
-                                    name="obtained_marks"
-                                    type="number"
-                                    min="0"
-                                    max="{{ $mark->total_marks }}"
-                                    class="mt-1 block min-h-11 w-full"
-                                    :value="old('obtained_marks', $mark->obtained_marks)"
-                                    required
-                                />
-                            </div>
+                        @if ($usesGradeSystem)
+                            <div class="space-y-3">
+                                <div>
+                                    <x-input-label for="grade" value="Select Grade" />
+                                    <select
+                                        id="grade"
+                                        name="grade"
+                                        required
+                                        class="mt-1 block min-h-11 w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                    >
+                                        <option value="">Select Grade</option>
+                                        @foreach ($gradeOptions as $option)
+                                            <option value="{{ $option['code'] }}" @selected(old('grade', $mark->grade) === $option['code'])>
+                                                {{ $option['code'] }} - {{ $option['label'] }}
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                </div>
 
-                            <div>
-                                <x-input-label for="total_marks" value="Total Marks" />
-                                <x-text-input
-                                    id="total_marks"
-                                    type="number"
-                                    class="mt-1 block min-h-11 w-full bg-gray-100"
-                                    :value="$mark->total_marks"
-                                    readonly
-                                />
+                                <div class="rounded-md border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm text-indigo-800">
+                                    Current descriptor: <span class="font-semibold">{{ $gradeLabel ?? 'Not set' }}</span>
+                                </div>
                             </div>
-                        </div>
+                        @else
+                            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                <div>
+                                    <x-input-label for="obtained_marks" value="Obtained Marks" />
+                                    <x-text-input
+                                        id="obtained_marks"
+                                        name="obtained_marks"
+                                        type="number"
+                                        min="0"
+                                        max="{{ $mark->total_marks }}"
+                                        class="mt-1 block min-h-11 w-full"
+                                        :value="old('obtained_marks', $mark->obtained_marks)"
+                                        required
+                                    />
+                                </div>
+
+                                <div>
+                                    <x-input-label for="total_marks" value="Total Marks" />
+                                    <x-text-input
+                                        id="total_marks"
+                                        type="number"
+                                        class="mt-1 block min-h-11 w-full bg-gray-100"
+                                        :value="$mark->total_marks"
+                                        readonly
+                                    />
+                                </div>
+                            </div>
+                        @endif
 
                         <div>
                             <x-input-label for="edit_reason" value="Edit Reason" />
@@ -91,7 +116,7 @@
                                 rows="3"
                                 required
                                 class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                placeholder="Reason for modifying this mark entry"
+                                placeholder="Reason for modifying this assessment entry"
                             >{{ old('edit_reason') }}</textarea>
                         </div>
 

@@ -9,6 +9,7 @@ use App\Models\SchoolClass;
 use App\Models\Subject;
 use App\Models\Teacher;
 use App\Models\TeacherAssignment;
+use App\Services\ClassAssessmentModeService;
 use App\Services\TeacherStudentVisibilityService;
 use App\Modules\Exams\Enums\ExamType;
 use Illuminate\Http\Request;
@@ -17,7 +18,8 @@ use Illuminate\View\View;
 class TeacherResultController extends Controller
 {
     public function __construct(
-        private readonly TeacherStudentVisibilityService $visibilityService
+        private readonly TeacherStudentVisibilityService $visibilityService,
+        private readonly ClassAssessmentModeService $assessmentModeService
     ) {
     }
 
@@ -42,6 +44,8 @@ class TeacherResultController extends Controller
                 'selectedClassId' => null,
                 'selectedExamType' => $defaultExamType,
                 'isClassTeacherView' => false,
+                'usesGradeSystem' => false,
+                'gradeOptions' => $this->assessmentModeService->gradeScale(),
                 'teacherSubjectIds' => [],
                 'mySubjectResults' => ['subjects' => [], 'rows' => [], 'total_rows' => 0],
                 'classResults' => null,
@@ -77,6 +81,9 @@ class TeacherResultController extends Controller
 
         $isClassTeacherView = $selectedClass
             ? (int) ($selectedClass->class_teacher_id ?? 0) === (int) $teacher->id
+            : false;
+        $usesGradeSystem = $selectedClass
+            ? $this->assessmentModeService->classUsesGradeSystem($selectedClass)
             : false;
 
         $teacherSubjectIds = [];
@@ -159,6 +166,8 @@ class TeacherResultController extends Controller
             'selectedClassId' => $selectedClassId,
             'selectedExamType' => $selectedExamType,
             'isClassTeacherView' => $isClassTeacherView,
+            'usesGradeSystem' => $usesGradeSystem,
+            'gradeOptions' => $this->assessmentModeService->gradeScale(),
             'teacherSubjectIds' => $teacherSubjectIds,
             'mySubjectResults' => $mySubjectResults,
             'classResults' => $classResults,
@@ -252,12 +261,14 @@ class TeacherResultController extends Controller
             ->unique()
             ->values()
             ->all();
+        $usesGradeSystem = $this->assessmentModeService->classUsesGradeSystem($classId);
 
         if ($normalizedSubjectIds === []) {
             return [
                 'subjects' => [],
                 'rows' => [],
                 'total_rows' => 0,
+                'uses_grade_system' => $usesGradeSystem,
             ];
         }
 
@@ -292,7 +303,7 @@ class TeacherResultController extends Controller
             ->whereHas('student', function ($query) use ($classId): void {
                 $query->where('class_id', $classId);
             })
-            ->get(['id', 'exam_id', 'student_id', 'obtained_marks', 'total_marks', 'session']);
+            ->get(['id', 'exam_id', 'student_id', 'obtained_marks', 'total_marks', 'grade', 'session']);
 
         $rows = $marks->map(function (Mark $mark) use (
             $teacherId,
@@ -301,7 +312,8 @@ class TeacherResultController extends Controller
             $classId,
             $session,
             $examType,
-            $requiresSubjectFiltering
+            $requiresSubjectFiltering,
+            $usesGradeSystem
         ): ?array {
             $subjectId = (int) ($mark->exam?->subject_id ?? 0);
             if ($subjectId <= 0) {
@@ -321,9 +333,12 @@ class TeacherResultController extends Controller
                 }
             }
 
-            $totalMarks = (float) ($mark->total_marks ?: $mark->exam?->total_marks ?: 0);
-            $obtained = (float) $mark->obtained_marks;
-            $percentage = $totalMarks > 0 ? round(($obtained / $totalMarks) * 100, 2) : 0.0;
+            $grade = $usesGradeSystem ? $this->assessmentModeService->normalizeGrade($mark->grade) : null;
+            $totalMarks = $usesGradeSystem ? null : (float) ($mark->total_marks ?: $mark->exam?->total_marks ?: 0);
+            $obtained = $usesGradeSystem ? null : (float) $mark->obtained_marks;
+            $percentage = $usesGradeSystem
+                ? null
+                : ($totalMarks > 0 ? round(($obtained / $totalMarks) * 100, 2) : 0.0);
 
             return [
                 'mark_id' => (int) $mark->id,
@@ -334,7 +349,8 @@ class TeacherResultController extends Controller
                 'obtained_marks' => $obtained,
                 'total_marks' => $totalMarks,
                 'percentage' => $percentage,
-                'grade' => $this->grade($percentage),
+                'grade' => $usesGradeSystem ? $grade : $this->grade((float) $percentage),
+                'grade_label' => $usesGradeSystem ? $this->assessmentModeService->gradeLabel($grade) : null,
                 'can_edit' => isset($editableLookup[$subjectId]),
                 'edit_url' => route('teacher.exams.index', [
                     'session' => $session,
@@ -350,8 +366,9 @@ class TeacherResultController extends Controller
 
         $subjects = $subjectCollection->map(function (Subject $subject) use ($rows): array {
             $subjectRows = $rows->where('subject_id', (int) $subject->id);
+            $dominantGrade = $this->assessmentModeService->dominantGrade($subjectRows->pluck('grade')->all());
             $avgPercentage = $subjectRows->isEmpty()
-                ? 0
+                ? null
                 : round((float) $subjectRows->avg('percentage'), 2);
 
             return [
@@ -359,6 +376,8 @@ class TeacherResultController extends Controller
                 'name' => (string) $subject->name,
                 'rows_count' => $subjectRows->count(),
                 'avg_percentage' => $avgPercentage,
+                'dominant_grade' => $dominantGrade,
+                'dominant_grade_label' => $this->assessmentModeService->gradeLabel($dominantGrade),
             ];
         })->values()->all();
 
@@ -366,6 +385,7 @@ class TeacherResultController extends Controller
             'subjects' => $subjects,
             'rows' => $rows->all(),
             'total_rows' => $rows->count(),
+            'uses_grade_system' => $usesGradeSystem,
         ];
     }
 

@@ -13,6 +13,8 @@ class MarkEditLog extends Model
         'mark_id',
         'old_marks',
         'new_marks',
+        'old_grade',
+        'new_grade',
         'edited_by',
         'edit_reason',
         'action_type',
@@ -24,6 +26,8 @@ class MarkEditLog extends Model
         return [
             'old_marks' => 'integer',
             'new_marks' => 'integer',
+            'old_grade' => 'string',
+            'new_grade' => 'string',
             'edited_at' => 'datetime',
         ];
     }
