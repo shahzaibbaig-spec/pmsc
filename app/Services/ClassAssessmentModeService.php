@@ -100,7 +100,11 @@ class ClassAssessmentModeService
         $metadata = collect(self::GRADE_SCALE)->keyBy('code');
 
         return $counts
-            ->sort(function (int $leftCount, int $rightCount, string $leftCode, string $rightCode) use ($metadata): int {
+            ->keys()
+            ->sort(function (string $leftCode, string $rightCode) use ($counts, $metadata): int {
+                $leftCount = (int) ($counts->get($leftCode) ?? 0);
+                $rightCount = (int) ($counts->get($rightCode) ?? 0);
+
                 if ($leftCount !== $rightCount) {
                     return $rightCount <=> $leftCount;
                 }
@@ -108,9 +112,12 @@ class ClassAssessmentModeService
                 $leftSort = (int) ($metadata->get($leftCode)['sort_order'] ?? PHP_INT_MAX);
                 $rightSort = (int) ($metadata->get($rightCode)['sort_order'] ?? PHP_INT_MAX);
 
-                return $leftSort <=> $rightSort;
+                if ($leftSort !== $rightSort) {
+                    return $leftSort <=> $rightSort;
+                }
+
+                return strcmp($leftCode, $rightCode);
             })
-            ->keys()
             ->first();
     }
 
