@@ -95,6 +95,51 @@
                         </div>
                     @endif
 
+                    @if(!empty($cognitiveAssessmentCard))
+                        <div class="mt-4 rounded-md border border-sky-200 bg-sky-50 p-4">
+                            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                <div>
+                                    <p class="text-xs font-semibold uppercase tracking-[0.24em] text-sky-700">Assessment</p>
+                                    <h3 class="mt-1 text-lg font-semibold text-slate-900">{{ $cognitiveAssessmentCard['title'] }}</h3>
+                                    <p class="mt-2 max-w-2xl text-sm text-slate-600">{{ $cognitiveAssessmentCard['description'] }}</p>
+                                </div>
+                                <div class="inline-flex items-center rounded-full bg-white px-3 py-1 text-xs font-semibold text-sky-700 shadow-sm">
+                                    {{ $cognitiveAssessmentCard['status_label'] }}
+                                </div>
+                            </div>
+
+                            <div class="mt-4 grid gap-3 sm:grid-cols-3">
+                                <div>
+                                    <p class="text-xs uppercase tracking-wide text-slate-500">Assessment Type</p>
+                                    <p class="mt-1 text-sm font-semibold text-slate-900">Fully Auto-Checked</p>
+                                </div>
+                                <div>
+                                    <p class="text-xs uppercase tracking-wide text-slate-500">Performance Band</p>
+                                    <p class="mt-1 text-sm font-semibold text-slate-900">{{ $cognitiveAssessmentCard['performance_band'] ?? 'Pending' }}</p>
+                                </div>
+                                <div>
+                                    <p class="text-xs uppercase tracking-wide text-slate-500">Overall Percentage</p>
+                                    <p class="mt-1 text-sm font-semibold text-slate-900">
+                                        {{ isset($cognitiveAssessmentCard['overall_percentage']) ? number_format((float) $cognitiveAssessmentCard['overall_percentage'], 2).'%' : 'Not graded yet' }}
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div class="mt-4 flex flex-wrap items-center gap-3">
+                                <a
+                                    href="{{ $cognitiveAssessmentCard['action_url'] }}"
+                                    class="inline-flex items-center rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700"
+                                >
+                                    {{ $cognitiveAssessmentCard['action_label'] }}
+                                </a>
+
+                                @if(!empty($cognitiveAssessmentCard['submitted_at']))
+                                    <p class="text-xs text-slate-500">Last submitted at {{ $cognitiveAssessmentCard['submitted_at'] }}</p>
+                                @endif
+                            </div>
+                        </div>
+                    @endif
+
                     <div class="mt-4">
                         <a
                             href="{{ route('student.results.index') }}"

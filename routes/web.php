@@ -1139,6 +1139,148 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
         ->middleware('role:Student')
         ->name('student.results.index');
 
+    Route::prefix('student/assessments')
+        ->name('student.assessments.')
+        ->middleware(['role:Student'])
+        ->group(function (): void {
+            Route::get('/', [\App\Modules\Assessments\Controllers\StudentCognitiveAssessmentController::class, 'index'])
+                ->middleware(['permission:take_cognitive_assessment,view_own_cognitive_results'])
+                ->name('index');
+
+            Route::prefix('cognitive-skills-level-4')
+                ->name('cognitive-skills-level-4.')
+                ->group(function (): void {
+                    Route::get('/', [\App\Modules\Assessments\Controllers\StudentCognitiveAssessmentController::class, 'showLevelFour'])
+                        ->middleware(['permission:take_cognitive_assessment,view_own_cognitive_results'])
+                        ->name('index');
+
+                    Route::post('/', [\App\Modules\Assessments\Controllers\StudentCognitiveAssessmentController::class, 'start'])
+                        ->middleware(['permission:take_cognitive_assessment'])
+                        ->name('start');
+
+                    Route::get('/attempt/{attempt}', [\App\Modules\Assessments\Controllers\StudentCognitiveAssessmentController::class, 'attempt'])
+                        ->middleware(['permission:take_cognitive_assessment'])
+                        ->name('attempt');
+
+                    Route::post('/attempt/{attempt}/responses', [\App\Modules\Assessments\Controllers\StudentCognitiveAssessmentController::class, 'saveResponses'])
+                        ->middleware(['permission:take_cognitive_assessment'])
+                        ->name('responses.store');
+
+                    Route::post('/attempt/{attempt}/submit', [\App\Modules\Assessments\Controllers\StudentCognitiveAssessmentController::class, 'submit'])
+                        ->middleware(['permission:take_cognitive_assessment'])
+                        ->name('submit');
+
+                    Route::get('/result/{attempt}', [\App\Modules\Assessments\Controllers\StudentCognitiveAssessmentController::class, 'result'])
+                        ->middleware(['permission:view_own_cognitive_results'])
+                        ->name('result');
+                });
+        });
+
+    Route::get('/principal/assessments/cognitive-skills-level-4-reports', [\App\Modules\Assessments\Controllers\PrincipalCognitiveAssessmentReportController::class, 'index'])
+        ->middleware(['role:Principal', 'permission:view_cognitive_assessment_reports'])
+        ->name('principal.assessments.cognitive-skills-level-4-reports.index');
+
+    Route::get('/principal/assessments/cognitive-skills-level-4/students', [\App\Modules\Assessments\Controllers\PrincipalCognitiveAssessmentAccessController::class, 'index'])
+        ->middleware(['role:Admin,Principal', 'permission:manage_student_cognitive_assessment_access'])
+        ->name('principal.assessments.cognitive-skills-level-4.students.index');
+
+    Route::post('/principal/assessments/cognitive-skills-level-4/{assessment}/students/{student}/enable', [\App\Modules\Assessments\Controllers\PrincipalCognitiveAssessmentAccessController::class, 'enableStudent'])
+        ->middleware(['role:Admin,Principal', 'permission:manage_student_cognitive_assessment_access'])
+        ->name('principal.assessments.cognitive-skills-level-4.students.enable');
+
+    Route::post('/principal/assessments/cognitive-skills-level-4/{assessment}/students/{student}/disable', [\App\Modules\Assessments\Controllers\PrincipalCognitiveAssessmentAccessController::class, 'disableStudent'])
+        ->middleware(['role:Admin,Principal', 'permission:manage_student_cognitive_assessment_access'])
+        ->name('principal.assessments.cognitive-skills-level-4.students.disable');
+
+    Route::post('/principal/assessments/cognitive-skills-level-4/{assessment}/students/{student}/reset', [\App\Modules\Assessments\Controllers\PrincipalCognitiveAssessmentAccessController::class, 'resetStudent'])
+        ->middleware(['role:Admin,Principal', 'permission:reset_student_cognitive_assessment'])
+        ->name('principal.assessments.cognitive-skills-level-4.students.reset');
+
+    Route::get('/principal/assessments/cognitive-skills-level-4/reports/{attempt}', [\App\Modules\Assessments\Controllers\PrincipalCognitiveAssessmentAccessController::class, 'report'])
+        ->middleware(['role:Admin,Principal', 'permission:view_cognitive_profile_reports'])
+        ->name('principal.assessments.cognitive-skills-level-4.reports.show');
+
+    Route::get('/principal/assessments/cognitive-skills-level-4-reports/{attempt}', [\App\Modules\Assessments\Controllers\PrincipalCognitiveAssessmentReportController::class, 'show'])
+        ->middleware(['role:Principal', 'permission:view_cognitive_assessment_reports'])
+        ->name('principal.assessments.cognitive-skills-level-4-reports.show');
+
+    Route::get('/admin/assessments/cognitive-skills-level-4-reports', [\App\Modules\Assessments\Controllers\AdminCognitiveAssessmentReportController::class, 'index'])
+        ->middleware(['role:Admin', 'permission:view_cognitive_assessment_reports'])
+        ->name('admin.assessments.cognitive-skills-level-4-reports.index');
+
+    Route::get('/admin/assessments/cognitive-skills-level-4/reports/{attempt}', [\App\Modules\Assessments\Controllers\AdminCognitiveAssessmentReportController::class, 'show'])
+        ->middleware(['role:Admin', 'permission:view_cognitive_profile_reports'])
+        ->name('admin.assessments.cognitive-skills-level-4.reports.show');
+
+    Route::get('/admin/assessments/cognitive-skills-level-4-reports/{attempt}', [\App\Modules\Assessments\Controllers\AdminCognitiveAssessmentReportController::class, 'show'])
+        ->middleware(['role:Admin', 'permission:view_cognitive_assessment_reports'])
+        ->name('admin.assessments.cognitive-skills-level-4-reports.show');
+
+    Route::prefix('/admin/assessments/cognitive-skills-level-4')
+        ->name('admin.assessments.cognitive-skills-level-4.')
+        ->middleware(['role:Admin'])
+        ->group(function (): void {
+            Route::get('/question-banks', [\App\Modules\Assessments\Controllers\AdminCognitiveQuestionBankController::class, 'index'])
+                ->middleware(['permission:manage_cognitive_question_banks'])
+                ->name('question-banks.index');
+
+            Route::get('/question-banks/create', [\App\Modules\Assessments\Controllers\AdminCognitiveQuestionBankController::class, 'create'])
+                ->middleware(['permission:manage_cognitive_question_banks'])
+                ->name('question-banks.create');
+
+            Route::post('/question-banks', [\App\Modules\Assessments\Controllers\AdminCognitiveQuestionBankController::class, 'store'])
+                ->middleware(['permission:manage_cognitive_question_banks'])
+                ->name('question-banks.store');
+
+            Route::get('/question-banks/{bank}', [\App\Modules\Assessments\Controllers\AdminCognitiveQuestionBankController::class, 'show'])
+                ->middleware(['permission:manage_cognitive_question_banks'])
+                ->name('question-banks.show');
+
+            Route::get('/question-banks/{bank}/edit', [\App\Modules\Assessments\Controllers\AdminCognitiveQuestionBankController::class, 'edit'])
+                ->middleware(['permission:manage_cognitive_question_banks'])
+                ->name('question-banks.edit');
+
+            Route::put('/question-banks/{bank}', [\App\Modules\Assessments\Controllers\AdminCognitiveQuestionBankController::class, 'update'])
+                ->middleware(['permission:manage_cognitive_question_banks'])
+                ->name('question-banks.update');
+
+            Route::delete('/question-banks/{bank}', [\App\Modules\Assessments\Controllers\AdminCognitiveQuestionBankController::class, 'destroy'])
+                ->middleware(['permission:manage_cognitive_question_banks'])
+                ->name('question-banks.destroy');
+
+            Route::get('/question-banks/{bank}/questions/create', [\App\Modules\Assessments\Controllers\AdminCognitiveBankQuestionController::class, 'create'])
+                ->middleware(['permission:manage_cognitive_question_banks'])
+                ->name('question-banks.questions.create');
+
+            Route::post('/question-banks/{bank}/questions', [\App\Modules\Assessments\Controllers\AdminCognitiveBankQuestionController::class, 'store'])
+                ->middleware(['permission:manage_cognitive_question_banks'])
+                ->name('question-banks.questions.store');
+
+            Route::get('/questions/{question}/edit', [\App\Modules\Assessments\Controllers\AdminCognitiveBankQuestionController::class, 'edit'])
+                ->middleware(['permission:manage_cognitive_question_banks'])
+                ->name('questions.edit');
+
+            Route::put('/questions/{question}', [\App\Modules\Assessments\Controllers\AdminCognitiveBankQuestionController::class, 'update'])
+                ->middleware(['permission:manage_cognitive_question_banks'])
+                ->name('questions.update');
+
+            Route::delete('/questions/{question}', [\App\Modules\Assessments\Controllers\AdminCognitiveBankQuestionController::class, 'destroy'])
+                ->middleware(['permission:manage_cognitive_question_banks'])
+                ->name('questions.destroy');
+
+            Route::get('/sections/{section}/questions', [\App\Modules\Assessments\Controllers\AdminCognitiveAssessmentSectionQuestionController::class, 'edit'])
+                ->middleware(['permission:manage_cognitive_assessment_setup'])
+                ->name('sections.questions.edit');
+
+            Route::put('/sections/{section}/questions', [\App\Modules\Assessments\Controllers\AdminCognitiveAssessmentSectionQuestionController::class, 'update'])
+                ->middleware(['permission:manage_cognitive_assessment_setup'])
+                ->name('sections.questions.update');
+
+            Route::delete('/sections/{section}/questions/{bankQuestion}', [\App\Modules\Assessments\Controllers\AdminCognitiveAssessmentSectionQuestionController::class, 'remove'])
+                ->middleware(['permission:manage_cognitive_assessment_setup'])
+                ->name('sections.questions.remove');
+        });
+
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');

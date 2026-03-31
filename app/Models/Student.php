@@ -135,6 +135,21 @@ class Student extends Model
         return $this->hasMany(FeeChallan::class);
     }
 
+    public function cognitiveAssessmentAttempts(): HasMany
+    {
+        return $this->hasMany(CognitiveAssessmentAttempt::class);
+    }
+
+    public function cognitiveAssessmentAssignments(): HasMany
+    {
+        return $this->hasMany(CognitiveAssessmentStudentAssignment::class);
+    }
+
+    public function cognitiveAssessmentAttemptResets(): HasMany
+    {
+        return $this->hasMany(CognitiveAssessmentAttemptReset::class);
+    }
+
     public function feeInstallmentPlans(): HasMany
     {
         return $this->hasMany(FeeInstallmentPlan::class);

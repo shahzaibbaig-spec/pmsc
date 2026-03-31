@@ -1,6 +1,16 @@
 @php
     $sidebarUser = auth()->user();
     $menuItems = [];
+    $studentAssessmentMenuVisible = false;
+
+    if ($sidebarUser?->hasRole('Student')) {
+        $studentAssessmentMenuVisible = rescue(function () use ($sidebarUser): bool {
+            $assessmentService = app(\App\Services\CognitiveAssessmentService::class);
+            $student = $assessmentService->resolveStudentForUser($sidebarUser);
+
+            return $student ? $assessmentService->studentCanAccessAssessment($student) : false;
+        }, false, false);
+    }
 
     if ($sidebarUser?->hasRole('Admin')) {
         $menuItems = [
@@ -77,6 +87,15 @@
         if ($sidebarUser?->can('review_device_declarations')) {
             $menuItems[] = ['route' => 'inventory.device-declarations.index', 'label' => 'Device Declarations'];
         }
+        if ($sidebarUser?->can('manage_student_cognitive_assessment_access')) {
+            $menuItems[] = ['route' => 'principal.assessments.cognitive-skills-level-4.students.index', 'label' => 'Assessment Access'];
+        }
+        if ($sidebarUser?->can('manage_cognitive_question_banks') || $sidebarUser?->can('manage_cognitive_assessment_setup')) {
+            $menuItems[] = ['route' => 'admin.assessments.cognitive-skills-level-4.question-banks.index', 'label' => 'Assessment Setup'];
+        }
+        if ($sidebarUser?->can('view_cognitive_assessment_reports')) {
+            $menuItems[] = ['route' => 'admin.assessments.cognitive-skills-level-4-reports.index', 'label' => 'Assessment Reports'];
+        }
     } elseif ($sidebarUser?->hasRole('Principal')) {
         $menuItems = [
             ['route' => 'principal.dashboard', 'label' => 'Dashboard'],
@@ -111,6 +130,12 @@
         }
         if ($sidebarUser?->can('review_device_declarations')) {
             $menuItems[] = ['route' => 'inventory.device-declarations.index', 'label' => 'Device Declarations'];
+        }
+        if ($sidebarUser?->can('manage_student_cognitive_assessment_access')) {
+            $menuItems[] = ['route' => 'principal.assessments.cognitive-skills-level-4.students.index', 'label' => 'Assessment Access'];
+        }
+        if ($sidebarUser?->can('view_cognitive_assessment_reports')) {
+            $menuItems[] = ['route' => 'principal.assessments.cognitive-skills-level-4-reports.index', 'label' => 'Assessment Reports'];
         }
     } elseif ($sidebarUser?->hasRole('Accountant')) {
         $menuItems = [
@@ -199,6 +224,13 @@
             ['route' => 'student.results.index', 'label' => 'My Results'],
             ['route' => 'notifications.index', 'label' => 'Notifications'],
         ];
+
+        if ($sidebarUser?->hasAnyPermission(['take_cognitive_assessment', 'view_own_cognitive_results']) && $studentAssessmentMenuVisible) {
+            array_splice($menuItems, 1, 0, [[
+                'route' => 'student.assessments.index',
+                'label' => 'Assessments',
+            ]]);
+        }
     }
 @endphp
 
@@ -226,6 +258,14 @@
                 array_pop($routeParts);
                 $routeGroup = implode('.', $routeParts);
                 $isActive = request()->routeIs($item['route']) || ($routeGroup !== '' && request()->routeIs($routeGroup.'.*'));
+
+                if ($item['route'] === 'principal.assessments.cognitive-skills-level-4-reports.index') {
+                    $isActive = $isActive || request()->routeIs('principal.assessments.cognitive-skills-level-4.reports.*');
+                }
+
+                if ($item['route'] === 'admin.assessments.cognitive-skills-level-4-reports.index') {
+                    $isActive = $isActive || request()->routeIs('admin.assessments.cognitive-skills-level-4.reports.*');
+                }
             @endphp
             <a
                 href="{{ route($item['route']) }}"

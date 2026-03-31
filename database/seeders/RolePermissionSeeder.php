@@ -56,6 +56,14 @@ class RolePermissionSeeder extends Seeder
             'fulfill_inventory_demands',
             'submit_device_declaration',
             'review_device_declarations',
+            'take_cognitive_assessment',
+            'view_own_cognitive_results',
+            'view_cognitive_assessment_reports',
+            'manage_student_cognitive_assessment_access',
+            'reset_student_cognitive_assessment',
+            'view_cognitive_profile_reports',
+            'manage_cognitive_question_banks',
+            'manage_cognitive_assessment_setup',
         ];
 
         foreach ($permissions as $permission) {
@@ -84,6 +92,10 @@ class RolePermissionSeeder extends Seeder
             'review_inventory_demands',
             'fulfill_inventory_demands',
             'review_device_declarations',
+            'view_cognitive_assessment_reports',
+            'manage_student_cognitive_assessment_access',
+            'reset_student_cognitive_assessment',
+            'view_cognitive_profile_reports',
         ]);
         $teacher->syncPermissions([
             'view_attendance',
@@ -98,7 +110,10 @@ class RolePermissionSeeder extends Seeder
             'submit_device_declaration',
         ]);
         $doctor->syncPermissions(['view_medical_requests']);
-        $student->syncPermissions([]);
+        $student->syncPermissions([
+            'take_cognitive_assessment',
+            'view_own_cognitive_results',
+        ]);
         $accountant->syncPermissions([
             'view_fee_structure',
             'create_fee_structure',

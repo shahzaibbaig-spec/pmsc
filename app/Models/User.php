@@ -175,4 +175,19 @@ class User extends Authenticatable
         return $this->hasMany(InventoryStockMovement::class, 'moved_by');
     }
 
+    public function enabledCognitiveAssessmentAssignments(): HasMany
+    {
+        return $this->hasMany(CognitiveAssessmentStudentAssignment::class, 'enabled_by');
+    }
+
+    public function disabledCognitiveAssessmentAssignments(): HasMany
+    {
+        return $this->hasMany(CognitiveAssessmentStudentAssignment::class, 'disabled_by');
+    }
+
+    public function cognitiveAssessmentAttemptResets(): HasMany
+    {
+        return $this->hasMany(CognitiveAssessmentAttemptReset::class, 'reset_by');
+    }
+
 }

@@ -3,6 +3,16 @@
         $navUser = auth()->user();
         $navUnreadCount = $navUser?->unreadNotifications()->count() ?? 0;
         $navRecentNotifications = $navUser?->notifications()->latest()->limit(8)->get() ?? collect();
+        $studentAssessmentNavVisible = false;
+
+        if ($navUser?->hasRole('Student')) {
+            $studentAssessmentNavVisible = rescue(function () use ($navUser): bool {
+                $assessmentService = app(\App\Services\CognitiveAssessmentService::class);
+                $student = $assessmentService->resolveStudentForUser($navUser);
+
+                return $student ? $assessmentService->studentCanAccessAssessment($student) : false;
+            }, false, false);
+        }
     @endphp
 
     <!-- Primary Navigation Menu -->
@@ -34,6 +44,21 @@
                         <x-nav-link :href="route('admin.rbac-matrix.index')" :active="request()->routeIs('admin.rbac-matrix.*')">
                             {{ __('RBAC Matrix') }}
                         </x-nav-link>
+                        @can('manage_student_cognitive_assessment_access')
+                            <x-nav-link :href="route('principal.assessments.cognitive-skills-level-4.students.index')" :active="request()->routeIs('principal.assessments.cognitive-skills-level-4.students.*')">
+                                {{ __('Assessment Access') }}
+                            </x-nav-link>
+                        @endcan
+                        @canany(['manage_cognitive_question_banks', 'manage_cognitive_assessment_setup'])
+                            <x-nav-link :href="route('admin.assessments.cognitive-skills-level-4.question-banks.index')" :active="request()->routeIs('admin.assessments.cognitive-skills-level-4.*')">
+                                {{ __('Assessment Setup') }}
+                            </x-nav-link>
+                        @endcanany
+                        @can('view_cognitive_assessment_reports')
+                            <x-nav-link :href="route('admin.assessments.cognitive-skills-level-4-reports.index')" :active="request()->routeIs('admin.assessments.cognitive-skills-level-4-reports.*') || request()->routeIs('admin.assessments.cognitive-skills-level-4.reports.*')">
+                                {{ __('Assessment Reports') }}
+                            </x-nav-link>
+                        @endcan
                         @can('review_inventory_demands')
                             <x-nav-link :href="route('inventory.demands.index')" :active="request()->routeIs('inventory.demands.*')">
                                 {{ __('Inventory Demands') }}
@@ -77,9 +102,19 @@
                         <x-nav-link :href="route('principal.teacher-assignments.index')" :active="request()->routeIs('principal.teacher-assignments.*')">
                             {{ __('Teacher Assignments') }}
                         </x-nav-link>
-                        <x-nav-link :href="route('principal.results.generator')" :active="request()->routeIs('principal.results.*')">
-                            {{ __('Results') }}
-                        </x-nav-link>
+                <x-nav-link :href="route('principal.results.generator')" :active="request()->routeIs('principal.results.*')">
+                    {{ __('Results') }}
+                </x-nav-link>
+                @can('manage_student_cognitive_assessment_access')
+                    <x-nav-link :href="route('principal.assessments.cognitive-skills-level-4.students.index')" :active="request()->routeIs('principal.assessments.cognitive-skills-level-4.students.*')">
+                        {{ __('Assessment Access') }}
+                    </x-nav-link>
+                @endcan
+                @can('view_cognitive_assessment_reports')
+                    <x-nav-link :href="route('principal.assessments.cognitive-skills-level-4-reports.index')" :active="request()->routeIs('principal.assessments.cognitive-skills-level-4-reports.*') || request()->routeIs('principal.assessments.cognitive-skills-level-4.reports.*')">
+                        {{ __('Assessment Reports') }}
+                    </x-nav-link>
+                @endcan
                         <x-nav-link :href="route('principal.analytics.teachers.index')" :active="request()->routeIs('principal.analytics.teachers.*') || request()->routeIs('principal.analytics.performance-insights.*')">
                             {{ __('Teacher Analytics') }}
                         </x-nav-link>
@@ -154,6 +189,13 @@
                         <x-nav-link :href="route('student.dashboard')" :active="request()->routeIs('student.dashboard')">
                             {{ __('Student') }}
                         </x-nav-link>
+                        @canany(['take_cognitive_assessment', 'view_own_cognitive_results'])
+                            @if ($studentAssessmentNavVisible)
+                            <x-nav-link :href="route('student.assessments.index')" :active="request()->routeIs('student.assessments.*')">
+                                {{ __('Assessments') }}
+                            </x-nav-link>
+                            @endif
+                        @endcanany
                         <x-nav-link :href="route('student.results.index')" :active="request()->routeIs('student.results.*')">
                             {{ __('My Results') }}
                         </x-nav-link>
@@ -303,6 +345,21 @@
                 <x-responsive-nav-link :href="route('admin.rbac-matrix.index')" :active="request()->routeIs('admin.rbac-matrix.*')">
                     {{ __('RBAC Matrix') }}
                 </x-responsive-nav-link>
+                @can('manage_student_cognitive_assessment_access')
+                    <x-responsive-nav-link :href="route('principal.assessments.cognitive-skills-level-4.students.index')" :active="request()->routeIs('principal.assessments.cognitive-skills-level-4.students.*')">
+                        {{ __('Assessment Access') }}
+                    </x-responsive-nav-link>
+                @endcan
+                @canany(['manage_cognitive_question_banks', 'manage_cognitive_assessment_setup'])
+                    <x-responsive-nav-link :href="route('admin.assessments.cognitive-skills-level-4.question-banks.index')" :active="request()->routeIs('admin.assessments.cognitive-skills-level-4.*')">
+                        {{ __('Assessment Setup') }}
+                    </x-responsive-nav-link>
+                @endcanany
+                @can('view_cognitive_assessment_reports')
+                    <x-responsive-nav-link :href="route('admin.assessments.cognitive-skills-level-4-reports.index')" :active="request()->routeIs('admin.assessments.cognitive-skills-level-4-reports.*') || request()->routeIs('admin.assessments.cognitive-skills-level-4.reports.*')">
+                        {{ __('Assessment Reports') }}
+                    </x-responsive-nav-link>
+                @endcan
                 @can('review_inventory_demands')
                     <x-responsive-nav-link :href="route('inventory.demands.index')" :active="request()->routeIs('inventory.demands.*')">
                         {{ __('Inventory Demands') }}
@@ -349,6 +406,16 @@
                 <x-responsive-nav-link :href="route('principal.results.generator')" :active="request()->routeIs('principal.results.*')">
                     {{ __('Results') }}
                 </x-responsive-nav-link>
+                @can('manage_student_cognitive_assessment_access')
+                    <x-responsive-nav-link :href="route('principal.assessments.cognitive-skills-level-4.students.index')" :active="request()->routeIs('principal.assessments.cognitive-skills-level-4.students.*')">
+                        {{ __('Assessment Access') }}
+                    </x-responsive-nav-link>
+                @endcan
+                @can('view_cognitive_assessment_reports')
+                    <x-responsive-nav-link :href="route('principal.assessments.cognitive-skills-level-4-reports.index')" :active="request()->routeIs('principal.assessments.cognitive-skills-level-4-reports.*') || request()->routeIs('principal.assessments.cognitive-skills-level-4.reports.*')">
+                        {{ __('Assessment Reports') }}
+                    </x-responsive-nav-link>
+                @endcan
                 <x-responsive-nav-link :href="route('principal.analytics.teachers.index')" :active="request()->routeIs('principal.analytics.teachers.*') || request()->routeIs('principal.analytics.performance-insights.*')">
                     {{ __('Teacher Analytics') }}
                 </x-responsive-nav-link>
@@ -423,6 +490,13 @@
                 <x-responsive-nav-link :href="route('student.dashboard')" :active="request()->routeIs('student.dashboard')">
                     {{ __('Student') }}
                 </x-responsive-nav-link>
+                @canany(['take_cognitive_assessment', 'view_own_cognitive_results'])
+                    @if ($studentAssessmentNavVisible)
+                    <x-responsive-nav-link :href="route('student.assessments.index')" :active="request()->routeIs('student.assessments.*')">
+                        {{ __('Assessments') }}
+                    </x-responsive-nav-link>
+                    @endif
+                @endcanany
                 <x-responsive-nav-link :href="route('student.results.index')" :active="request()->routeIs('student.results.*')">
                     {{ __('My Results') }}
                 </x-responsive-nav-link>

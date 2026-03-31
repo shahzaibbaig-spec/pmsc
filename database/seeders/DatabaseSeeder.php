@@ -23,6 +23,8 @@ class DatabaseSeeder extends Seeder
             ClassPromotionMappingSeeder::class,
             ClassSectionSeeder::class,
             TimeSlotSeeder::class,
+            CognitiveAssessmentSeeder::class,
+            CognitiveSkillsAssessmentLevel4Seeder::class,
         ]);
     }
 }

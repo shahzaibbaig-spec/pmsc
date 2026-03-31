@@ -65,6 +65,14 @@ class RbacMatrixController extends Controller
         'fulfill_inventory_demands',
         'submit_device_declaration',
         'review_device_declarations',
+        'take_cognitive_assessment',
+        'view_own_cognitive_results',
+        'view_cognitive_assessment_reports',
+        'manage_student_cognitive_assessment_access',
+        'reset_student_cognitive_assessment',
+        'view_cognitive_profile_reports',
+        'manage_cognitive_question_banks',
+        'manage_cognitive_assessment_setup',
     ];
 
     public function index(): View

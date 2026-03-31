@@ -415,3 +415,7 @@ Schedule::command('fees:process-late-fees')
 Schedule::command('fees:process-defaulters')
     ->dailyAt('01:00')
     ->withoutOverlapping();
+
+Schedule::command('cognitive-assessments:auto-submit-expired')
+    ->everyMinute()
+    ->withoutOverlapping();
