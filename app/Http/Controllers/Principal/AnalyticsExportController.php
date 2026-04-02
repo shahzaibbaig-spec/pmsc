@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Services\AnalyticsReportService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Maatwebsite\Excel\Facades\Excel;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
@@ -16,7 +17,7 @@ class AnalyticsExportController extends Controller
     {
     }
 
-    public function exportPdf(Request $request): BinaryFileResponse
+    public function exportPdf(Request $request): Response
     {
         [$session, $exam, $classId] = $this->validatedFilters($request);
         $report = $this->reportService->build($session, $exam, $classId);
