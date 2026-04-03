@@ -4,6 +4,7 @@ use App\Http\Controllers\DashboardRedirectController;
 use App\Http\Controllers\Inventory\DeviceDeclarationReviewController;
 use App\Http\Controllers\Inventory\InventoryDemandReviewController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\Principal\TeacherRankingController;
 use App\Http\Controllers\Principal\TeacherAssignmentController as PrincipalTeacherAssignmentController;
 use App\Http\Controllers\Principal\AnalyticsExportController;
 use App\Http\Controllers\Principal\PrincipalPromotionController;
@@ -561,6 +562,14 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
     Route::get('/principal/analytics/teachers/{teacher}/detail', [TeacherAnalyticsController::class, 'detail'])
         ->middleware(['role:Principal', 'permission:view_teacher_performance'])
         ->name('principal.analytics.teachers.detail');
+
+    Route::get('/principal/analytics/teacher-rankings', [TeacherRankingController::class, 'index'])
+        ->middleware(['role:Principal', 'permission:view_teacher_performance'])
+        ->name('principal.analytics.teacher-rankings.index');
+
+    Route::post('/principal/analytics/teacher-rankings/regenerate', [TeacherRankingController::class, 'regenerate'])
+        ->middleware(['role:Principal', 'permission:view_teacher_performance'])
+        ->name('principal.analytics.teacher-rankings.regenerate');
 
     Route::get('/principal/analytics/performance-insights/data', [PerformanceInsightsController::class, 'data'])
         ->middleware(['role:Principal', 'permission:view_teacher_performance'])

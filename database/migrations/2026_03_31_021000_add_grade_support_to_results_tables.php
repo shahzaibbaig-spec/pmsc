@@ -13,7 +13,7 @@ return new class extends Migration
         });
 
         $marksHasGrade = Schema::hasColumn('marks', 'grade');
-        Schema::table('marks', function (Blueprint $table): void {
+        Schema::table('marks', function (Blueprint $table) use ($marksHasGrade): void {
             $table->unsignedInteger('obtained_marks')->nullable()->change();
             $table->unsignedInteger('total_marks')->nullable()->change();
 
@@ -23,7 +23,7 @@ return new class extends Migration
         });
 
         $studentResultsHasGrade = Schema::hasColumn('student_results', 'grade');
-        Schema::table('student_results', function (Blueprint $table): void {
+        Schema::table('student_results', function (Blueprint $table) use ($studentResultsHasGrade): void {
             $table->unsignedInteger('total_marks')->nullable()->change();
             $table->unsignedInteger('obtained_marks')->nullable()->change();
 
@@ -34,7 +34,7 @@ return new class extends Migration
 
         $markEditLogsHasOldGrade = Schema::hasColumn('mark_edit_logs', 'old_grade');
         $markEditLogsHasNewGrade = Schema::hasColumn('mark_edit_logs', 'new_grade');
-        Schema::table('mark_edit_logs', function (Blueprint $table): void {
+        Schema::table('mark_edit_logs', function (Blueprint $table) use ($markEditLogsHasOldGrade, $markEditLogsHasNewGrade): void {
             if (! $markEditLogsHasOldGrade) {
                 $table->string('old_grade', 10)->nullable()->after('new_marks');
             }
