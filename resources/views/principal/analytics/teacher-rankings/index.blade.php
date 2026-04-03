@@ -25,6 +25,12 @@
                 </div>
             @endif
 
+            @if (session('error'))
+                <div class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                    {{ session('error') }}
+                </div>
+            @endif
+
             @if ($errors->any())
                 <div class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
                     <p class="font-semibold">Please review the selected filters.</p>
@@ -33,6 +39,12 @@
                             <li>{{ $error }}</li>
                         @endforeach
                     </ul>
+                </div>
+            @endif
+
+            @if (!($schemaReady ?? true) && !empty($schemaMessage))
+                <div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                    {{ $schemaMessage }}
                 </div>
             @endif
 
@@ -92,6 +104,10 @@
                             Regenerate Rankings
                         </button>
                     </form>
+
+                    @if (!($schemaReady ?? true))
+                        <p class="text-sm text-slate-500">Migration required before rankings can be generated on this server.</p>
+                    @endif
 
                     <button
                         type="button"

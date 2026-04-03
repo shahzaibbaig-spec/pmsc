@@ -16,6 +16,7 @@ use App\Models\User;
 use App\Services\GradeScaleService;
 use App\Services\TeacherRankingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
 class TeacherRankingServiceTest extends TestCase
@@ -371,6 +372,21 @@ class TeacherRankingServiceTest extends TestCase
         $this->assertSame(56.00, $service->getPercentageEquivalent('e'));
         $this->assertSame('Very Good', $service->getOverallLabelFromCgpa(5.50));
         $this->assertSame('Ungraded / Unsatisfactory', $service->getOverallLabelFromCgpa(0.20));
+    }
+
+    public function test_snapshot_returns_empty_payload_when_rankings_table_is_missing(): void
+    {
+        $service = app(TeacherRankingService::class);
+
+        Schema::drop('teacher_cgpa_rankings');
+
+        $snapshot = $service->snapshot('2025-2026');
+
+        $this->assertFalse($snapshot['schema_ready']);
+        $this->assertSame([], $snapshot['overall']);
+        $this->assertSame([], $snapshot['classwise']);
+        $this->assertSame(0, $snapshot['summary']['total_ranked_teachers']);
+        $this->assertNotEmpty($snapshot['schema_message']);
     }
 
     private function createClass(string $name, string $section): SchoolClass

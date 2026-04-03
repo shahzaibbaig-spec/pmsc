@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Principal\TeacherRankingRequest;
 use App\Services\TeacherRankingService;
 use Illuminate\Http\RedirectResponse;
+use RuntimeException;
 use Illuminate\View\View;
 
 class TeacherRankingController extends Controller
@@ -32,6 +33,8 @@ class TeacherRankingController extends Controller
             'overallRankings' => $snapshot['overall'],
             'classwiseRankings' => $snapshot['classwise'],
             'summary' => $snapshot['summary'],
+            'schemaReady' => (bool) ($snapshot['schema_ready'] ?? true),
+            'schemaMessage' => $snapshot['schema_message'] ?? null,
         ]);
     }
 
@@ -43,7 +46,16 @@ class TeacherRankingController extends Controller
             isset($validated['exam_type']) ? (string) $validated['exam_type'] : 'overall'
         );
 
-        $this->rankingService->storeTeacherCgpaRankings($session, $selectedExamType);
+        try {
+            $this->rankingService->storeTeacherCgpaRankings($session, $selectedExamType);
+        } catch (RuntimeException $exception) {
+            return redirect()
+                ->route('principal.analytics.teacher-rankings.index', [
+                    'session' => $session,
+                    'exam_type' => $selectedExamType,
+                ])
+                ->with('error', $exception->getMessage());
+        }
 
         return redirect()
             ->route('principal.analytics.teacher-rankings.index', [

@@ -7,6 +7,8 @@ use App\Models\TeacherCgpaRanking;
 use Illuminate\Database\Query\JoinClause;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use RuntimeException;
 
 class TeacherRankingService
 {
@@ -115,6 +117,20 @@ class TeacherRankingService
         };
     }
 
+    public function rankingsTableReady(): bool
+    {
+        return Schema::hasTable('teacher_cgpa_rankings');
+    }
+
+    public function rankingsTableMessage(): ?string
+    {
+        if ($this->rankingsTableReady()) {
+            return null;
+        }
+
+        return 'Teacher CGPA rankings are not available yet on this server. Run the latest migrations, then regenerate rankings.';
+    }
+
     public function convertPercentageToCgpa(float $percentage): float
     {
         $normalized = max(0.0, min(100.0, $percentage));
@@ -144,6 +160,10 @@ class TeacherRankingService
 
     public function storeTeacherCgpaRankings(string $session, ?string $examType = null): void
     {
+        if (! $this->rankingsTableReady()) {
+            throw new RuntimeException($this->rankingsTableMessage() ?? 'Teacher CGPA ranking storage is unavailable.');
+        }
+
         $resolvedSession = $this->resolveSession($session);
         $resolvedExamType = $this->normalizeExamType($examType);
 
@@ -274,6 +294,20 @@ class TeacherRankingService
 
     public function snapshot(string $session, ?string $examType = null): array
     {
+        if (! $this->rankingsTableReady()) {
+            return [
+                'overall' => [],
+                'classwise' => [],
+                'summary' => [
+                    'top_teacher' => null,
+                    'average_school_teacher_cgpa' => null,
+                    'total_ranked_teachers' => 0,
+                ],
+                'schema_ready' => false,
+                'schema_message' => $this->rankingsTableMessage(),
+            ];
+        }
+
         $resolvedSession = $this->resolveSession($session);
         $resolvedExamType = $this->normalizeExamType($examType);
 
@@ -325,6 +359,8 @@ class TeacherRankingService
                 'average_school_teacher_cgpa' => $averageSchoolTeacherCgpa,
                 'total_ranked_teachers' => count($overallRows),
             ],
+            'schema_ready' => true,
+            'schema_message' => null,
         ];
     }
 

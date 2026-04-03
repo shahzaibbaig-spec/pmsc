@@ -110,13 +110,16 @@
                         {{ __('Assessment Access') }}
                     </x-nav-link>
                 @endcan
-                @can('view_cognitive_assessment_reports')
+                        @can('view_cognitive_assessment_reports')
                     <x-nav-link :href="route('principal.assessments.cognitive-skills-level-4-reports.index')" :active="request()->routeIs('principal.assessments.cognitive-skills-level-4-reports.*') || request()->routeIs('principal.assessments.cognitive-skills-level-4.reports.*')">
                         {{ __('Assessment Reports') }}
                     </x-nav-link>
                 @endcan
                         <x-nav-link :href="route('principal.analytics.teachers.index')" :active="request()->routeIs('principal.analytics.teachers.*') || request()->routeIs('principal.analytics.performance-insights.*')">
                             {{ __('Teacher Analytics') }}
+                        </x-nav-link>
+                        <x-nav-link :href="route('principal.analytics.teacher-rankings.index')" :active="request()->routeIs('principal.analytics.teacher-rankings.*')">
+                            {{ __('Teacher Ranking') }}
                         </x-nav-link>
                         <x-nav-link :href="route('principal.medical.referrals.index')" :active="request()->routeIs('principal.medical.referrals.*')">
                             {{ __('Medical') }}
@@ -418,6 +421,9 @@
                 @endcan
                 <x-responsive-nav-link :href="route('principal.analytics.teachers.index')" :active="request()->routeIs('principal.analytics.teachers.*') || request()->routeIs('principal.analytics.performance-insights.*')">
                     {{ __('Teacher Analytics') }}
+                </x-responsive-nav-link>
+                <x-responsive-nav-link :href="route('principal.analytics.teacher-rankings.index')" :active="request()->routeIs('principal.analytics.teacher-rankings.*')">
+                    {{ __('Teacher Ranking') }}
                 </x-responsive-nav-link>
                 <x-responsive-nav-link :href="route('principal.medical.referrals.index')" :active="request()->routeIs('principal.medical.referrals.*')">
                     {{ __('Medical') }}
