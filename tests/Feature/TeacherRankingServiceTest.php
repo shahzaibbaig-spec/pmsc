@@ -6,6 +6,7 @@ use App\Models\Exam;
 use App\Models\Mark;
 use App\Models\SchoolClass;
 use App\Models\Student;
+use App\Models\StudentSubject;
 use App\Models\StudentSubjectAssignment;
 use App\Models\Subject;
 use App\Models\Teacher;
@@ -316,6 +317,50 @@ class TeacherRankingServiceTest extends TestCase
         $this->assertSame('90.33', (string) $overallRanking->average_percentage);
         $this->assertSame('100.00', (string) $overallRanking->pass_percentage);
         $this->assertSame('5.59', (string) $overallRanking->cgpa);
+    }
+
+    public function test_it_falls_back_to_student_subjects_for_grades_9_to_12_when_matrix_assignments_do_not_exist(): void
+    {
+        $service = app(TeacherRankingService::class);
+        $classNine = $this->createClass('9', 'B');
+        $biology = $this->createSubject('Biology', 'BIO');
+        $teacher = $this->createTeachers('Fallback Teacher')[0];
+
+        TeacherAssignment::query()->create([
+            'teacher_id' => $teacher->id,
+            'class_id' => $classNine->id,
+            'subject_id' => $biology->id,
+            'is_class_teacher' => false,
+            'session' => '2025-2026',
+        ]);
+
+        $legacyAssignedStudent = $this->createStudent($classNine, 'STD-9B-1', 'Legacy Assigned');
+        $unassignedStudent = $this->createStudent($classNine, 'STD-9B-2', 'Not Assigned');
+
+        StudentSubject::query()->create([
+            'student_id' => $legacyAssignedStudent->id,
+            'subject_id' => $biology->id,
+            'session' => '2025-2026',
+        ]);
+
+        $this->createExamWithMarks($classNine, $biology, $teacher, '2025-2026', 'first_term', [
+            [$legacyAssignedStudent, 84, 100],
+            [$unassignedStudent, 66, 100],
+        ]);
+
+        $service->storeTeacherCgpaRankings('2025-2026', 'first_term');
+
+        $ranking = TeacherCgpaRanking::query()
+            ->where('session', '2025-2026')
+            ->where('exam_type', 'first_term')
+            ->where('ranking_scope', TeacherCgpaRanking::SCOPE_CLASSWISE)
+            ->where('class_id', $classNine->id)
+            ->sole();
+
+        $this->assertSame(1, $ranking->student_count);
+        $this->assertSame('84.00', (string) $ranking->average_percentage);
+        $this->assertSame('100.00', (string) $ranking->pass_percentage);
+        $this->assertSame('5.04', (string) $ranking->cgpa);
     }
 
     public function test_grade_scale_service_maps_points_percentages_and_labels(): void

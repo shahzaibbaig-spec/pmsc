@@ -467,11 +467,27 @@ class TeacherRankingService
                 $join->on('m.exam_id', '=', 'e.id')
                     ->where('m.session', '=', $session);
             })
+            ->leftJoinSub(
+                DB::table('student_subject_assignments')
+                    ->where('session', $session)
+                    ->select('class_id', 'subject_id')
+                    ->distinct(),
+                'ssam',
+                function (JoinClause $join): void {
+                    $join->on('ssam.class_id', '=', 'e.class_id')
+                        ->on('ssam.subject_id', '=', 'e.subject_id');
+                }
+            )
             ->leftJoin('student_subject_assignments as ssa', function (JoinClause $join) use ($session): void {
                 $join->on('ssa.student_id', '=', 'm.student_id')
                     ->on('ssa.class_id', '=', 'e.class_id')
                     ->on('ssa.subject_id', '=', 'e.subject_id')
                     ->where('ssa.session', '=', $session);
+            })
+            ->leftJoin('student_subjects as ss', function (JoinClause $join) use ($session): void {
+                $join->on('ss.student_id', '=', 'm.student_id')
+                    ->on('ss.subject_id', '=', 'e.subject_id')
+                    ->where('ss.session', '=', $session);
             })
             ->when($examType !== null, fn ($query) => $query->where('e.exam_type', $examType))
             ->select([
@@ -485,15 +501,24 @@ class TeacherRankingService
                 'm.obtained_marks',
                 'm.total_marks',
                 'm.grade',
+                'ssam.class_id as subject_assignment_matrix_class_id',
                 'ssa.id as student_subject_assignment_id',
+                'ss.id as student_subject_id',
             ])
             ->get()
             ->map(function ($row): ?array {
                 $rawClassName = (string) $row->raw_class_name;
                 $usesGradeSystem = $this->assessmentModeService->classUsesGradeSystem($rawClassName);
 
-                if ($this->requiresStudentSubjectAssignment($rawClassName) && $row->student_subject_assignment_id === null) {
-                    return null;
+                if ($this->requiresStudentSubjectAssignment($rawClassName)) {
+                    $hasMatrixAssignments = $row->subject_assignment_matrix_class_id !== null;
+                    $studentIsAssignedToSubject = $hasMatrixAssignments
+                        ? $row->student_subject_assignment_id !== null
+                        : $row->student_subject_id !== null;
+
+                    if (! $studentIsAssignedToSubject) {
+                        return null;
+                    }
                 }
 
                 if ($usesGradeSystem) {
