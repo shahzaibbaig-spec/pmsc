@@ -15,6 +15,8 @@
         $topTeacher = $summary['top_teacher'] ?? null;
         $averageSchoolTeacherCgpa = $summary['average_school_teacher_cgpa'] ?? null;
         $totalRankedTeachers = $summary['total_ranked_teachers'] ?? 0;
+        $previewMode = (bool) ($previewMode ?? false);
+        $dataSource = (string) ($dataSource ?? 'snapshot');
     @endphp
 
     <div class="py-8" x-data="{ showClasswise: true }">
@@ -44,6 +46,10 @@
 
             @if (!($schemaReady ?? true) && !empty($schemaMessage))
                 <div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                    {{ $schemaMessage }}
+                </div>
+            @elseif ($previewMode && !empty($schemaMessage))
+                <div class="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-700">
                     {{ $schemaMessage }}
                 </div>
             @endif
@@ -99,15 +105,25 @@
                         <input type="hidden" name="exam_type" value="{{ $selectedExamType }}">
                         <button
                             type="submit"
-                            class="inline-flex min-h-11 items-center rounded-xl border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-100"
+                            @disabled(!($schemaReady ?? true))
+                            class="inline-flex min-h-11 items-center rounded-xl border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                             Regenerate Rankings
                         </button>
                     </form>
 
                     @if (!($schemaReady ?? true))
-                        <p class="text-sm text-slate-500">Migration required before rankings can be generated on this server.</p>
+                        <p class="text-sm text-slate-500">Migration required before rankings can be saved on this server.</p>
+                    @elseif ($previewMode)
+                        <p class="text-sm text-slate-500">Viewing live calculated rankings. Regenerate to store this scope as a snapshot.</p>
                     @endif
+
+                    <a
+                        href="{{ route('principal.analytics.teachers.index') }}"
+                        class="inline-flex min-h-11 items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                        Open Teacher Analytics
+                    </a>
 
                     <button
                         type="button"
@@ -137,13 +153,17 @@
                     <p class="mt-3 text-lg font-semibold text-slate-900">
                         {{ $averageSchoolTeacherCgpa !== null ? number_format((float) $averageSchoolTeacherCgpa, 2).' / 6' : 'N/A' }}
                     </p>
-                    <p class="mt-1 text-sm text-slate-500">Based on stored overall ranking rows for the selected scope.</p>
+                    <p class="mt-1 text-sm text-slate-500">
+                        {{ $dataSource === 'snapshot' ? 'Based on saved overall ranking rows for the selected scope.' : 'Based on live calculated overall ranking rows for the selected scope.' }}
+                    </p>
                 </article>
 
                 <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                     <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Total Ranked Teachers</p>
                     <p class="mt-3 text-lg font-semibold text-slate-900">{{ number_format((int) $totalRankedTeachers) }}</p>
-                    <p class="mt-1 text-sm text-slate-500">Teachers with numeric result data included in this ranking snapshot.</p>
+                    <p class="mt-1 text-sm text-slate-500">
+                        {{ $dataSource === 'snapshot' ? 'Teachers included in the saved ranking snapshot.' : 'Teachers included in the current live ranking calculation.' }}
+                    </p>
                 </article>
             </section>
 
@@ -179,7 +199,7 @@
                             @empty
                                 <tr>
                                     <td colspan="5" class="px-4 py-8 text-center text-sm text-slate-500">
-                                        No overall teacher ranking snapshot exists for the selected filters yet.
+                                        {{ $previewMode ? 'No overall teacher ranking data is available for the selected filters.' : 'No overall teacher ranking snapshot exists for the selected filters yet.' }}
                                     </td>
                                 </tr>
                             @endforelse
@@ -222,7 +242,7 @@
                             @empty
                                 <tr>
                                     <td colspan="6" class="px-4 py-8 text-center text-sm text-slate-500">
-                                        No class-wise teacher ranking snapshot exists for the selected filters yet.
+                                        {{ $previewMode ? 'No class-wise teacher ranking data is available for the selected filters.' : 'No class-wise teacher ranking snapshot exists for the selected filters yet.' }}
                                     </td>
                                 </tr>
                             @endforelse

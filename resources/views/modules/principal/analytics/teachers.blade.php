@@ -1,8 +1,16 @@
 <x-app-layout>
     <x-slot name="header">
-        <div>
-            <h2 class="text-xl font-semibold text-slate-900">Teacher Performance Analytics</h2>
-            <p class="mt-1 text-sm text-slate-500">Manage teacher-level attendance and results analytics.</p>
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+                <h2 class="text-xl font-semibold text-slate-900">Teacher Performance Analytics</h2>
+                <p class="mt-1 text-sm text-slate-500">Manage teacher-level attendance and results analytics.</p>
+            </div>
+            <a
+                href="{{ route('principal.analytics.teacher-rankings.index', ['session' => $defaultSession]) }}"
+                class="inline-flex min-h-11 items-center rounded-xl border border-indigo-300 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100"
+            >
+                Open Teacher Ranking
+            </a>
         </div>
     </x-slot>
 

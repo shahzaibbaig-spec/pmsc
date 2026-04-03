@@ -374,19 +374,69 @@ class TeacherRankingServiceTest extends TestCase
         $this->assertSame('Ungraded / Unsatisfactory', $service->getOverallLabelFromCgpa(0.20));
     }
 
-    public function test_snapshot_returns_empty_payload_when_rankings_table_is_missing(): void
+    public function test_snapshot_returns_live_preview_when_rankings_table_is_missing(): void
     {
         $service = app(TeacherRankingService::class);
+        $classRoom = $this->createClass('8', 'A');
+        $subject = $this->createSubject('Mathematics', 'MTH');
+        $teacher = $this->createTeachers('Preview Teacher')[0];
+
+        TeacherAssignment::query()->create([
+            'teacher_id' => $teacher->id,
+            'class_id' => $classRoom->id,
+            'subject_id' => $subject->id,
+            'is_class_teacher' => false,
+            'session' => '2025-2026',
+        ]);
+
+        $student = $this->createStudent($classRoom, 'STD-8A-PREVIEW', 'Preview Student');
+
+        $this->createExamWithMarks($classRoom, $subject, $teacher, '2025-2026', 'final_term', [
+            [$student, 78, 100],
+        ]);
 
         Schema::drop('teacher_cgpa_rankings');
 
-        $snapshot = $service->snapshot('2025-2026');
+        $snapshot = $service->snapshot('2025-2026', 'final_term');
 
         $this->assertFalse($snapshot['schema_ready']);
-        $this->assertSame([], $snapshot['overall']);
-        $this->assertSame([], $snapshot['classwise']);
-        $this->assertSame(0, $snapshot['summary']['total_ranked_teachers']);
+        $this->assertTrue($snapshot['preview_mode']);
+        $this->assertSame('live_preview', $snapshot['data_source']);
+        $this->assertCount(1, $snapshot['overall']);
+        $this->assertCount(1, $snapshot['classwise']);
+        $this->assertSame(1, $snapshot['summary']['total_ranked_teachers']);
         $this->assertNotEmpty($snapshot['schema_message']);
+    }
+
+    public function test_snapshot_falls_back_to_live_preview_when_no_saved_rows_exist_yet(): void
+    {
+        $service = app(TeacherRankingService::class);
+        $classRoom = $this->createClass('7', 'B');
+        $subject = $this->createSubject('English', 'ENG');
+        $teacher = $this->createTeachers('Unsaved Teacher')[0];
+
+        TeacherAssignment::query()->create([
+            'teacher_id' => $teacher->id,
+            'class_id' => $classRoom->id,
+            'subject_id' => $subject->id,
+            'is_class_teacher' => false,
+            'session' => '2025-2026',
+        ]);
+
+        $student = $this->createStudent($classRoom, 'STD-7B-UNSAVED', 'Unsaved Student');
+
+        $this->createExamWithMarks($classRoom, $subject, $teacher, '2025-2026', 'class_test', [
+            [$student, 67, 100],
+        ]);
+
+        $snapshot = $service->snapshot('2025-2026', 'class_test');
+
+        $this->assertTrue($snapshot['schema_ready']);
+        $this->assertTrue($snapshot['preview_mode']);
+        $this->assertSame('live_preview', $snapshot['data_source']);
+        $this->assertCount(1, $snapshot['overall']);
+        $this->assertCount(1, $snapshot['classwise']);
+        $this->assertStringContainsString('No saved teacher ranking snapshot exists', (string) $snapshot['schema_message']);
     }
 
     private function createClass(string $name, string $section): SchoolClass

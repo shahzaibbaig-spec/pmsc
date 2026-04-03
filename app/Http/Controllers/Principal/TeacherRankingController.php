@@ -35,6 +35,8 @@ class TeacherRankingController extends Controller
             'summary' => $snapshot['summary'],
             'schemaReady' => (bool) ($snapshot['schema_ready'] ?? true),
             'schemaMessage' => $snapshot['schema_message'] ?? null,
+            'previewMode' => (bool) ($snapshot['preview_mode'] ?? false),
+            'dataSource' => (string) ($snapshot['data_source'] ?? 'snapshot'),
         ]);
     }
 

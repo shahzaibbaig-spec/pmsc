@@ -14,6 +14,11 @@
         $teacherPerformance = $dashboard['teacher_performance'] ?? [];
         $classComparison = $dashboard['class_comparison'] ?? [];
         $charts = $dashboard['charts'] ?? [];
+        $teacherRankingExamType = match ($selectedExam ?? null) {
+            'bimonthly_test' => 'bimonthly',
+            'class_test', 'first_term', 'final_term' => $selectedExam,
+            default => 'overall',
+        };
 
         $formatPercent = fn ($value) => $value !== null ? number_format((float) $value, 2).'%' : 'N/A';
         $riskClasses = [
@@ -249,7 +254,15 @@
 
             <article class="rounded-2xl border border-slate-200 bg-white shadow-sm">
                 <header class="border-b border-slate-200 px-4 py-3">
-                    <h3 class="text-sm font-semibold text-slate-900">Teacher Performance</h3>
+                    <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <h3 class="text-sm font-semibold text-slate-900">Teacher Performance</h3>
+                        <a
+                            href="{{ route('principal.analytics.teacher-rankings.index', ['session' => $selectedSession, 'exam_type' => $teacherRankingExamType]) }}"
+                            class="inline-flex items-center rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
+                        >
+                            View Teacher Ranking
+                        </a>
+                    </div>
                 </header>
                 <div class="overflow-x-auto">
                     <table class="min-w-full divide-y divide-slate-200">

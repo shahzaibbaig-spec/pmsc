@@ -294,22 +294,17 @@ class TeacherRankingService
 
     public function snapshot(string $session, ?string $examType = null): array
     {
-        if (! $this->rankingsTableReady()) {
-            return [
-                'overall' => [],
-                'classwise' => [],
-                'summary' => [
-                    'top_teacher' => null,
-                    'average_school_teacher_cgpa' => null,
-                    'total_ranked_teachers' => 0,
-                ],
-                'schema_ready' => false,
-                'schema_message' => $this->rankingsTableMessage(),
-            ];
-        }
-
         $resolvedSession = $this->resolveSession($session);
         $resolvedExamType = $this->normalizeExamType($examType);
+
+        if (! $this->rankingsTableReady()) {
+            return $this->liveSnapshotPayload(
+                $resolvedSession,
+                $resolvedExamType,
+                false,
+                'Teacher CGPA ranking storage is not available yet on this server. Showing a live calculated preview from current results. Run the latest migrations to enable saved rankings and regeneration.'
+            );
+        }
 
         $overallRows = $this->snapshotQuery($resolvedSession, $resolvedExamType)
             ->where('ranking_scope', TeacherCgpaRanking::SCOPE_OVERALL)
@@ -343,6 +338,65 @@ class TeacherRankingService
             ->values()
             ->all();
 
+        if ($overallRows === [] && $classwiseRows === []) {
+            return $this->liveSnapshotPayload(
+                $resolvedSession,
+                $resolvedExamType,
+                true,
+                'No saved teacher ranking snapshot exists for this scope yet. Showing a live calculated preview from current results. Use Regenerate Rankings to save it.'
+            );
+        }
+
+        return $this->formatSnapshotPayload(
+            $overallRows,
+            $classwiseRows,
+            true,
+            null,
+            false,
+            'snapshot'
+        );
+    }
+
+    private function liveSnapshotPayload(string $session, ?string $examType, bool $schemaReady, ?string $message): array
+    {
+        $classwiseRows = collect($this->buildClasswiseRows($session, $examType))
+            ->groupBy('class_id')
+            ->flatMap(fn (Collection $rows): array => $this->rankTeachers($rows->all()))
+            ->sort(function (array $left, array $right): int {
+                $classComparison = strcasecmp((string) ($left['class_name'] ?? ''), (string) ($right['class_name'] ?? ''));
+                if ($classComparison !== 0) {
+                    return $classComparison;
+                }
+
+                return $this->compareSnapshotRows($left, $right);
+            })
+            ->values()
+            ->all();
+
+        $overallRows = collect(
+            $this->rankTeachers($this->buildOverallRows($classwiseRows, $session, $examType))
+        )
+            ->values()
+            ->all();
+
+        return $this->formatSnapshotPayload(
+            $overallRows,
+            $classwiseRows,
+            $schemaReady,
+            $message,
+            true,
+            'live_preview'
+        );
+    }
+
+    private function formatSnapshotPayload(
+        array $overallRows,
+        array $classwiseRows,
+        bool $schemaReady,
+        ?string $schemaMessage,
+        bool $previewMode,
+        string $dataSource
+    ): array {
         $topTeacher = $overallRows[0] ?? null;
         $averageSchoolTeacherCgpa = $overallRows === []
             ? null
@@ -359,8 +413,10 @@ class TeacherRankingService
                 'average_school_teacher_cgpa' => $averageSchoolTeacherCgpa,
                 'total_ranked_teachers' => count($overallRows),
             ],
-            'schema_ready' => true,
-            'schema_message' => null,
+            'schema_ready' => $schemaReady,
+            'schema_message' => $schemaMessage,
+            'preview_mode' => $previewMode,
+            'data_source' => $dataSource,
         ];
     }
 
