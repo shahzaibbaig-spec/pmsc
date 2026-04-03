@@ -76,6 +76,9 @@
                         <td>
                             @if ($usesGradeSystem)
                                 {{ $subjectMark['grade'] ?? '-' }}
+                                @if (!empty($subjectMark['label']))
+                                    <br><span style="font-size: 8px; color: #475569;">{{ $subjectMark['label'] }}</span>
+                                @endif
                             @else
                                 {{ (int) $subjectMark['obtained'] }}/{{ (int) $subjectMark['total'] }}
                             @endif

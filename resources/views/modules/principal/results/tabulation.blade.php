@@ -148,7 +148,10 @@
                                         @endphp
                                         <td class="px-3 py-2 text-sm text-slate-700">
                                             @if ($usesGradeSystem)
-                                                {{ $subjectMark['grade'] ?? '-' }}
+                                                <div class="font-semibold text-slate-900">{{ $subjectMark['grade'] ?? '-' }}</div>
+                                                @if (!empty($subjectMark['label']))
+                                                    <div class="text-xs text-slate-500">{{ $subjectMark['label'] }}</div>
+                                                @endif
                                             @else
                                                 {{ (int) $subjectMark['obtained'] }}/{{ (int) $subjectMark['total'] }}
                                             @endif

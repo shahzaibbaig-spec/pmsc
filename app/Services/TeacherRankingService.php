@@ -22,8 +22,10 @@ class TeacherRankingService
         'final_term',
     ];
 
-    public function __construct(private readonly ClassAssessmentModeService $assessmentModeService)
-    {
+    public function __construct(
+        private readonly ClassAssessmentModeService $assessmentModeService,
+        private readonly GradeScaleService $gradeScaleService
+    ) {
     }
 
     /**
@@ -221,6 +223,22 @@ class TeacherRankingService
                 return $comparison;
             }
 
+            $comparison = $this->compareAsc(
+                (int) ($left['u_grade_count'] ?? 0),
+                (int) ($right['u_grade_count'] ?? 0)
+            );
+            if ($comparison !== 0) {
+                return $comparison;
+            }
+
+            $comparison = $this->compareDesc(
+                (int) ($left['top_grade_count'] ?? 0),
+                (int) ($right['top_grade_count'] ?? 0)
+            );
+            if ($comparison !== 0) {
+                return $comparison;
+            }
+
             $comparison = $this->compareDesc(
                 (float) ($left['pass_percentage'] ?? 0),
                 (float) ($right['pass_percentage'] ?? 0)
@@ -311,11 +329,10 @@ class TeacherRankingService
 
     private function buildClasswiseRows(string $session, ?string $examType): array
     {
-        $studentRows = $this->subjectPercentageRows($session, $examType)
+        $studentRows = $this->resultMetricRows($session, $examType)
             ->groupBy(fn (array $row): string => $row['teacher_id'].'|'.$row['class_id'].'|'.$row['student_id'])
             ->map(function (Collection $rows): array {
                 $first = $rows->first();
-                $studentPercentage = round((float) ($rows->avg('percentage') ?? 0), 2);
 
                 return [
                     'teacher_id' => (int) $first['teacher_id'],
@@ -323,8 +340,12 @@ class TeacherRankingService
                     'teacher_code' => (string) ($first['teacher_code'] ?? ''),
                     'class_id' => (int) $first['class_id'],
                     'class_name' => (string) $first['class_name'],
+                    'uses_grade_system' => (bool) ($first['uses_grade_system'] ?? false),
                     'student_id' => (int) $first['student_id'],
-                    'student_percentage' => $studentPercentage,
+                    'student_percentage' => round((float) ($rows->avg('percentage_equivalent') ?? 0), 2),
+                    'student_cgpa' => round((float) ($rows->avg('cgpa_value') ?? 0), 2),
+                    'u_grade_count' => (int) $rows->sum('u_grade_count'),
+                    'top_grade_count' => (int) $rows->sum('top_grade_count'),
                 ];
             })
             ->values();
@@ -335,10 +356,14 @@ class TeacherRankingService
                 $first = $rows->first();
                 $studentCount = $rows->count();
                 $averagePercentage = $studentCount > 0 ? round((float) ($rows->avg('student_percentage') ?? 0), 2) : 0.0;
+                $usesGradeSystem = (bool) ($first['uses_grade_system'] ?? false);
                 $passCount = $rows
                     ->filter(fn (array $row): bool => (float) $row['student_percentage'] >= self::PASS_PERCENTAGE)
                     ->count();
                 $passPercentage = $studentCount > 0 ? round(($passCount * 100) / $studentCount, 2) : 0.0;
+                $cgpa = $usesGradeSystem
+                    ? round((float) ($rows->avg('student_cgpa') ?? 0), 2)
+                    : $this->convertPercentageToCgpa($averagePercentage);
 
                 return [
                     'teacher_id' => (int) $first['teacher_id'],
@@ -349,10 +374,13 @@ class TeacherRankingService
                     'class_id' => (int) $first['class_id'],
                     'class_name' => (string) $first['class_name'],
                     'average_percentage' => $averagePercentage,
-                    'cgpa' => $this->convertPercentageToCgpa($averagePercentage),
+                    'cgpa' => $cgpa,
                     'student_count' => $studentCount,
                     'pass_percentage' => $passPercentage,
                     'pass_count' => $passCount,
+                    'u_grade_count' => (int) $rows->sum('u_grade_count'),
+                    'top_grade_count' => (int) $rows->sum('top_grade_count'),
+                    'uses_grade_system' => $usesGradeSystem,
                     'ranking_scope' => TeacherCgpaRanking::SCOPE_CLASSWISE,
                 ];
             })
@@ -374,6 +402,12 @@ class TeacherRankingService
                         2
                     )
                     : 0.0;
+                $weightedCgpa = $studentCount > 0
+                    ? round(
+                        $rows->sum(fn (array $row): float => (float) $row['cgpa'] * (int) $row['student_count']) / $studentCount,
+                        2
+                    )
+                    : 0.0;
                 $passCount = (int) $rows->sum('pass_count');
                 $passPercentage = $studentCount > 0 ? round(($passCount * 100) / $studentCount, 2) : 0.0;
 
@@ -386,10 +420,13 @@ class TeacherRankingService
                     'class_id' => null,
                     'class_name' => null,
                     'average_percentage' => $weightedPercentage,
-                    'cgpa' => $this->convertPercentageToCgpa($weightedPercentage),
+                    'cgpa' => $weightedCgpa,
                     'student_count' => $studentCount,
                     'pass_percentage' => $passPercentage,
                     'pass_count' => $passCount,
+                    'u_grade_count' => (int) $rows->sum('u_grade_count'),
+                    'top_grade_count' => (int) $rows->sum('top_grade_count'),
+                    'uses_grade_system' => $rows->contains(fn (array $row): bool => (bool) ($row['uses_grade_system'] ?? false)),
                     'ranking_scope' => TeacherCgpaRanking::SCOPE_OVERALL,
                 ];
             })
@@ -398,7 +435,7 @@ class TeacherRankingService
             ->all();
     }
 
-    private function subjectPercentageRows(string $session, ?string $examType): Collection
+    private function resultMetricRows(string $session, ?string $examType): Collection
     {
         $assignmentSubquery = TeacherAssignment::query()
             ->join('teachers as t', 't.id', '=', 'teacher_assignments.teacher_id')
@@ -436,9 +473,6 @@ class TeacherRankingService
                     ->where('ssa.session', '=', $session);
             })
             ->when($examType !== null, fn ($query) => $query->where('e.exam_type', $examType))
-            ->whereNotNull('m.obtained_marks')
-            ->whereNotNull('m.total_marks')
-            ->where('m.total_marks', '>', 0)
             ->select([
                 'ta.teacher_id',
                 'ta.teacher_name',
@@ -447,36 +481,64 @@ class TeacherRankingService
                 'ta.raw_class_name',
                 'ta.class_section',
                 'm.student_id',
+                'm.obtained_marks',
+                'm.total_marks',
+                'm.grade',
                 'ssa.id as student_subject_assignment_id',
             ])
-            ->selectRaw('(m.obtained_marks * 100.0) / NULLIF(m.total_marks, 0) as percentage')
             ->get()
-            ->map(function ($row): array {
+            ->map(function ($row): ?array {
+                $rawClassName = (string) $row->raw_class_name;
+                $usesGradeSystem = $this->assessmentModeService->classUsesGradeSystem($rawClassName);
+
+                if ($this->requiresStudentSubjectAssignment($rawClassName) && $row->student_subject_assignment_id === null) {
+                    return null;
+                }
+
+                if ($usesGradeSystem) {
+                    $grade = $this->assessmentModeService->normalizeGrade($row->grade);
+                    if ($grade === null) {
+                        return null;
+                    }
+
+                    return [
+                        'teacher_id' => (int) $row->teacher_id,
+                        'teacher_name' => (string) ($row->teacher_name ?? ('Teacher '.$row->teacher_id)),
+                        'teacher_code' => (string) ($row->teacher_code ?? ''),
+                        'class_id' => (int) $row->class_id,
+                        'raw_class_name' => $rawClassName,
+                        'class_name' => $this->classLabel($rawClassName, $row->class_section),
+                        'uses_grade_system' => true,
+                        'student_id' => (int) $row->student_id,
+                        'percentage_equivalent' => round($this->gradeScaleService->getPercentageEquivalent($grade), 4),
+                        'cgpa_value' => round($this->gradeScaleService->getGradePoint($grade), 4),
+                        'u_grade_count' => $grade === 'U' ? 1 : 0,
+                        'top_grade_count' => $this->isTopGrade($grade) ? 1 : 0,
+                    ];
+                }
+
+                if ($row->obtained_marks === null || $row->total_marks === null || (int) $row->total_marks <= 0) {
+                    return null;
+                }
+
+                $percentage = round((((float) $row->obtained_marks) * 100.0) / (float) $row->total_marks, 4);
+
                 return [
                     'teacher_id' => (int) $row->teacher_id,
                     'teacher_name' => (string) ($row->teacher_name ?? ('Teacher '.$row->teacher_id)),
                     'teacher_code' => (string) ($row->teacher_code ?? ''),
                     'class_id' => (int) $row->class_id,
-                    'raw_class_name' => (string) $row->raw_class_name,
-                    'class_name' => $this->classLabel((string) $row->raw_class_name, $row->class_section),
+                    'raw_class_name' => $rawClassName,
+                    'class_name' => $this->classLabel($rawClassName, $row->class_section),
+                    'uses_grade_system' => false,
                     'student_id' => (int) $row->student_id,
-                    'student_subject_assignment_id' => $row->student_subject_assignment_id !== null
-                        ? (int) $row->student_subject_assignment_id
-                        : null,
-                    'percentage' => round((float) ($row->percentage ?? 0), 4),
+                    'percentage_equivalent' => $percentage,
+                    'cgpa_value' => round($this->convertPercentageToCgpa($percentage), 4),
+                    'u_grade_count' => 0,
+                    'top_grade_count' => 0,
                 ];
             })
-            ->filter(function (array $row): bool {
-                if ($this->assessmentModeService->classUsesGradeSystem($row['raw_class_name'])) {
-                    return false;
-                }
-
-                if (! $this->requiresStudentSubjectAssignment($row['raw_class_name'])) {
-                    return true;
-                }
-
-                return $row['student_subject_assignment_id'] !== null;
-            })
+            ->filter()
             ->values();
     }
 
@@ -495,6 +557,16 @@ class TeacherRankingService
     private function compareDesc(float|int $left, float|int $right): int
     {
         return $right <=> $left;
+    }
+
+    private function compareAsc(float|int $left, float|int $right): int
+    {
+        return $left <=> $right;
+    }
+
+    private function isTopGrade(string $grade): bool
+    {
+        return in_array($grade, ['A*', 'A'], true);
     }
 
     private function snapshotKey(int $teacherId, string $scope, ?int $classId): string

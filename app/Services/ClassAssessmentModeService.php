@@ -3,25 +3,13 @@
 namespace App\Services;
 
 use App\Models\SchoolClass;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
 class ClassAssessmentModeService
 {
-    /**
-     * @var array<int, array{code:string,label:string,sort_order:int}>
-     */
-    private const GRADE_SCALE = [
-        ['code' => 'A*', 'label' => 'Excellent', 'sort_order' => 1],
-        ['code' => 'A', 'label' => 'Very Good', 'sort_order' => 2],
-        ['code' => 'B', 'label' => 'Good', 'sort_order' => 3],
-        ['code' => 'C', 'label' => 'Satisfactory', 'sort_order' => 4],
-        ['code' => 'D', 'label' => 'Basic', 'sort_order' => 5],
-        ['code' => 'E', 'label' => 'Needs Improvement', 'sort_order' => 6],
-        ['code' => 'F', 'label' => 'Weak', 'sort_order' => 7],
-        ['code' => 'G', 'label' => 'Very Weak', 'sort_order' => 8],
-        ['code' => 'U', 'label' => 'Ungraded / Not Assessed', 'sort_order' => 9],
-    ];
+    public function __construct(private readonly GradeScaleService $gradeScaleService)
+    {
+    }
 
     public function classUsesGradeSystem(SchoolClass|int|string|null $class): bool
     {
@@ -40,11 +28,26 @@ class ClassAssessmentModeService
     }
 
     /**
-     * @return array<int, array{code:string,label:string,sort_order:int}>
+     * @return array<int, array{
+     *   code:string,
+     *   label:string,
+     *   sort_order:int,
+     *   percentage_equivalent:float,
+     *   grade_point:float
+     * }>
      */
     public function gradeScale(): array
     {
-        return self::GRADE_SCALE;
+        return collect($this->gradeScaleService->scaleRows())
+            ->map(static fn (array $row): array => [
+                'code' => (string) $row['grade_code'],
+                'label' => (string) $row['label'],
+                'sort_order' => (int) $row['sort_order'],
+                'percentage_equivalent' => (float) $row['percentage_equivalent'],
+                'grade_point' => (float) $row['grade_point'],
+            ])
+            ->values()
+            ->all();
     }
 
     /**
@@ -52,7 +55,7 @@ class ClassAssessmentModeService
      */
     public function gradeCodes(): array
     {
-        return array_column(self::GRADE_SCALE, 'code');
+        return $this->gradeScaleService->gradeCodes();
     }
 
     public function normalizeGrade(?string $grade): ?string
@@ -80,9 +83,7 @@ class ClassAssessmentModeService
             return null;
         }
 
-        $item = collect(self::GRADE_SCALE)->firstWhere('code', $normalized);
-
-        return $item['label'] ?? null;
+        return $this->gradeScaleService->getLabel($normalized);
     }
 
     public function dominantGrade(iterable $grades): ?string
@@ -97,11 +98,9 @@ class ClassAssessmentModeService
         }
 
         $counts = $normalizedGrades->countBy();
-        $metadata = collect(self::GRADE_SCALE)->keyBy('code');
-
         return $counts
             ->keys()
-            ->sort(function (string $leftCode, string $rightCode) use ($counts, $metadata): int {
+            ->sort(function (string $leftCode, string $rightCode) use ($counts): int {
                 $leftCount = (int) ($counts->get($leftCode) ?? 0);
                 $rightCount = (int) ($counts->get($rightCode) ?? 0);
 
@@ -109,8 +108,8 @@ class ClassAssessmentModeService
                     return $rightCount <=> $leftCount;
                 }
 
-                $leftSort = (int) ($metadata->get($leftCode)['sort_order'] ?? PHP_INT_MAX);
-                $rightSort = (int) ($metadata->get($rightCode)['sort_order'] ?? PHP_INT_MAX);
+                $leftSort = $this->gradeScaleService->getSortOrder($leftCode);
+                $rightSort = $this->gradeScaleService->getSortOrder($rightCode);
 
                 if ($leftSort !== $rightSort) {
                     return $leftSort <=> $rightSort;

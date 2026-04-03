@@ -12,6 +12,7 @@ use App\Models\Teacher;
 use App\Models\TeacherAssignment;
 use App\Models\TeacherCgpaRanking;
 use App\Models\User;
+use App\Services\GradeScaleService;
 use App\Services\TeacherRankingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -134,44 +135,82 @@ class TeacherRankingServiceTest extends TestCase
 
         $ranked = $service->rankTeachers([
             [
-                'teacher_id' => 4,
-                'teacher_name' => 'Bilal',
+                'teacher_id' => 6,
+                'teacher_name' => 'Zara',
                 'cgpa' => 5.10,
-                'average_percentage' => 85.00,
-                'pass_percentage' => 95.00,
-                'student_count' => 30,
+                'average_percentage' => 85.05,
+                'u_grade_count' => 4,
+                'top_grade_count' => 0,
+                'pass_percentage' => 10.00,
+                'student_count' => 1,
             ],
             [
                 'teacher_id' => 1,
                 'teacher_name' => 'Adeel',
                 'cgpa' => 5.10,
-                'average_percentage' => 85.02,
+                'average_percentage' => 85.00,
+                'u_grade_count' => 0,
+                'top_grade_count' => 3,
                 'pass_percentage' => 80.00,
                 'student_count' => 10,
             ],
             [
-                'teacher_id' => 2,
-                'teacher_name' => 'Hamza',
+                'teacher_id' => 5,
+                'teacher_name' => 'Basit',
                 'cgpa' => 5.10,
                 'average_percentage' => 85.00,
-                'pass_percentage' => 98.00,
+                'u_grade_count' => 0,
+                'top_grade_count' => 2,
+                'pass_percentage' => 100.00,
                 'student_count' => 20,
+            ],
+            [
+                'teacher_id' => 7,
+                'teacher_name' => 'Danish',
+                'cgpa' => 5.10,
+                'average_percentage' => 85.00,
+                'u_grade_count' => 0,
+                'top_grade_count' => 2,
+                'pass_percentage' => 95.00,
+                'student_count' => 30,
             ],
             [
                 'teacher_id' => 3,
                 'teacher_name' => 'Ahmad',
                 'cgpa' => 5.10,
                 'average_percentage' => 85.00,
-                'pass_percentage' => 95.00,
-                'student_count' => 30,
+                'u_grade_count' => 0,
+                'top_grade_count' => 2,
+                'pass_percentage' => 80.00,
+                'student_count' => 20,
+            ],
+            [
+                'teacher_id' => 2,
+                'teacher_name' => 'Hamza',
+                'cgpa' => 5.10,
+                'average_percentage' => 85.00,
+                'u_grade_count' => 0,
+                'top_grade_count' => 2,
+                'pass_percentage' => 80.00,
+                'student_count' => 20,
+            ],
+            [
+                'teacher_id' => 4,
+                'teacher_name' => 'Bilal',
+                'cgpa' => 5.10,
+                'average_percentage' => 85.00,
+                'u_grade_count' => 1,
+                'top_grade_count' => 9,
+                'pass_percentage' => 100.00,
+                'student_count' => 50,
             ],
         ]);
 
-        $this->assertSame([1, 2, 3, 4], array_column($ranked, 'teacher_id'));
-        $this->assertSame([1, 2, 3, 4], array_column($ranked, 'rank_position'));
+        $this->assertSame([6, 1, 5, 7, 3, 2, 4], array_column($ranked, 'teacher_id'));
+        $this->assertSame([1, 2, 3, 4, 5, 6, 7], array_column($ranked, 'rank_position'));
     }
 
-    public function test_it_excludes_grade_classes_and_filters_unassigned_subject_group_students_for_grades_9_to_12(): void
+    public function test_it_includes_grade_classes_and_filters_unassigned_subject_group_students_for_grades_9_to_12(): void
     {
         $service = app(TeacherRankingService::class);
         $gradeOnlyClass = $this->createClass('1', 'A');
@@ -194,12 +233,14 @@ class TeacherRankingServiceTest extends TestCase
             'session' => '2025-2026',
         ]);
 
-        $gradeStudent = $this->createStudent($gradeOnlyClass, 'STD-1A-1', 'Grade Student');
+        $gradeStudentOne = $this->createStudent($gradeOnlyClass, 'STD-1A-1', 'Grade Student One');
+        $gradeStudentTwo = $this->createStudent($gradeOnlyClass, 'STD-1A-2', 'Grade Student Two');
         $assignedStudent = $this->createStudent($classTen, 'STD-10A-1', 'Assigned Student');
         $unassignedStudent = $this->createStudent($classTen, 'STD-10A-2', 'Unassigned Student');
 
-        $this->createExamWithMarks($gradeOnlyClass, $science, $teacher, '2025-2026', 'bimonthly_test', [
-            [$gradeStudent, 95, 100],
+        $this->createExamWithGrades($gradeOnlyClass, $science, $teacher, '2025-2026', 'bimonthly_test', [
+            [$gradeStudentOne, 'A*'],
+            [$gradeStudentTwo, 'A'],
         ]);
         $this->createExamWithMarks($classTen, $science, $teacher, '2025-2026', 'bimonthly_test', [
             [$assignedStudent, 88, 100],
@@ -215,24 +256,69 @@ class TeacherRankingServiceTest extends TestCase
             'assigned_by' => null,
         ]);
 
+        $classwiseRows = collect($service->calculateTeacherClasswiseCgpa('2025-2026', 'bimonthly'));
+
+        $gradeClassRow = $classwiseRows->firstWhere('class_id', $gradeOnlyClass->id);
+        $numericClassRow = $classwiseRows->firstWhere('class_id', $classTen->id);
+
+        $this->assertNotNull($gradeClassRow);
+        $this->assertTrue((bool) $gradeClassRow['uses_grade_system']);
+        $this->assertSame(2, $gradeClassRow['student_count']);
+        $this->assertSame(0, $gradeClassRow['u_grade_count']);
+        $this->assertSame(2, $gradeClassRow['top_grade_count']);
+        $this->assertSame(100.00, (float) $gradeClassRow['pass_percentage']);
+        $this->assertSame(91.50, (float) $gradeClassRow['average_percentage']);
+        $this->assertSame(5.75, (float) $gradeClassRow['cgpa']);
+
+        $this->assertNotNull($numericClassRow);
+        $this->assertFalse((bool) $numericClassRow['uses_grade_system']);
+        $this->assertSame(1, $numericClassRow['student_count']);
+        $this->assertSame(88.00, (float) $numericClassRow['average_percentage']);
+        $this->assertSame(5.28, (float) $numericClassRow['cgpa']);
+
         $service->storeTeacherCgpaRankings('2025-2026', 'bimonthly');
 
-        $this->assertDatabaseMissing('teacher_cgpa_rankings', [
-            'session' => '2025-2026',
-            'class_id' => $gradeOnlyClass->id,
-            'ranking_scope' => TeacherCgpaRanking::SCOPE_CLASSWISE,
-        ]);
+        $gradeRanking = TeacherCgpaRanking::query()
+            ->where('session', '2025-2026')
+            ->where('exam_type', 'bimonthly_test')
+            ->where('ranking_scope', TeacherCgpaRanking::SCOPE_CLASSWISE)
+            ->where('class_id', $gradeOnlyClass->id)
+            ->sole();
 
-        $ranking = TeacherCgpaRanking::query()
+        $this->assertSame(2, $gradeRanking->student_count);
+        $this->assertSame('91.50', (string) $gradeRanking->average_percentage);
+        $this->assertSame('5.75', (string) $gradeRanking->cgpa);
+
+        $numericRanking = TeacherCgpaRanking::query()
             ->where('session', '2025-2026')
             ->where('exam_type', 'bimonthly_test')
             ->where('ranking_scope', TeacherCgpaRanking::SCOPE_CLASSWISE)
             ->where('class_id', $classTen->id)
             ->sole();
 
-        $this->assertSame(1, $ranking->student_count);
-        $this->assertSame('88.00', (string) $ranking->average_percentage);
-        $this->assertSame('5.28', (string) $ranking->cgpa);
+        $this->assertSame(1, $numericRanking->student_count);
+        $this->assertSame('88.00', (string) $numericRanking->average_percentage);
+        $this->assertSame('5.28', (string) $numericRanking->cgpa);
+
+        $overallRanking = TeacherCgpaRanking::query()
+            ->where('session', '2025-2026')
+            ->where('exam_type', 'bimonthly_test')
+            ->where('ranking_scope', TeacherCgpaRanking::SCOPE_OVERALL)
+            ->sole();
+
+        $this->assertSame(3, $overallRanking->student_count);
+        $this->assertSame('90.33', (string) $overallRanking->average_percentage);
+        $this->assertSame('5.59', (string) $overallRanking->cgpa);
+    }
+
+    public function test_grade_scale_service_maps_points_percentages_and_labels(): void
+    {
+        $service = app(GradeScaleService::class);
+
+        $this->assertSame(6.00, $service->getGradePoint('A*'));
+        $this->assertSame(56.00, $service->getPercentageEquivalent('e'));
+        $this->assertSame('Very Good', $service->getOverallLabelFromCgpa(5.50));
+        $this->assertSame('Ungraded / Unsatisfactory', $service->getOverallLabelFromCgpa(0.20));
     }
 
     private function createClass(string $name, string $section): SchoolClass
@@ -310,6 +396,41 @@ class TeacherRankingServiceTest extends TestCase
                 'obtained_marks' => $obtainedMarks,
                 'grade' => null,
                 'total_marks' => $totalMarks,
+                'teacher_id' => $teacher->id,
+                'session' => $session,
+            ]);
+        }
+
+        return $exam;
+    }
+
+    /**
+     * @param array<int, array{0:Student,1:string}> $gradeRows
+     */
+    private function createExamWithGrades(
+        SchoolClass $classRoom,
+        Subject $subject,
+        Teacher $teacher,
+        string $session,
+        string $examType,
+        array $gradeRows
+    ): Exam {
+        $exam = Exam::query()->create([
+            'class_id' => $classRoom->id,
+            'subject_id' => $subject->id,
+            'exam_type' => $examType,
+            'session' => $session,
+            'total_marks' => null,
+            'teacher_id' => $teacher->id,
+        ]);
+
+        foreach ($gradeRows as [$student, $grade]) {
+            Mark::query()->create([
+                'exam_id' => $exam->id,
+                'student_id' => $student->id,
+                'obtained_marks' => null,
+                'grade' => $grade,
+                'total_marks' => null,
                 'teacher_id' => $teacher->id,
                 'session' => $session,
             ]);

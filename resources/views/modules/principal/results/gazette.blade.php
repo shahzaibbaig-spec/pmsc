@@ -156,7 +156,14 @@
                                                 : ['obtained' => 0, 'total' => (int) $subject['total_marks']]);
                                         @endphp
                                         <td class="px-3 py-2 text-sm text-slate-700">
-                                            {{ $usesGradeSystem ? ($subjectMark['grade'] ?? '-') : (int) $subjectMark['obtained'] }}
+                                            @if ($usesGradeSystem)
+                                                <div class="font-semibold text-slate-900">{{ $subjectMark['grade'] ?? '-' }}</div>
+                                                @if (!empty($subjectMark['label']))
+                                                    <div class="text-xs text-slate-500">{{ $subjectMark['label'] }}</div>
+                                                @endif
+                                            @else
+                                                {{ (int) $subjectMark['obtained'] }}
+                                            @endif
                                         </td>
                                     @endforeach
                                     @if ($usesGradeSystem)
