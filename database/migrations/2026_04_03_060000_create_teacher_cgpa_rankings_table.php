@@ -15,6 +15,7 @@ return new class extends Migration
             $table->string('exam_type', 30)->nullable();
             $table->foreignId('class_id')->nullable()->constrained('school_classes')->nullOnDelete();
             $table->decimal('average_percentage', 5, 2)->default(0);
+            $table->decimal('pass_percentage', 5, 2)->default(0);
             $table->decimal('cgpa', 4, 2)->default(0);
             $table->integer('student_count')->default(0);
             $table->integer('rank_position')->nullable();

@@ -187,6 +187,7 @@ class TeacherRankingService
                     'exam_type' => $resolvedExamType,
                     'class_id' => isset($row['class_id']) ? (int) $row['class_id'] : null,
                     'average_percentage' => round((float) $row['average_percentage'], 2),
+                    'pass_percentage' => round((float) ($row['pass_percentage'] ?? 0), 2),
                     'cgpa' => round((float) $row['cgpa'], 2),
                     'student_count' => (int) $row['student_count'],
                     'rank_position' => isset($row['rank_position']) ? (int) $row['rank_position'] : null,
@@ -596,6 +597,7 @@ class TeacherRankingService
                 ? $this->classLabel((string) $ranking->classRoom->name, $ranking->classRoom->section)
                 : null,
             'average_percentage' => round((float) $ranking->average_percentage, 2),
+            'pass_percentage' => round((float) $ranking->pass_percentage, 2),
             'cgpa' => round((float) $ranking->cgpa, 2),
             'student_count' => (int) $ranking->student_count,
             'rank_position' => $ranking->rank_position !== null ? (int) $ranking->rank_position : null,

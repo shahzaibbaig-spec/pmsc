@@ -92,12 +92,14 @@ class TeacherRankingServiceTest extends TestCase
         $this->assertSame($teacherOne->id, $overall[0]->teacher_id);
         $this->assertSame(1, $overall[0]->rank_position);
         $this->assertSame('76.67', (string) $overall[0]->average_percentage);
+        $this->assertSame('100.00', (string) $overall[0]->pass_percentage);
         $this->assertSame('4.60', (string) $overall[0]->cgpa);
         $this->assertSame(3, $overall[0]->student_count);
 
         $this->assertSame($teacherTwo->id, $overall[1]->teacher_id);
         $this->assertSame(2, $overall[1]->rank_position);
         $this->assertSame('65.00', (string) $overall[1]->average_percentage);
+        $this->assertSame('100.00', (string) $overall[1]->pass_percentage);
         $this->assertSame('3.90', (string) $overall[1]->cgpa);
         $this->assertSame(2, $overall[1]->student_count);
 
@@ -113,10 +115,12 @@ class TeacherRankingServiceTest extends TestCase
         $this->assertSame($teacherOne->id, $classwiseEight[0]->teacher_id);
         $this->assertSame(1, $classwiseEight[0]->rank_position);
         $this->assertSame('85.00', (string) $classwiseEight[0]->average_percentage);
+        $this->assertSame('100.00', (string) $classwiseEight[0]->pass_percentage);
 
         $this->assertSame($teacherTwo->id, $classwiseEight[1]->teacher_id);
         $this->assertSame(2, $classwiseEight[1]->rank_position);
         $this->assertSame('65.00', (string) $classwiseEight[1]->average_percentage);
+        $this->assertSame('100.00', (string) $classwiseEight[1]->pass_percentage);
 
         $service->storeTeacherCgpaRankings('2025-2026', 'final_term');
 
@@ -287,6 +291,7 @@ class TeacherRankingServiceTest extends TestCase
 
         $this->assertSame(2, $gradeRanking->student_count);
         $this->assertSame('91.50', (string) $gradeRanking->average_percentage);
+        $this->assertSame('100.00', (string) $gradeRanking->pass_percentage);
         $this->assertSame('5.75', (string) $gradeRanking->cgpa);
 
         $numericRanking = TeacherCgpaRanking::query()
@@ -298,6 +303,7 @@ class TeacherRankingServiceTest extends TestCase
 
         $this->assertSame(1, $numericRanking->student_count);
         $this->assertSame('88.00', (string) $numericRanking->average_percentage);
+        $this->assertSame('100.00', (string) $numericRanking->pass_percentage);
         $this->assertSame('5.28', (string) $numericRanking->cgpa);
 
         $overallRanking = TeacherCgpaRanking::query()
@@ -308,6 +314,7 @@ class TeacherRankingServiceTest extends TestCase
 
         $this->assertSame(3, $overallRanking->student_count);
         $this->assertSame('90.33', (string) $overallRanking->average_percentage);
+        $this->assertSame('100.00', (string) $overallRanking->pass_percentage);
         $this->assertSame('5.59', (string) $overallRanking->cgpa);
     }
 

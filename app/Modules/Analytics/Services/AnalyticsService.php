@@ -8,7 +8,8 @@ use App\Models\Mark;
 use App\Models\SchoolClass;
 use App\Models\Student;
 use App\Models\Teacher;
-use App\Models\TeacherSubjectAssignment;
+use App\Models\TeacherAssignment;
+use App\Services\TeacherRankingService;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -20,6 +21,10 @@ class AnalyticsService
 {
     private const PASS_PERCENTAGE = 60.0;
     private const EXAM_TYPES = ['class_test', 'bimonthly_test', 'first_term', 'final_term'];
+
+    public function __construct(private readonly TeacherRankingService $teacherRankingService)
+    {
+    }
 
     /**
      * @return array<int, string>
@@ -206,14 +211,14 @@ class AnalyticsService
         $teacherPerformanceRows = $this->teacherPerformanceRows($session, $classId);
         $summaryRow = $teacherPerformanceRows->firstWhere('teacher_id', (int) $teacher->id);
 
-        $assignedClasses = TeacherSubjectAssignment::query()
+        $assignedClasses = TeacherAssignment::query()
             ->with('classRoom:id,name,section')
             ->where('session', $session)
             ->where('teacher_id', $teacher->id)
             ->when($classId !== null, fn (Builder $query) => $query->where('class_id', $classId))
             ->orderBy('class_id')
             ->get(['id', 'class_id'])
-            ->map(fn (TeacherSubjectAssignment $assignment): array => [
+            ->map(fn (TeacherAssignment $assignment): array => [
                 'id' => (int) $assignment->class_id,
                 'name' => $this->classLabel(
                     (string) ($assignment->classRoom?->name ?? 'Class'),
@@ -439,11 +444,11 @@ class AnalyticsService
     {
         $exam = $this->normalizeExamType($examType);
 
-        $teachers = TeacherSubjectAssignment::query()
-            ->join('teachers as t', 't.id', '=', 'teacher_subject_assignments.teacher_id')
+        $teachers = TeacherAssignment::query()
+            ->join('teachers as t', 't.id', '=', 'teacher_assignments.teacher_id')
             ->join('users as u', 'u.id', '=', 't.user_id')
-            ->where('teacher_subject_assignments.session', $session)
-            ->when($classId !== null, fn ($query) => $query->where('teacher_subject_assignments.class_id', $classId))
+            ->where('teacher_assignments.session', $session)
+            ->when($classId !== null, fn ($query) => $query->where('teacher_assignments.class_id', $classId))
             ->where(function ($query): void {
                 $query->whereNull('u.status')
                     ->orWhere('u.status', 'active');
@@ -452,54 +457,19 @@ class AnalyticsService
                 t.id as teacher_id,
                 t.teacher_id as teacher_code,
                 u.name as teacher_name,
-                COUNT(DISTINCT teacher_subject_assignments.class_id) as classes_count
+                COUNT(DISTINCT teacher_assignments.class_id) as classes_count
             ')
             ->groupBy('t.id', 't.teacher_id', 'u.name')
             ->orderBy('u.name')
             ->get();
 
         $teacherIds = $teachers->pluck('teacher_id')->map(fn ($id): int => (int) $id)->all();
+        $rankingMetrics = $this->teacherRankingMetricsByTeacher($session, $classId, $exam)->all();
+        $entriesByTeacher = $this->teacherEntriesByTeacher($session, $classId, $exam, $teacherIds);
 
-        $marksByTeacher = [];
-        if ($teacherIds !== []) {
-            $markRows = Mark::query()
-                ->join('exams as e', 'e.id', '=', 'marks.exam_id')
-                ->join('students as s', 's.id', '=', 'marks.student_id')
-                ->where('marks.session', $session)
-                ->whereNull('s.deleted_at')
-                ->where('s.status', 'active')
-                ->whereIn('marks.teacher_id', $teacherIds)
-                ->when($classId !== null, fn ($query) => $query->where('e.class_id', $classId))
-                ->when($exam !== null, fn ($query) => $query->where('e.exam_type', $exam))
-                ->selectRaw("
-                    marks.teacher_id as teacher_id,
-                    AVG((marks.obtained_marks * 100.0) / NULLIF(marks.total_marks, 0)) as average_score,
-                    (
-                        SUM(
-                            CASE
-                                WHEN ((marks.obtained_marks * 100.0) / NULLIF(marks.total_marks, 0)) >= ?
-                                THEN 1
-                                ELSE 0
-                            END
-                        ) * 100.0
-                    ) / NULLIF(COUNT(*), 0) as pass_percentage,
-                    COUNT(*) as entries
-                ", [self::PASS_PERCENTAGE])
-                ->groupBy('marks.teacher_id')
-                ->get();
-
-            foreach ($markRows as $row) {
-                $marksByTeacher[(int) $row->teacher_id] = [
-                    'average_score' => $row->average_score !== null ? round((float) $row->average_score, 2) : null,
-                    'pass_percentage' => $row->pass_percentage !== null ? round((float) $row->pass_percentage, 2) : null,
-                    'entries' => (int) ($row->entries ?? 0),
-                ];
-            }
-        }
-
-        $rows = $teachers->map(function ($row) use ($marksByTeacher): array {
+        $rows = $teachers->map(function ($row) use ($rankingMetrics, $entriesByTeacher): array {
             $teacherId = (int) $row->teacher_id;
-            $metric = $marksByTeacher[$teacherId] ?? null;
+            $metric = $rankingMetrics[$teacherId] ?? null;
 
             return [
                 'teacher_id' => $teacherId,
@@ -507,12 +477,13 @@ class AnalyticsService
                 'teacher_name' => (string) $row->teacher_name,
                 'average_score' => $metric['average_score'] ?? null,
                 'pass_percentage' => $metric['pass_percentage'] ?? null,
-                'entries' => $metric['entries'] ?? 0,
+                'entries' => (int) ($entriesByTeacher[$teacherId] ?? 0),
                 'classes_count' => (int) ($row->classes_count ?? 0),
+                'rank' => $metric['rank'] ?? null,
             ];
         });
 
-        return $this->rankRowsByMetric($rows, 'average_score');
+        return $this->sortTeacherPerformanceRows($rows);
     }
 
     public function classComparisonRows(string $session, ?int $classId = null, ?string $examType = null): Collection
@@ -987,16 +958,111 @@ class AnalyticsService
 
     private function activeTeachersCount(string $session, ?int $classId = null): int
     {
-        return (int) TeacherSubjectAssignment::query()
-            ->join('teachers as t', 't.id', '=', 'teacher_subject_assignments.teacher_id')
+        return (int) TeacherAssignment::query()
+            ->join('teachers as t', 't.id', '=', 'teacher_assignments.teacher_id')
             ->join('users as u', 'u.id', '=', 't.user_id')
-            ->where('teacher_subject_assignments.session', $session)
-            ->when($classId !== null, fn ($query) => $query->where('teacher_subject_assignments.class_id', $classId))
+            ->where('teacher_assignments.session', $session)
+            ->when($classId !== null, fn ($query) => $query->where('teacher_assignments.class_id', $classId))
             ->where(function ($query): void {
                 $query->whereNull('u.status')
                     ->orWhere('u.status', 'active');
             })
-            ->count(DB::raw('DISTINCT teacher_subject_assignments.teacher_id'));
+            ->count(DB::raw('DISTINCT teacher_assignments.teacher_id'));
+    }
+
+    private function teacherRankingMetricsByTeacher(string $session, ?int $classId = null, ?string $examType = null): Collection
+    {
+        if (! Schema::hasTable('teacher_cgpa_rankings')) {
+            return collect();
+        }
+
+        $snapshot = $this->teacherRankingService->snapshot($session, $examType);
+        $rows = $classId !== null
+            ? collect($snapshot['classwise'] ?? [])->where('class_id', $classId)->values()
+            : collect($snapshot['overall'] ?? []);
+
+        if ($rows->isEmpty()) {
+            $this->teacherRankingService->storeTeacherCgpaRankings($session, $examType);
+
+            $snapshot = $this->teacherRankingService->snapshot($session, $examType);
+            $rows = $classId !== null
+                ? collect($snapshot['classwise'] ?? [])->where('class_id', $classId)->values()
+                : collect($snapshot['overall'] ?? []);
+        }
+
+        return $rows->mapWithKeys(fn (array $row): array => [
+            (int) $row['teacher_id'] => [
+                'average_score' => isset($row['average_percentage']) ? round((float) $row['average_percentage'], 2) : null,
+                'pass_percentage' => isset($row['pass_percentage']) ? round((float) $row['pass_percentage'], 2) : null,
+                'rank' => isset($row['rank_position']) ? (int) $row['rank_position'] : null,
+                'student_count' => isset($row['student_count']) ? (int) $row['student_count'] : 0,
+            ],
+        ]);
+    }
+
+    /**
+     * @param array<int, int> $teacherIds
+     * @return array<int, int>
+     */
+    private function teacherEntriesByTeacher(string $session, ?int $classId, ?string $examType, array $teacherIds): array
+    {
+        if ($teacherIds === []) {
+            return [];
+        }
+
+        return Mark::query()
+            ->join('exams as e', 'e.id', '=', 'marks.exam_id')
+            ->join('students as s', 's.id', '=', 'marks.student_id')
+            ->where('marks.session', $session)
+            ->whereNull('s.deleted_at')
+            ->where('s.status', 'active')
+            ->whereIn('marks.teacher_id', $teacherIds)
+            ->when($classId !== null, fn ($query) => $query->where('e.class_id', $classId))
+            ->when($examType !== null, fn ($query) => $query->where('e.exam_type', $examType))
+            ->selectRaw('marks.teacher_id as teacher_id, COUNT(*) as entries')
+            ->groupBy('marks.teacher_id')
+            ->pluck('entries', 'teacher_id')
+            ->mapWithKeys(fn ($entries, $teacherId): array => [(int) $teacherId => (int) $entries])
+            ->all();
+    }
+
+    private function sortTeacherPerformanceRows(Collection $rows): Collection
+    {
+        return $rows
+            ->sort(function (array $left, array $right): int {
+                $leftRank = $left['rank'] ?? null;
+                $rightRank = $right['rank'] ?? null;
+
+                if ($leftRank !== null && $rightRank !== null && $leftRank !== $rightRank) {
+                    return $leftRank <=> $rightRank;
+                }
+
+                if ($leftRank !== null && $rightRank === null) {
+                    return -1;
+                }
+
+                if ($leftRank === null && $rightRank !== null) {
+                    return 1;
+                }
+
+                $leftAverage = $left['average_score'] ?? null;
+                $rightAverage = $right['average_score'] ?? null;
+
+                if ($leftAverage !== null && $rightAverage !== null && (float) $leftAverage !== (float) $rightAverage) {
+                    return (float) $rightAverage <=> (float) $leftAverage;
+                }
+
+                if ($leftAverage !== null && $rightAverage === null) {
+                    return -1;
+                }
+
+                if ($leftAverage === null && $rightAverage !== null) {
+                    return 1;
+                }
+
+                return strcasecmp((string) ($left['teacher_name'] ?? ''), (string) ($right['teacher_name'] ?? ''));
+            })
+            ->values();
     }
 
     private function activeStudentsQuery(?int $classId = null): Builder
