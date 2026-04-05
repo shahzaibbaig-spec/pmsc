@@ -24,11 +24,18 @@ return new class extends Migration
             $table->integer('student_count')->default(0);
             $table->integer('rank_position')->nullable();
             $table->enum('ranking_scope', ['classwise', 'overall'])->default('classwise');
+            $table->string('ranking_group', 30)->default('middle_school');
             $table->timestamps();
 
-            $table->index(['session', 'exam_type', 'ranking_scope'], 'teacher_cgpa_rankings_session_exam_scope_index');
-            $table->index(['session', 'exam_type', 'class_id'], 'teacher_cgpa_rankings_session_exam_class_index');
-            $table->index(['teacher_id', 'session'], 'teacher_cgpa_rankings_teacher_session_index');
+            $table->index(
+                ['session', 'exam_type', 'ranking_group', 'ranking_scope'],
+                'teacher_cgpa_rankings_session_exam_group_scope_index'
+            );
+            $table->index(
+                ['session', 'exam_type', 'ranking_group', 'class_id'],
+                'teacher_cgpa_rankings_session_exam_group_class_index'
+            );
+            $table->index(['teacher_id', 'session', 'ranking_group'], 'teacher_cgpa_rankings_teacher_session_group_index');
         });
     }
 

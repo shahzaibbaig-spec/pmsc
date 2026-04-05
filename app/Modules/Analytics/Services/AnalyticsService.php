@@ -972,16 +972,15 @@ class AnalyticsService
 
     private function teacherRankingMetricsByTeacher(string $session, ?int $classId = null, ?string $examType = null): Collection
     {
-        if (! Schema::hasTable('teacher_cgpa_rankings')) {
-            return collect();
-        }
-
         $snapshot = $this->teacherRankingService->snapshot($session, $examType);
         $rows = $classId !== null
             ? collect($snapshot['classwise'] ?? [])->where('class_id', $classId)->values()
             : collect($snapshot['overall'] ?? []);
 
-        if ($rows->isEmpty()) {
+        $canPersistSnapshot = (bool) ($snapshot['schema_ready'] ?? false)
+            && ! (bool) ($snapshot['preview_mode'] ?? false);
+
+        if ($rows->isEmpty() && $canPersistSnapshot) {
             $this->teacherRankingService->storeTeacherCgpaRankings($session, $examType);
 
             $snapshot = $this->teacherRankingService->snapshot($session, $examType);
@@ -990,14 +989,42 @@ class AnalyticsService
                 : collect($snapshot['overall'] ?? []);
         }
 
-        return $rows->mapWithKeys(fn (array $row): array => [
-            (int) $row['teacher_id'] => [
-                'average_score' => isset($row['average_percentage']) ? round((float) $row['average_percentage'], 2) : null,
-                'pass_percentage' => isset($row['pass_percentage']) ? round((float) $row['pass_percentage'], 2) : null,
-                'rank' => isset($row['rank_position']) ? (int) $row['rank_position'] : null,
-                'student_count' => isset($row['student_count']) ? (int) $row['student_count'] : 0,
-            ],
-        ]);
+        return $rows
+            ->groupBy(fn (array $row): int => (int) $row['teacher_id'])
+            ->map(function (Collection $teacherRows) use ($classId): array {
+                /** @var array<string, mixed> $first */
+                $first = $teacherRows->first();
+
+                if ($teacherRows->count() === 1 || $classId !== null) {
+                    return [
+                        'average_score' => isset($first['average_percentage']) ? round((float) $first['average_percentage'], 2) : null,
+                        'pass_percentage' => isset($first['pass_percentage']) ? round((float) $first['pass_percentage'], 2) : null,
+                        'rank' => isset($first['rank_position']) ? (int) $first['rank_position'] : null,
+                        'student_count' => isset($first['student_count']) ? (int) $first['student_count'] : 0,
+                    ];
+                }
+
+                $studentCount = (int) $teacherRows->sum(fn (array $row): int => (int) ($row['student_count'] ?? 0));
+                $averageScore = $studentCount > 0
+                    ? round(
+                        $teacherRows->sum(fn (array $row): float => (float) ($row['average_percentage'] ?? 0) * (int) ($row['student_count'] ?? 0)) / $studentCount,
+                        2
+                    )
+                    : null;
+                $passPercentage = $studentCount > 0
+                    ? round(
+                        $teacherRows->sum(fn (array $row): float => (float) ($row['pass_percentage'] ?? 0) * (int) ($row['student_count'] ?? 0)) / $studentCount,
+                        2
+                    )
+                    : null;
+
+                return [
+                    'average_score' => $averageScore,
+                    'pass_percentage' => $passPercentage,
+                    'rank' => null,
+                    'student_count' => $studentCount,
+                ];
+            });
     }
 
     /**

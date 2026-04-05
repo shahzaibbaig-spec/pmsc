@@ -56,6 +56,7 @@ class AnalyticsServiceTeacherPerformanceTest extends TestCase
             'student_count' => 24,
             'rank_position' => 1,
             'ranking_scope' => TeacherCgpaRanking::SCOPE_OVERALL,
+            'ranking_group' => TeacherCgpaRanking::GROUP_SENIOR_SCHOOL,
         ]);
         TeacherCgpaRanking::query()->create([
             'teacher_id' => $teacherTwo->id,
@@ -68,6 +69,7 @@ class AnalyticsServiceTeacherPerformanceTest extends TestCase
             'student_count' => 21,
             'rank_position' => 2,
             'ranking_scope' => TeacherCgpaRanking::SCOPE_OVERALL,
+            'ranking_group' => TeacherCgpaRanking::GROUP_SENIOR_SCHOOL,
         ]);
 
         $rows = $service->teacherPerformanceRows('2025-2026')->all();
@@ -128,6 +130,7 @@ class AnalyticsServiceTeacherPerformanceTest extends TestCase
             'student_count' => 40,
             'rank_position' => 1,
             'ranking_scope' => TeacherCgpaRanking::SCOPE_OVERALL,
+            'ranking_group' => TeacherCgpaRanking::GROUP_SENIOR_SCHOOL,
         ]);
         TeacherCgpaRanking::query()->create([
             'teacher_id' => $teacherTwo->id,
@@ -140,6 +143,7 @@ class AnalyticsServiceTeacherPerformanceTest extends TestCase
             'student_count' => 18,
             'rank_position' => 2,
             'ranking_scope' => TeacherCgpaRanking::SCOPE_OVERALL,
+            'ranking_group' => TeacherCgpaRanking::GROUP_SENIOR_SCHOOL,
         ]);
         TeacherCgpaRanking::query()->create([
             'teacher_id' => $teacherTwo->id,
@@ -152,6 +156,7 @@ class AnalyticsServiceTeacherPerformanceTest extends TestCase
             'student_count' => 22,
             'rank_position' => 1,
             'ranking_scope' => TeacherCgpaRanking::SCOPE_CLASSWISE,
+            'ranking_group' => TeacherCgpaRanking::GROUP_SENIOR_SCHOOL,
         ]);
         TeacherCgpaRanking::query()->create([
             'teacher_id' => $teacherOne->id,
@@ -164,6 +169,7 @@ class AnalyticsServiceTeacherPerformanceTest extends TestCase
             'student_count' => 20,
             'rank_position' => 2,
             'ranking_scope' => TeacherCgpaRanking::SCOPE_CLASSWISE,
+            'ranking_group' => TeacherCgpaRanking::GROUP_SENIOR_SCHOOL,
         ]);
 
         $rows = $service->teacherPerformanceRows('2025-2026', $classEight->id, 'final_term')->all();
@@ -173,6 +179,65 @@ class AnalyticsServiceTeacherPerformanceTest extends TestCase
         $this->assertSame([1, 2, null], array_column($rows, 'rank'));
         $this->assertSame([88.00, 70.00, null], array_column($rows, 'average_score'));
         $this->assertSame([90.00, 68.00, null], array_column($rows, 'pass_percentage'));
+    }
+
+    public function test_teacher_performance_rows_aggregate_multiple_group_rows_for_the_same_teacher(): void
+    {
+        $service = app(AnalyticsService::class);
+        $classOne = $this->createClass('1', 'A');
+        $classSeven = $this->createClass('7', 'A');
+        [$teacher] = $this->createTeachers('Adeel');
+        [$science, $english] = $this->createSubjects('Science', 'English');
+
+        TeacherAssignment::query()->create([
+            'teacher_id' => $teacher->id,
+            'class_id' => $classOne->id,
+            'subject_id' => $science->id,
+            'is_class_teacher' => false,
+            'session' => '2025-2026',
+        ]);
+        TeacherAssignment::query()->create([
+            'teacher_id' => $teacher->id,
+            'class_id' => $classSeven->id,
+            'subject_id' => $english->id,
+            'is_class_teacher' => false,
+            'session' => '2025-2026',
+        ]);
+
+        TeacherCgpaRanking::query()->create([
+            'teacher_id' => $teacher->id,
+            'session' => '2025-2026',
+            'exam_type' => null,
+            'class_id' => null,
+            'average_percentage' => 90.00,
+            'pass_percentage' => 100.00,
+            'cgpa' => 5.40,
+            'student_count' => 10,
+            'rank_position' => 1,
+            'ranking_scope' => TeacherCgpaRanking::SCOPE_OVERALL,
+            'ranking_group' => TeacherCgpaRanking::GROUP_EARLY_YEARS,
+        ]);
+        TeacherCgpaRanking::query()->create([
+            'teacher_id' => $teacher->id,
+            'session' => '2025-2026',
+            'exam_type' => null,
+            'class_id' => null,
+            'average_percentage' => 70.00,
+            'pass_percentage' => 60.00,
+            'cgpa' => 4.20,
+            'student_count' => 30,
+            'rank_position' => 3,
+            'ranking_scope' => TeacherCgpaRanking::SCOPE_OVERALL,
+            'ranking_group' => TeacherCgpaRanking::GROUP_SENIOR_SCHOOL,
+        ]);
+
+        $rows = $service->teacherPerformanceRows('2025-2026')->all();
+
+        $this->assertCount(1, $rows);
+        $this->assertSame($teacher->id, $rows[0]['teacher_id']);
+        $this->assertNull($rows[0]['rank']);
+        $this->assertSame(75.00, $rows[0]['average_score']);
+        $this->assertSame(70.00, $rows[0]['pass_percentage']);
     }
 
     private function createClass(string $name, string $section): SchoolClass

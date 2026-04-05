@@ -92,6 +92,7 @@ class TeacherRankingServiceTest extends TestCase
 
         $this->assertCount(2, $overall);
         $this->assertSame($teacherOne->id, $overall[0]->teacher_id);
+        $this->assertSame(TeacherCgpaRanking::GROUP_SENIOR_SCHOOL, $overall[0]->ranking_group);
         $this->assertSame(1, $overall[0]->rank_position);
         $this->assertSame('76.67', (string) $overall[0]->average_percentage);
         $this->assertSame('100.00', (string) $overall[0]->pass_percentage);
@@ -99,6 +100,7 @@ class TeacherRankingServiceTest extends TestCase
         $this->assertSame(3, $overall[0]->student_count);
 
         $this->assertSame($teacherTwo->id, $overall[1]->teacher_id);
+        $this->assertSame(TeacherCgpaRanking::GROUP_SENIOR_SCHOOL, $overall[1]->ranking_group);
         $this->assertSame(2, $overall[1]->rank_position);
         $this->assertSame('65.00', (string) $overall[1]->average_percentage);
         $this->assertSame('100.00', (string) $overall[1]->pass_percentage);
@@ -109,6 +111,7 @@ class TeacherRankingServiceTest extends TestCase
             ->where('session', '2025-2026')
             ->where('exam_type', 'final_term')
             ->where('ranking_scope', TeacherCgpaRanking::SCOPE_CLASSWISE)
+            ->where('ranking_group', TeacherCgpaRanking::GROUP_SENIOR_SCHOOL)
             ->where('class_id', $classEight->id)
             ->orderBy('rank_position')
             ->get();
@@ -212,8 +215,51 @@ class TeacherRankingServiceTest extends TestCase
             ],
         ]);
 
-        $this->assertSame([6, 1, 5, 7, 3, 2, 4], array_column($ranked, 'teacher_id'));
+        $this->assertSame([6, 4, 5, 7, 3, 2, 1], array_column($ranked, 'teacher_id'));
         $this->assertSame([1, 2, 3, 4, 5, 6, 7], array_column($ranked, 'rank_position'));
+    }
+
+    public function test_rank_teachers_uses_early_years_specific_tie_breakers_when_common_metrics_match(): void
+    {
+        $service = app(TeacherRankingService::class);
+
+        $ranked = $service->rankTeachers([
+            [
+                'teacher_id' => 2,
+                'teacher_name' => 'Bilal',
+                'cgpa' => 5.20,
+                'average_percentage' => 86.00,
+                'pass_percentage' => 100.00,
+                'student_count' => 12,
+                'u_grade_count' => 1,
+                'top_grade_count' => 4,
+                'ranking_group' => TeacherCgpaRanking::GROUP_EARLY_YEARS,
+            ],
+            [
+                'teacher_id' => 1,
+                'teacher_name' => 'Adeel',
+                'cgpa' => 5.20,
+                'average_percentage' => 86.00,
+                'pass_percentage' => 100.00,
+                'student_count' => 12,
+                'u_grade_count' => 0,
+                'top_grade_count' => 2,
+                'ranking_group' => TeacherCgpaRanking::GROUP_EARLY_YEARS,
+            ],
+            [
+                'teacher_id' => 3,
+                'teacher_name' => 'Hamza',
+                'cgpa' => 5.20,
+                'average_percentage' => 86.00,
+                'pass_percentage' => 100.00,
+                'student_count' => 12,
+                'u_grade_count' => 0,
+                'top_grade_count' => 1,
+                'ranking_group' => TeacherCgpaRanking::GROUP_EARLY_YEARS,
+            ],
+        ]);
+
+        $this->assertSame([1, 3, 2], array_column($ranked, 'teacher_id'));
     }
 
     public function test_it_includes_grade_classes_and_filters_unassigned_subject_group_students_for_grades_9_to_12(): void
@@ -262,13 +308,15 @@ class TeacherRankingServiceTest extends TestCase
             'assigned_by' => null,
         ]);
 
-        $classwiseRows = collect($service->calculateTeacherClasswiseCgpa('2025-2026', 'bimonthly'));
+        $earlyYearsClasswiseRows = collect($service->calculateTeacherClasswiseCgpaByGroup('2025-2026', TeacherCgpaRanking::GROUP_EARLY_YEARS, 'bimonthly'));
+        $seniorSchoolClasswiseRows = collect($service->calculateTeacherClasswiseCgpaByGroup('2025-2026', TeacherCgpaRanking::GROUP_SENIOR_SCHOOL, 'bimonthly'));
 
-        $gradeClassRow = $classwiseRows->firstWhere('class_id', $gradeOnlyClass->id);
-        $numericClassRow = $classwiseRows->firstWhere('class_id', $classTen->id);
+        $gradeClassRow = $earlyYearsClasswiseRows->firstWhere('class_id', $gradeOnlyClass->id);
+        $numericClassRow = $seniorSchoolClasswiseRows->firstWhere('class_id', $classTen->id);
 
         $this->assertNotNull($gradeClassRow);
         $this->assertTrue((bool) $gradeClassRow['uses_grade_system']);
+        $this->assertSame(TeacherCgpaRanking::GROUP_EARLY_YEARS, $gradeClassRow['ranking_group']);
         $this->assertSame(2, $gradeClassRow['student_count']);
         $this->assertSame(0, $gradeClassRow['u_grade_count']);
         $this->assertSame(2, $gradeClassRow['top_grade_count']);
@@ -278,6 +326,7 @@ class TeacherRankingServiceTest extends TestCase
 
         $this->assertNotNull($numericClassRow);
         $this->assertFalse((bool) $numericClassRow['uses_grade_system']);
+        $this->assertSame(TeacherCgpaRanking::GROUP_SENIOR_SCHOOL, $numericClassRow['ranking_group']);
         $this->assertSame(1, $numericClassRow['student_count']);
         $this->assertSame(88.00, (float) $numericClassRow['average_percentage']);
         $this->assertSame(5.28, (float) $numericClassRow['cgpa']);
@@ -288,6 +337,7 @@ class TeacherRankingServiceTest extends TestCase
             ->where('session', '2025-2026')
             ->where('exam_type', 'bimonthly_test')
             ->where('ranking_scope', TeacherCgpaRanking::SCOPE_CLASSWISE)
+            ->where('ranking_group', TeacherCgpaRanking::GROUP_EARLY_YEARS)
             ->where('class_id', $gradeOnlyClass->id)
             ->sole();
 
@@ -300,6 +350,7 @@ class TeacherRankingServiceTest extends TestCase
             ->where('session', '2025-2026')
             ->where('exam_type', 'bimonthly_test')
             ->where('ranking_scope', TeacherCgpaRanking::SCOPE_CLASSWISE)
+            ->where('ranking_group', TeacherCgpaRanking::GROUP_SENIOR_SCHOOL)
             ->where('class_id', $classTen->id)
             ->sole();
 
@@ -308,16 +359,29 @@ class TeacherRankingServiceTest extends TestCase
         $this->assertSame('100.00', (string) $numericRanking->pass_percentage);
         $this->assertSame('5.28', (string) $numericRanking->cgpa);
 
-        $overallRanking = TeacherCgpaRanking::query()
+        $earlyYearsOverallRanking = TeacherCgpaRanking::query()
             ->where('session', '2025-2026')
             ->where('exam_type', 'bimonthly_test')
             ->where('ranking_scope', TeacherCgpaRanking::SCOPE_OVERALL)
+            ->where('ranking_group', TeacherCgpaRanking::GROUP_EARLY_YEARS)
             ->sole();
 
-        $this->assertSame(3, $overallRanking->student_count);
-        $this->assertSame('90.33', (string) $overallRanking->average_percentage);
-        $this->assertSame('100.00', (string) $overallRanking->pass_percentage);
-        $this->assertSame('5.59', (string) $overallRanking->cgpa);
+        $this->assertSame(2, $earlyYearsOverallRanking->student_count);
+        $this->assertSame('91.50', (string) $earlyYearsOverallRanking->average_percentage);
+        $this->assertSame('100.00', (string) $earlyYearsOverallRanking->pass_percentage);
+        $this->assertSame('5.75', (string) $earlyYearsOverallRanking->cgpa);
+
+        $seniorSchoolOverallRanking = TeacherCgpaRanking::query()
+            ->where('session', '2025-2026')
+            ->where('exam_type', 'bimonthly_test')
+            ->where('ranking_scope', TeacherCgpaRanking::SCOPE_OVERALL)
+            ->where('ranking_group', TeacherCgpaRanking::GROUP_SENIOR_SCHOOL)
+            ->sole();
+
+        $this->assertSame(1, $seniorSchoolOverallRanking->student_count);
+        $this->assertSame('88.00', (string) $seniorSchoolOverallRanking->average_percentage);
+        $this->assertSame('100.00', (string) $seniorSchoolOverallRanking->pass_percentage);
+        $this->assertSame('5.28', (string) $seniorSchoolOverallRanking->cgpa);
     }
 
     public function test_it_falls_back_to_student_subjects_for_grades_9_to_12_when_matrix_assignments_do_not_exist(): void
@@ -355,6 +419,7 @@ class TeacherRankingServiceTest extends TestCase
             ->where('session', '2025-2026')
             ->where('exam_type', 'first_term')
             ->where('ranking_scope', TeacherCgpaRanking::SCOPE_CLASSWISE)
+            ->where('ranking_group', TeacherCgpaRanking::GROUP_SENIOR_SCHOOL)
             ->where('class_id', $classNine->id)
             ->sole();
 
@@ -372,6 +437,17 @@ class TeacherRankingServiceTest extends TestCase
         $this->assertSame(56.00, $service->getPercentageEquivalent('e'));
         $this->assertSame('Very Good', $service->getOverallLabelFromCgpa(5.50));
         $this->assertSame('Ungraded / Unsatisfactory', $service->getOverallLabelFromCgpa(0.20));
+    }
+
+    public function test_it_resolves_ranking_group_from_exact_class_names(): void
+    {
+        $service = app(TeacherRankingService::class);
+
+        $this->assertSame(TeacherCgpaRanking::GROUP_EARLY_YEARS, $service->resolveRankingGroupFromClass('PG'));
+        $this->assertSame(TeacherCgpaRanking::GROUP_EARLY_YEARS, $service->resolveRankingGroupFromClass('Class 1'));
+        $this->assertSame(TeacherCgpaRanking::GROUP_MIDDLE_SCHOOL, $service->resolveRankingGroupFromClass('5'));
+        $this->assertSame(TeacherCgpaRanking::GROUP_SENIOR_SCHOOL, $service->resolveRankingGroupFromClass('Class 10'));
+        $this->assertSame(TeacherCgpaRanking::GROUP_SENIOR_SCHOOL, $service->resolveRankingGroupFromClass('12'));
     }
 
     public function test_snapshot_returns_live_preview_when_rankings_table_is_missing(): void
@@ -405,6 +481,8 @@ class TeacherRankingServiceTest extends TestCase
         $this->assertCount(1, $snapshot['overall']);
         $this->assertCount(1, $snapshot['classwise']);
         $this->assertSame(1, $snapshot['summary']['total_ranked_teachers']);
+        $this->assertArrayHasKey(TeacherCgpaRanking::GROUP_SENIOR_SCHOOL, $snapshot['groups']);
+        $this->assertCount(1, $snapshot['groups'][TeacherCgpaRanking::GROUP_SENIOR_SCHOOL]['overall']);
         $this->assertNotEmpty($snapshot['schema_message']);
     }
 
@@ -436,7 +514,8 @@ class TeacherRankingServiceTest extends TestCase
         $this->assertSame('live_preview', $snapshot['data_source']);
         $this->assertCount(1, $snapshot['overall']);
         $this->assertCount(1, $snapshot['classwise']);
-        $this->assertStringContainsString('No saved teacher ranking snapshot exists', (string) $snapshot['schema_message']);
+        $this->assertCount(1, $snapshot['groups'][TeacherCgpaRanking::GROUP_SENIOR_SCHOOL]['overall']);
+        $this->assertStringContainsString('Some ranking groups are showing live calculated previews', (string) $snapshot['schema_message']);
     }
 
     private function createClass(string $name, string $section): SchoolClass

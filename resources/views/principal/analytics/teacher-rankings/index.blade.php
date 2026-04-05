@@ -3,7 +3,7 @@
         <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
                 <h2 class="text-xl font-semibold text-slate-900">Teacher Ranking &amp; CGPA</h2>
-                <p class="mt-1 text-sm text-slate-500">CGPA out of 6 based on teacher-owned student results for the selected session scope.</p>
+                <p class="mt-1 text-sm text-slate-500">Teacher rankings are split into Early Years, Middle School, and Senior School so each level is compared within its own academic structure.</p>
             </div>
             <div class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
                 {{ $selectedSession }} | {{ $selectedExamLabel }}
@@ -12,14 +12,13 @@
     </x-slot>
 
     @php
-        $topTeacher = $summary['top_teacher'] ?? null;
-        $averageSchoolTeacherCgpa = $summary['average_school_teacher_cgpa'] ?? null;
-        $totalRankedTeachers = $summary['total_ranked_teachers'] ?? 0;
+        $rankingGroups = $rankingGroups ?? [];
+        $groupedRankings = $groupedRankings ?? [];
         $previewMode = (bool) ($previewMode ?? false);
-        $dataSource = (string) ($dataSource ?? 'snapshot');
+        $showClasswiseState = collect(array_keys($rankingGroups))->mapWithKeys(fn ($group) => [$group => true])->all();
     @endphp
 
-    <div class="py-8" x-data="{ showClasswise: true }">
+    <div class="py-8" x-data='@json(["showClasswise" => $showClasswiseState])'>
         <div class="mx-auto max-w-7xl space-y-6 sm:px-6 lg:px-8">
             @if (session('success'))
                 <div class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
@@ -113,9 +112,9 @@
                     </form>
 
                     @if (!($schemaReady ?? true))
-                        <p class="text-sm text-slate-500">Migration required before rankings can be saved on this server.</p>
+                        <p class="text-sm text-slate-500">Migration required before grouped rankings can be stored on this server.</p>
                     @elseif ($previewMode)
-                        <p class="text-sm text-slate-500">Viewing live calculated rankings. Regenerate to store this scope as a snapshot.</p>
+                        <p class="text-sm text-slate-500">Viewing live calculated previews for any academic level that does not yet have a saved snapshot.</p>
                     @endif
 
                     <a
@@ -124,132 +123,185 @@
                     >
                         Open Teacher Analytics
                     </a>
-
-                    <button
-                        type="button"
-                        @click="showClasswise = !showClasswise"
-                        class="inline-flex min-h-11 items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                    >
-                        <span x-text="showClasswise ? 'Hide Class-wise Table' : 'Show Class-wise Table'"></span>
-                    </button>
                 </div>
             </section>
 
-            <section class="grid grid-cols-1 gap-4 md:grid-cols-3">
-                <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                    <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Top Ranked Teacher</p>
-                    <p class="mt-3 text-lg font-semibold text-slate-900">{{ $topTeacher['teacher_name'] ?? 'Not generated yet' }}</p>
-                    <p class="mt-1 text-sm text-slate-500">
-                        @if ($topTeacher)
-                            CGPA {{ number_format((float) $topTeacher['cgpa'], 2) }} / 6
-                        @else
-                            Regenerate rankings for this filter to populate the leaderboard.
-                        @endif
-                    </p>
-                </article>
+            <section class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                @foreach ($rankingGroups as $groupKey => $groupMeta)
+                    @php
+                        $groupData = $groupedRankings[$groupKey] ?? [];
+                        $groupSummary = $groupData['summary'] ?? [];
+                        $topTeacher = $groupSummary['top_teacher'] ?? null;
+                        $averageCgpa = $groupSummary['average_teacher_cgpa'] ?? null;
+                    @endphp
 
-                <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                    <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Average School Teacher CGPA</p>
-                    <p class="mt-3 text-lg font-semibold text-slate-900">
-                        {{ $averageSchoolTeacherCgpa !== null ? number_format((float) $averageSchoolTeacherCgpa, 2).' / 6' : 'N/A' }}
-                    </p>
-                    <p class="mt-1 text-sm text-slate-500">
-                        {{ $dataSource === 'snapshot' ? 'Based on saved overall ranking rows for the selected scope.' : 'Based on live calculated overall ranking rows for the selected scope.' }}
-                    </p>
-                </article>
+                    <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                        <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Top {{ $groupMeta['label'] }} Teacher</p>
+                        <p class="mt-3 text-lg font-semibold text-slate-900">{{ $topTeacher['teacher_name'] ?? 'Not available yet' }}</p>
+                        <p class="mt-1 text-sm text-slate-500">
+                            @if ($topTeacher)
+                                CGPA {{ number_format((float) $topTeacher['cgpa'], 2) }} / 6
+                            @else
+                                No ranking rows found for this academic level and scope.
+                            @endif
+                        </p>
+                    </article>
+                @endforeach
 
-                <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                    <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Total Ranked Teachers</p>
-                    <p class="mt-3 text-lg font-semibold text-slate-900">{{ number_format((int) $totalRankedTeachers) }}</p>
-                    <p class="mt-1 text-sm text-slate-500">
-                        {{ $dataSource === 'snapshot' ? 'Teachers included in the saved ranking snapshot.' : 'Teachers included in the current live ranking calculation.' }}
-                    </p>
-                </article>
+                @foreach ($rankingGroups as $groupKey => $groupMeta)
+                    @php
+                        $groupData = $groupedRankings[$groupKey] ?? [];
+                        $groupSummary = $groupData['summary'] ?? [];
+                        $averageCgpa = $groupSummary['average_teacher_cgpa'] ?? null;
+                    @endphp
+
+                    <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                        <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Average {{ $groupMeta['label'] }} CGPA</p>
+                        <p class="mt-3 text-lg font-semibold text-slate-900">
+                            {{ $averageCgpa !== null ? number_format((float) $averageCgpa, 2).' / 6' : 'N/A' }}
+                        </p>
+                        <p class="mt-1 text-sm text-slate-500">Average teacher CGPA inside the {{ strtolower($groupMeta['label']) }} comparison group.</p>
+                    </article>
+                @endforeach
             </section>
 
-            <section class="rounded-2xl border border-slate-200 bg-white shadow-sm">
-                <header class="border-b border-slate-200 px-5 py-4">
-                    <h3 class="text-sm font-semibold text-slate-900">Overall Teacher CGPA Ranking</h3>
-                    <p class="mt-1 text-xs text-slate-500">Weighted by student count across all included class results.</p>
-                </header>
+            @foreach ($rankingGroups as $groupKey => $groupMeta)
+                @php
+                    $groupData = $groupedRankings[$groupKey] ?? [];
+                    $overallRows = $groupData['overall'] ?? [];
+                    $classwiseRows = $groupData['classwise'] ?? [];
+                    $groupSummary = $groupData['summary'] ?? [];
+                    $groupPreview = (bool) ($groupData['preview_mode'] ?? false);
+                    $groupDataSource = (string) ($groupData['data_source'] ?? 'snapshot');
+                    $metricHeader = $groupKey === 'early_years' ? 'Average Grade Point / Average %' : 'Average %';
+                    $classwiseEmptyMessage = $groupPreview
+                        ? 'No class-wise ranking data is available for this academic level and filter yet.'
+                        : 'No saved class-wise ranking snapshot exists for this academic level and filter yet.';
+                    $overallEmptyMessage = $groupPreview
+                        ? 'No overall ranking data is available for this academic level and filter yet.'
+                        : 'No saved overall ranking snapshot exists for this academic level and filter yet.';
+                @endphp
 
-                <div class="overflow-x-auto">
-                    <table class="min-w-full divide-y divide-slate-200">
-                        <thead class="bg-slate-50">
-                            <tr>
-                                <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Rank</th>
-                                <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Teacher</th>
-                                <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Average %</th>
-                                <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">CGPA / 6</th>
-                                <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Student Count</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-slate-100 bg-white">
-                            @forelse ($overallRankings as $row)
-                                <tr>
-                                    <td class="px-4 py-3 text-sm font-semibold text-slate-900">#{{ $row['rank_position'] ?? '-' }}</td>
-                                    <td class="px-4 py-3 text-sm text-slate-700">
-                                        <p class="font-medium text-slate-900">{{ $row['teacher_name'] }}</p>
-                                        <p class="text-xs text-slate-500">{{ $row['teacher_code'] !== '' ? $row['teacher_code'] : '-' }}</p>
-                                    </td>
-                                    <td class="px-4 py-3 text-sm text-slate-700">{{ number_format((float) $row['average_percentage'], 2) }}%</td>
-                                    <td class="px-4 py-3 text-sm text-slate-700">{{ number_format((float) $row['cgpa'], 2) }}</td>
-                                    <td class="px-4 py-3 text-sm text-slate-700">{{ number_format((int) $row['student_count']) }}</td>
-                                </tr>
-                            @empty
-                                <tr>
-                                    <td colspan="5" class="px-4 py-8 text-center text-sm text-slate-500">
-                                        {{ $previewMode ? 'No overall teacher ranking data is available for the selected filters.' : 'No overall teacher ranking snapshot exists for the selected filters yet.' }}
-                                    </td>
-                                </tr>
-                            @endforelse
-                        </tbody>
-                    </table>
-                </div>
-            </section>
+                <section class="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                    <header class="border-b border-slate-200 px-5 py-4">
+                        <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                            <div>
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <h3 class="text-sm font-semibold text-slate-900">{{ $groupMeta['label'] }} Teacher Ranking</h3>
+                                    <span class="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold {{ $groupDataSource === 'snapshot' ? 'bg-emerald-100 text-emerald-700' : 'bg-sky-100 text-sky-700' }}">
+                                        {{ $groupDataSource === 'snapshot' ? 'Saved Snapshot' : 'Live Preview' }}
+                                    </span>
+                                </div>
+                                <p class="mt-1 text-xs text-slate-500">Teachers in {{ $groupMeta['label'] }} are ranked only against other {{ $groupMeta['label'] }} teachers for this filter.</p>
+                            </div>
 
-            <section class="rounded-2xl border border-slate-200 bg-white shadow-sm" x-show="showClasswise" x-transition.opacity>
-                <header class="border-b border-slate-200 px-5 py-4">
-                    <h3 class="text-sm font-semibold text-slate-900">Class-wise Teacher CGPA Ranking</h3>
-                    <p class="mt-1 text-xs text-slate-500">Ranked separately inside each class using CGPA, average %, pass %, student count, and teacher name.</p>
-                </header>
+                            <div class="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+                                <span>Total Ranked Teachers: {{ number_format((int) ($groupSummary['total_ranked_teachers'] ?? 0)) }}</span>
+                                <button
+                                    type="button"
+                                    @click="showClasswise['{{ $groupKey }}'] = !showClasswise['{{ $groupKey }}']"
+                                    class="inline-flex min-h-10 items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                                >
+                                    <span x-text="showClasswise['{{ $groupKey }}'] ? 'Hide Class-wise Table' : 'Show Class-wise Table'"></span>
+                                </button>
+                            </div>
+                        </div>
+                    </header>
 
-                <div class="overflow-x-auto">
-                    <table class="min-w-full divide-y divide-slate-200">
-                        <thead class="bg-slate-50">
-                            <tr>
-                                <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Class</th>
-                                <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Rank</th>
-                                <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Teacher</th>
-                                <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Average %</th>
-                                <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">CGPA / 6</th>
-                                <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Student Count</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-slate-100 bg-white">
-                            @forelse ($classwiseRankings as $row)
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-slate-200">
+                            <thead class="bg-slate-50">
                                 <tr>
-                                    <td class="px-4 py-3 text-sm text-slate-700">{{ $row['class_name'] ?? '-' }}</td>
-                                    <td class="px-4 py-3 text-sm font-semibold text-slate-900">#{{ $row['rank_position'] ?? '-' }}</td>
-                                    <td class="px-4 py-3 text-sm text-slate-700">
-                                        <p class="font-medium text-slate-900">{{ $row['teacher_name'] }}</p>
-                                        <p class="text-xs text-slate-500">{{ $row['teacher_code'] !== '' ? $row['teacher_code'] : '-' }}</p>
-                                    </td>
-                                    <td class="px-4 py-3 text-sm text-slate-700">{{ number_format((float) $row['average_percentage'], 2) }}%</td>
-                                    <td class="px-4 py-3 text-sm text-slate-700">{{ number_format((float) $row['cgpa'], 2) }}</td>
-                                    <td class="px-4 py-3 text-sm text-slate-700">{{ number_format((int) $row['student_count']) }}</td>
+                                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Rank</th>
+                                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Teacher</th>
+                                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Classes</th>
+                                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">{{ $metricHeader }}</th>
+                                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">CGPA / 6</th>
+                                    <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Result Count</th>
                                 </tr>
-                            @empty
-                                <tr>
-                                    <td colspan="6" class="px-4 py-8 text-center text-sm text-slate-500">
-                                        {{ $previewMode ? 'No class-wise teacher ranking data is available for the selected filters.' : 'No class-wise teacher ranking snapshot exists for the selected filters yet.' }}
-                                    </td>
-                                </tr>
-                            @endforelse
-                        </tbody>
-                    </table>
-                </div>
-            </section>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100 bg-white">
+                                @forelse ($overallRows as $row)
+                                    <tr>
+                                        <td class="px-4 py-3 text-sm font-semibold text-slate-900">#{{ $row['rank_position'] ?? '-' }}</td>
+                                        <td class="px-4 py-3 text-sm text-slate-700">
+                                            <p class="font-medium text-slate-900">{{ $row['teacher_name'] }}</p>
+                                            <p class="text-xs text-slate-500">{{ $row['teacher_code'] !== '' ? $row['teacher_code'] : '-' }}</p>
+                                        </td>
+                                        <td class="px-4 py-3 text-sm text-slate-700">{{ $row['classes_label'] !== '' ? $row['classes_label'] : '-' }}</td>
+                                        <td class="px-4 py-3 text-sm text-slate-700">
+                                            @if ($groupKey === 'early_years')
+                                                <p class="font-medium text-slate-900">GP {{ number_format((float) $row['cgpa'], 2) }}</p>
+                                                <p class="text-xs text-slate-500">{{ number_format((float) $row['average_percentage'], 2) }}%</p>
+                                            @else
+                                                {{ number_format((float) $row['average_percentage'], 2) }}%
+                                            @endif
+                                        </td>
+                                        <td class="px-4 py-3 text-sm text-slate-700">{{ number_format((float) $row['cgpa'], 2) }}</td>
+                                        <td class="px-4 py-3 text-sm text-slate-700">{{ number_format((int) $row['student_count']) }}</td>
+                                    </tr>
+                                @empty
+                                    <tr>
+                                        <td colspan="6" class="px-4 py-8 text-center text-sm text-slate-500">
+                                            {{ $overallEmptyMessage }}
+                                        </td>
+                                    </tr>
+                                @endforelse
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div x-show="showClasswise['{{ $groupKey }}']" x-transition.opacity class="border-t border-slate-200">
+                        <header class="border-b border-slate-200 px-5 py-4">
+                            <h4 class="text-sm font-semibold text-slate-900">{{ $groupMeta['label'] }} Class-wise Ranking</h4>
+                            <p class="mt-1 text-xs text-slate-500">Teachers are ranked separately inside each class for the {{ strtolower($groupMeta['label']) }} level.</p>
+                        </header>
+
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full divide-y divide-slate-200">
+                                <thead class="bg-slate-50">
+                                    <tr>
+                                        <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Class</th>
+                                        <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Rank</th>
+                                        <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Teacher</th>
+                                        <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">{{ $metricHeader }}</th>
+                                        <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">CGPA / 6</th>
+                                        <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Result Count</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100 bg-white">
+                                    @forelse ($classwiseRows as $row)
+                                        <tr>
+                                            <td class="px-4 py-3 text-sm text-slate-700">{{ $row['class_name'] ?? '-' }}</td>
+                                            <td class="px-4 py-3 text-sm font-semibold text-slate-900">#{{ $row['rank_position'] ?? '-' }}</td>
+                                            <td class="px-4 py-3 text-sm text-slate-700">
+                                                <p class="font-medium text-slate-900">{{ $row['teacher_name'] }}</p>
+                                                <p class="text-xs text-slate-500">{{ $row['teacher_code'] !== '' ? $row['teacher_code'] : '-' }}</p>
+                                            </td>
+                                            <td class="px-4 py-3 text-sm text-slate-700">
+                                                @if ($groupKey === 'early_years')
+                                                    <p class="font-medium text-slate-900">GP {{ number_format((float) $row['cgpa'], 2) }}</p>
+                                                    <p class="text-xs text-slate-500">{{ number_format((float) $row['average_percentage'], 2) }}%</p>
+                                                @else
+                                                    {{ number_format((float) $row['average_percentage'], 2) }}%
+                                                @endif
+                                            </td>
+                                            <td class="px-4 py-3 text-sm text-slate-700">{{ number_format((float) $row['cgpa'], 2) }}</td>
+                                            <td class="px-4 py-3 text-sm text-slate-700">{{ number_format((int) $row['student_count']) }}</td>
+                                        </tr>
+                                    @empty
+                                        <tr>
+                                            <td colspan="6" class="px-4 py-8 text-center text-sm text-slate-500">
+                                                {{ $classwiseEmptyMessage }}
+                                            </td>
+                                        </tr>
+                                    @endforelse
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+            @endforeach
         </div>
     </div>
 </x-app-layout>

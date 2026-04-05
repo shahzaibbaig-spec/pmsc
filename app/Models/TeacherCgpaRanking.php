@@ -11,6 +11,12 @@ class TeacherCgpaRanking extends Model
 
     public const SCOPE_OVERALL = 'overall';
 
+    public const GROUP_EARLY_YEARS = 'early_years';
+
+    public const GROUP_MIDDLE_SCHOOL = 'middle_school';
+
+    public const GROUP_SENIOR_SCHOOL = 'senior_school';
+
     protected $fillable = [
         'teacher_id',
         'session',
@@ -22,6 +28,7 @@ class TeacherCgpaRanking extends Model
         'student_count',
         'rank_position',
         'ranking_scope',
+        'ranking_group',
     ];
 
     protected function casts(): array

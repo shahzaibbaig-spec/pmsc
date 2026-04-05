@@ -27,11 +27,11 @@ class TeacherRankingController extends Controller
         return view('principal.analytics.teacher-rankings.index', [
             'sessions' => $this->rankingService->sessionOptions(),
             'examTypes' => $this->rankingService->examTypeOptions(),
+            'rankingGroups' => $this->rankingService->rankingGroups(),
             'selectedSession' => $session,
             'selectedExamType' => $selectedExamType,
             'selectedExamLabel' => $this->rankingService->examTypeLabel($selectedExamType),
-            'overallRankings' => $snapshot['overall'],
-            'classwiseRankings' => $snapshot['classwise'],
+            'groupedRankings' => $snapshot['groups'] ?? [],
             'summary' => $snapshot['summary'],
             'schemaReady' => (bool) ($snapshot['schema_ready'] ?? true),
             'schemaMessage' => $snapshot['schema_message'] ?? null,
@@ -66,7 +66,7 @@ class TeacherRankingController extends Controller
             ])
             ->with(
                 'success',
-                'Teacher CGPA rankings regenerated for '.$session.' ('.$this->rankingService->examTypeLabel($selectedExamType).').'
+                'Teacher CGPA rankings regenerated for '.$session.' ('.$this->rankingService->examTypeLabel($selectedExamType).') across Early Years, Middle School, and Senior School.'
             );
     }
 }
