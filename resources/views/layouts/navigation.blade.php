@@ -44,6 +44,11 @@
                         <x-nav-link :href="route('admin.rbac-matrix.index')" :active="request()->routeIs('admin.rbac-matrix.*')">
                             {{ __('RBAC Matrix') }}
                         </x-nav-link>
+                        @can('view_teacher_acr')
+                            <x-nav-link :href="route('principal.acr.index')" :active="request()->routeIs('principal.acr.*')">
+                                {{ __('Teacher ACR') }}
+                            </x-nav-link>
+                        @endcan
                         @can('manage_student_cognitive_assessment_access')
                             <x-nav-link :href="route('principal.assessments.cognitive-skills-level-4.students.index')" :active="request()->routeIs('principal.assessments.cognitive-skills-level-4.students.*')">
                                 {{ __('Assessment Access') }}
@@ -121,6 +126,11 @@
                         <x-nav-link :href="route('principal.analytics.teacher-rankings.index')" :active="request()->routeIs('principal.analytics.teacher-rankings.*')">
                             {{ __('Teacher Ranking') }}
                         </x-nav-link>
+                        @can('view_teacher_acr')
+                            <x-nav-link :href="route('principal.acr.index')" :active="request()->routeIs('principal.acr.*')">
+                                {{ __('Teacher ACR') }}
+                            </x-nav-link>
+                        @endcan
                         <x-nav-link :href="route('principal.medical.referrals.index')" :active="request()->routeIs('principal.medical.referrals.*')">
                             {{ __('Medical') }}
                         </x-nav-link>
@@ -348,6 +358,11 @@
                 <x-responsive-nav-link :href="route('admin.rbac-matrix.index')" :active="request()->routeIs('admin.rbac-matrix.*')">
                     {{ __('RBAC Matrix') }}
                 </x-responsive-nav-link>
+                @can('view_teacher_acr')
+                    <x-responsive-nav-link :href="route('principal.acr.index')" :active="request()->routeIs('principal.acr.*')">
+                        {{ __('Teacher ACR') }}
+                    </x-responsive-nav-link>
+                @endcan
                 @can('manage_student_cognitive_assessment_access')
                     <x-responsive-nav-link :href="route('principal.assessments.cognitive-skills-level-4.students.index')" :active="request()->routeIs('principal.assessments.cognitive-skills-level-4.students.*')">
                         {{ __('Assessment Access') }}
@@ -425,6 +440,11 @@
                 <x-responsive-nav-link :href="route('principal.analytics.teacher-rankings.index')" :active="request()->routeIs('principal.analytics.teacher-rankings.*')">
                     {{ __('Teacher Ranking') }}
                 </x-responsive-nav-link>
+                @can('view_teacher_acr')
+                    <x-responsive-nav-link :href="route('principal.acr.index')" :active="request()->routeIs('principal.acr.*')">
+                        {{ __('Teacher ACR') }}
+                    </x-responsive-nav-link>
+                @endcan
                 <x-responsive-nav-link :href="route('principal.medical.referrals.index')" :active="request()->routeIs('principal.medical.referrals.*')">
                     {{ __('Medical') }}
                 </x-responsive-nav-link>

@@ -204,4 +204,9 @@ class Student extends Model
     {
         return $this->hasMany(StudentClassHistory::class);
     }
+
+    public function certificates(): HasMany
+    {
+        return $this->hasMany(Certificate::class);
+    }
 }

@@ -190,4 +190,14 @@ class User extends Authenticatable
         return $this->hasMany(CognitiveAssessmentAttemptReset::class, 'reset_by');
     }
 
+    public function preparedTeacherAcrs(): HasMany
+    {
+        return $this->hasMany(TeacherAcr::class, 'prepared_by');
+    }
+
+    public function reviewedTeacherAcrs(): HasMany
+    {
+        return $this->hasMany(TeacherAcr::class, 'reviewed_by');
+    }
+
 }

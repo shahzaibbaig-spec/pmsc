@@ -84,4 +84,9 @@ class Teacher extends Model
     {
         return $this->hasMany(InventoryAssetUnit::class, 'issued_to_teacher_id');
     }
+
+    public function acrs(): HasMany
+    {
+        return $this->hasMany(TeacherAcr::class);
+    }
 }

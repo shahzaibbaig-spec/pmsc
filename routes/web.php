@@ -4,6 +4,7 @@ use App\Http\Controllers\DashboardRedirectController;
 use App\Http\Controllers\Inventory\DeviceDeclarationReviewController;
 use App\Http\Controllers\Inventory\InventoryDemandReviewController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\Principal\TeacherAcrController;
 use App\Http\Controllers\Principal\TeacherRankingController;
 use App\Http\Controllers\Principal\TeacherAssignmentController as PrincipalTeacherAssignmentController;
 use App\Http\Controllers\Principal\AnalyticsExportController;
@@ -570,6 +571,34 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
     Route::post('/principal/analytics/teacher-rankings/regenerate', [TeacherRankingController::class, 'regenerate'])
         ->middleware(['role:Principal', 'permission:view_teacher_performance'])
         ->name('principal.analytics.teacher-rankings.regenerate');
+
+    Route::get('/principal/acr', [TeacherAcrController::class, 'index'])
+        ->middleware(['role:Admin|Principal', 'permission:view_teacher_acr'])
+        ->name('principal.acr.index');
+
+    Route::post('/principal/acr/generate', [TeacherAcrController::class, 'generate'])
+        ->middleware(['role:Admin|Principal', 'permission:manage_teacher_acr'])
+        ->name('principal.acr.generate');
+
+    Route::get('/principal/acr/{acr}', [TeacherAcrController::class, 'show'])
+        ->middleware(['role:Admin|Principal', 'permission:view_teacher_acr'])
+        ->whereNumber('acr')
+        ->name('principal.acr.show');
+
+    Route::put('/principal/acr/{acr}', [TeacherAcrController::class, 'update'])
+        ->middleware(['role:Admin|Principal', 'permission:manage_teacher_acr'])
+        ->whereNumber('acr')
+        ->name('principal.acr.update');
+
+    Route::post('/principal/acr/{acr}/finalize', [TeacherAcrController::class, 'finalize'])
+        ->middleware(['role:Admin|Principal', 'permission:finalize_teacher_acr'])
+        ->whereNumber('acr')
+        ->name('principal.acr.finalize');
+
+    Route::get('/principal/acr/{acr}/print', [TeacherAcrController::class, 'print'])
+        ->middleware(['role:Admin|Principal', 'permission:view_teacher_acr'])
+        ->whereNumber('acr')
+        ->name('principal.acr.print');
 
     Route::get('/principal/analytics/performance-insights/data', [PerformanceInsightsController::class, 'data'])
         ->middleware(['role:Principal', 'permission:view_teacher_performance'])

@@ -96,6 +96,9 @@
         if ($sidebarUser?->can('view_cognitive_assessment_reports')) {
             $menuItems[] = ['route' => 'admin.assessments.cognitive-skills-level-4-reports.index', 'label' => 'Assessment Reports'];
         }
+        if ($sidebarUser?->can('view_teacher_acr')) {
+            $menuItems[] = ['route' => 'principal.acr.index', 'label' => 'Teacher ACR'];
+        }
     } elseif ($sidebarUser?->hasRole('Principal')) {
         $menuItems = [
             ['route' => 'principal.dashboard', 'label' => 'Dashboard'],
@@ -136,6 +139,9 @@
         }
         if ($sidebarUser?->can('view_cognitive_assessment_reports')) {
             $menuItems[] = ['route' => 'principal.assessments.cognitive-skills-level-4-reports.index', 'label' => 'Assessment Reports'];
+        }
+        if ($sidebarUser?->can('view_teacher_acr')) {
+            $menuItems[] = ['route' => 'principal.acr.index', 'label' => 'Teacher ACR'];
         }
     } elseif ($sidebarUser?->hasRole('Accountant')) {
         $menuItems = [
