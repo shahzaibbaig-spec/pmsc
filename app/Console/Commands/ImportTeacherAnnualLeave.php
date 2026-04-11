@@ -17,9 +17,12 @@ class ImportTeacherAnnualLeave extends Command
         {file : Absolute path to the Excel (.xlsx) file}
         {--session= : Academic session in YYYY-YYYY format (defaults to current)}
         {--sheet=sheet1 : Sheet name (normalized) to import}
+        {--working-days=220 : Working days used to convert leave into attendance percentage}
+        {--include-finalized : Also update attendance score for finalized ACRs}
+        {--store-only : Store leave data and attendance percentage only, without changing ACR scores}
         {--dry-run : Validate and preview matches without writing to database}';
 
-    protected $description = 'Import annual teacher leave/attendance summary into teacher ACR metrics meta.';
+    protected $description = 'Import annual teacher leave data, merge by teacher name, and update ACR attendance.';
 
     public function __construct(private readonly XlsxWorkbookReader $workbookReader)
     {
@@ -44,6 +47,15 @@ class ImportTeacherAnnualLeave extends Command
         $session = $this->resolveSession((string) $this->option('session'));
         $requestedSheet = $this->normalizeKey((string) $this->option('sheet'));
         $dryRun = (bool) $this->option('dry-run');
+        $storeOnly = (bool) $this->option('store-only');
+        $includeFinalized = (bool) $this->option('include-finalized');
+        $workingDays = (float) $this->option('working-days');
+
+        if ($workingDays <= 0) {
+            $this->error('Working days must be greater than zero. Example: --working-days=220');
+
+            return self::FAILURE;
+        }
 
         $workbook = $this->workbookReader->read($file);
         if ($workbook === []) {
@@ -112,18 +124,26 @@ class ImportTeacherAnnualLeave extends Command
                 $totalLeave = $monthly !== [] ? round(array_sum($monthly), 2) : 0.0;
             }
 
+            $attendancePercentage = $this->attendancePercentageFromLeave($totalLeave, $workingDays);
+            $attendanceScore = $this->attendanceScoreFromPercentage($attendancePercentage);
+
             $prepared[] = [
                 'row_no' => $index + 2,
                 'teacher' => $teacher,
                 'excel_name' => $excelName,
                 'match_type' => $match['status'],
                 'total_leave' => $totalLeave,
+                'attendance_percentage' => $attendancePercentage,
+                'attendance_score' => $attendanceScore,
                 'monthly' => $monthly,
             ];
         }
 
         $this->line('Session: <info>'.$session.'</info>');
         $this->line('Sheet: <info>'.$sheetKey.'</info>');
+        $this->line('Working days: <info>'.number_format($workingDays, 2).'</info>');
+        $this->line('Store only (no ACR score updates): <info>'.($storeOnly ? 'yes' : 'no').'</info>');
+        $this->line('Include finalized ACRs: <info>'.($includeFinalized ? 'yes' : 'no').'</info>');
         $this->line('Rows prepared: <info>'.count($prepared).'</info>');
         $this->line('Rows unmatched: <comment>'.count($unmatched).'</comment>');
         $this->line('Rows ambiguous: <comment>'.count($ambiguous).'</comment>');
@@ -159,13 +179,15 @@ class ImportTeacherAnnualLeave extends Command
                     'Matched Teacher' => (string) ($teacher->user?->name ?? ('Teacher '.$teacher->teacher_id)),
                     'Teacher Code' => (string) $teacher->teacher_id,
                     'Total Leave' => number_format((float) $row['total_leave'], 2),
+                    'Attendance %' => number_format((float) $row['attendance_percentage'], 2),
+                    'ACR Attendance Score' => number_format((float) $row['attendance_score'], 2),
                     'Match' => (string) $row['match_type'],
                 ];
             })
             ->all();
 
         $this->table(
-            ['Excel Name', 'Matched Teacher', 'Teacher Code', 'Total Leave', 'Match'],
+            ['Excel Name', 'Matched Teacher', 'Teacher Code', 'Total Leave', 'Attendance %', 'ACR Attendance Score', 'Match'],
             $previewRows
         );
 
@@ -177,8 +199,15 @@ class ImportTeacherAnnualLeave extends Command
 
         $now = now();
         $sourceFile = basename($file);
+        $stats = [
+            'rows_written' => 0,
+            'acrs_created' => 0,
+            'metrics_created' => 0,
+            'acrs_updated' => 0,
+            'finalized_skipped' => 0,
+        ];
 
-        DB::transaction(function () use ($prepared, $session, $sourceFile, $now): void {
+        DB::transaction(function () use ($prepared, $session, $sourceFile, $now, $storeOnly, $includeFinalized, $workingDays, &$stats): void {
             foreach ($prepared as $row) {
                 /** @var Teacher $teacher */
                 $teacher = $row['teacher'];
@@ -199,6 +228,9 @@ class ImportTeacherAnnualLeave extends Command
                         'status' => TeacherAcr::STATUS_DRAFT,
                     ]
                 );
+                if ($acr->wasRecentlyCreated) {
+                    $stats['acrs_created']++;
+                }
 
                 $metric = TeacherAcrMetric::query()->firstOrCreate(
                     ['acr_id' => (int) $acr->id],
@@ -209,23 +241,59 @@ class ImportTeacherAnnualLeave extends Command
                         'meta' => [],
                     ]
                 );
+                if ($metric->wasRecentlyCreated) {
+                    $stats['metrics_created']++;
+                }
 
                 $meta = is_array($metric->meta) ? $metric->meta : [];
                 $meta['annual_leave_import'] = [
                     'source_file' => $sourceFile,
                     'excel_teacher_name' => (string) $row['excel_name'],
                     'total_leave_days' => round((float) $row['total_leave'], 2),
+                    'working_days' => round($workingDays, 2),
+                    'attendance_percentage' => round((float) $row['attendance_percentage'], 2),
+                    'acr_attendance_score' => round((float) $row['attendance_score'], 2),
                     'monthly_leave_days' => $row['monthly'],
                     'session' => $session,
                     'imported_at' => $now->toDateTimeString(),
                 ];
 
+                $metric->attendance_percentage = (float) $row['attendance_percentage'];
                 $metric->meta = $meta;
                 $metric->save();
+
+                $stats['rows_written']++;
+
+                if ($storeOnly) {
+                    continue;
+                }
+
+                if (! $includeFinalized && $acr->status === TeacherAcr::STATUS_FINALIZED) {
+                    $stats['finalized_skipped']++;
+                    continue;
+                }
+
+                $acr->attendance_score = (float) $row['attendance_score'];
+                $acr->total_score = $this->recalculateAcrTotal($acr);
+                $acr->final_grade = $this->gradeForScore((float) $acr->total_score);
+                $acr->save();
+
+                $stats['acrs_updated']++;
             }
         });
 
-        $this->info('Import completed successfully. Updated rows: '.count($prepared));
+        $this->table(
+            ['Metric', 'Value'],
+            [
+                ['Rows written', (string) $stats['rows_written']],
+                ['ACRs created', (string) $stats['acrs_created']],
+                ['Metrics created', (string) $stats['metrics_created']],
+                ['ACRs attendance updated', (string) $stats['acrs_updated']],
+                ['Finalized ACRs skipped', (string) $stats['finalized_skipped']],
+            ]
+        );
+
+        $this->info('Import completed successfully.');
 
         return self::SUCCESS;
     }
@@ -350,6 +418,48 @@ class ImportTeacherAnnualLeave extends Command
             ];
         }
 
+        $scored = $teachers
+            ->map(function (Teacher $teacher) use ($needle): array {
+                $candidate = $this->normalizeTeacherName((string) ($teacher->user?->name ?? ''));
+                $score = $this->nameSimilarity($needle, $candidate);
+
+                return [
+                    'teacher' => $teacher,
+                    'score' => $score,
+                    'name' => (string) ($teacher->user?->name ?? ('Teacher '.$teacher->teacher_id)),
+                ];
+            })
+            ->filter(fn (array $item): bool => (float) $item['score'] >= 75.0)
+            ->sortByDesc('score')
+            ->values();
+
+        if ($scored->count() === 1) {
+            return [
+                'status' => 'fuzzy_score',
+                'teacher' => $scored->first()['teacher'],
+            ];
+        }
+
+        if ($scored->count() > 1) {
+            $best = $scored->first();
+            $second = $scored->get(1);
+
+            if ($second !== null && ((float) $best['score'] - (float) $second['score']) >= 5.0) {
+                return [
+                    'status' => 'fuzzy_score',
+                    'teacher' => $best['teacher'],
+                ];
+            }
+
+            return [
+                'status' => 'ambiguous',
+                'candidates' => $scored
+                    ->take(8)
+                    ->map(fn (array $item): string => $item['name'].' ('.number_format((float) $item['score'], 1).'%)')
+                    ->all(),
+            ];
+        }
+
         return ['status' => 'unmatched'];
     }
 
@@ -416,5 +526,56 @@ class ImportTeacherAnnualLeave extends Command
 
         return (float) $clean;
     }
-}
 
+    private function attendancePercentageFromLeave(float $leaveDays, float $workingDays): float
+    {
+        $safeWorkingDays = max(1.0, $workingDays);
+        $safeLeave = max(0.0, $leaveDays);
+        $presentDays = max(0.0, $safeWorkingDays - $safeLeave);
+
+        return round(($presentDays * 100.0) / $safeWorkingDays, 2);
+    }
+
+    private function attendanceScoreFromPercentage(float $attendancePercentage): float
+    {
+        $normalized = max(0.0, min(100.0, $attendancePercentage));
+
+        return round(($normalized / 100.0) * 15.0, 2);
+    }
+
+    private function recalculateAcrTotal(TeacherAcr $acr): float
+    {
+        return round(
+            (float) $acr->attendance_score
+            + (float) $acr->academic_score
+            + (float) $acr->improvement_score
+            + (float) $acr->conduct_score
+            + (float) $acr->pd_score
+            + (float) $acr->principal_score,
+            2
+        );
+    }
+
+    private function gradeForScore(float $totalScore): string
+    {
+        return match (true) {
+            $totalScore >= 90 => 'Outstanding',
+            $totalScore >= 80 => 'Very Good',
+            $totalScore >= 70 => 'Good',
+            $totalScore >= 60 => 'Average',
+            $totalScore >= 50 => 'Weak',
+            default => 'Unsatisfactory',
+        };
+    }
+
+    private function nameSimilarity(string $left, string $right): float
+    {
+        if ($left === '' || $right === '') {
+            return 0.0;
+        }
+
+        similar_text($left, $right, $percent);
+
+        return round((float) $percent, 2);
+    }
+}
