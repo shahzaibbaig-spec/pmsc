@@ -5,6 +5,7 @@ use App\Http\Controllers\Inventory\DeviceDeclarationReviewController;
 use App\Http\Controllers\Inventory\InventoryDemandReviewController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\Principal\TeacherAcrController;
+use App\Http\Controllers\Principal\TeacherAttendanceController as PrincipalTeacherAttendanceController;
 use App\Http\Controllers\Principal\TeacherRankingController;
 use App\Http\Controllers\Principal\TeacherAssignmentController as PrincipalTeacherAssignmentController;
 use App\Http\Controllers\Principal\AnalyticsExportController;
@@ -604,6 +605,28 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
         ->middleware(['role:Admin|Principal', 'permission:view_teacher_acr'])
         ->whereNumber('acr')
         ->name('principal.acr.print');
+
+    Route::get('/principal/teacher-attendance', [PrincipalTeacherAttendanceController::class, 'index'])
+        ->middleware(['role:Admin|Principal', 'permission:manage_teacher_attendance'])
+        ->name('principal.teacher-attendance.index');
+
+    Route::get('/principal/teacher-attendance/create', [PrincipalTeacherAttendanceController::class, 'create'])
+        ->middleware(['role:Admin|Principal', 'permission:manage_teacher_attendance'])
+        ->name('principal.teacher-attendance.create');
+
+    Route::post('/principal/teacher-attendance', [PrincipalTeacherAttendanceController::class, 'store'])
+        ->middleware(['role:Admin|Principal', 'permission:manage_teacher_attendance'])
+        ->name('principal.teacher-attendance.store');
+
+    Route::get('/principal/teacher-attendance/{attendance}/edit', [PrincipalTeacherAttendanceController::class, 'edit'])
+        ->middleware(['role:Admin|Principal', 'permission:manage_teacher_attendance'])
+        ->whereNumber('attendance')
+        ->name('principal.teacher-attendance.edit');
+
+    Route::put('/principal/teacher-attendance/{attendance}', [PrincipalTeacherAttendanceController::class, 'update'])
+        ->middleware(['role:Admin|Principal', 'permission:manage_teacher_attendance'])
+        ->whereNumber('attendance')
+        ->name('principal.teacher-attendance.update');
 
     Route::get('/principal/analytics/performance-insights/data', [PerformanceInsightsController::class, 'data'])
         ->middleware(['role:Principal', 'permission:view_teacher_performance'])

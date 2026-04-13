@@ -89,4 +89,9 @@ class Teacher extends Model
     {
         return $this->hasMany(TeacherAcr::class);
     }
+
+    public function teacherAttendances(): HasMany
+    {
+        return $this->hasMany(TeacherAttendance::class);
+    }
 }

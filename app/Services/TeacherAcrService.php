@@ -43,6 +43,7 @@ class TeacherAcrService
         private readonly TeacherRankingService $teacherRankingService,
         private readonly ClassAssessmentModeService $assessmentModeService,
         private readonly GradeScaleService $gradeScaleService,
+        private readonly TeacherAttendanceService $teacherAttendanceService,
     ) {
     }
 
@@ -550,6 +551,7 @@ class TeacherAcrService
             'score' => self::ATTENDANCE_NEUTRAL_SCORE,
             'source' => 'neutral_default_no_attendance_records',
             'notes' => ['No session attendance records were found for the assigned classes, so a neutral attendance baseline was applied.'],
+            'late_count' => 0,
         ];
         $academicMetric = $context['academic'][$teacherId] ?? [
             'teacher_cgpa' => null,
@@ -605,7 +607,7 @@ class TeacherAcrService
                 'pass_percentage' => $academicMetric['pass_percentage'],
                 'student_improvement_percentage' => $improvementMetric['student_improvement_percentage'],
                 'trainings_attended' => (int) ($pdMetric['trainings_attended'] ?? 0),
-                'late_count' => 0,
+                'late_count' => (int) ($attendanceMetric['late_count'] ?? 0),
                 'discipline_flags' => 0,
                 'meta' => [
                     'session' => $session,
@@ -613,6 +615,11 @@ class TeacherAcrService
                     'class_ids' => $classMetric['ids'],
                     'attendance' => [
                         'percentage' => $attendanceMetric['attendance_percentage'],
+                        'late_count' => (int) ($attendanceMetric['late_count'] ?? 0),
+                        'present_days' => (int) ($attendanceMetric['present_days'] ?? 0),
+                        'absent_days' => (int) ($attendanceMetric['absent_days'] ?? 0),
+                        'leave_days' => (int) ($attendanceMetric['leave_days'] ?? 0),
+                        'total_days' => (int) ($attendanceMetric['total_days'] ?? 0),
                         'source' => $attendanceMetric['source'] ?? null,
                     ],
                     'academic' => [
@@ -658,11 +665,16 @@ class TeacherAcrService
             return $this->sessionContextCache[$session];
         }
 
+        [$sessionStart, $sessionEnd] = $this->sessionDateRange($session);
+
         $teachers = Teacher::query()
             ->with('user:id,name,status')
-            ->where(function ($query) use ($session): void {
+            ->where(function ($query) use ($session, $sessionStart, $sessionEnd): void {
                 $query->whereHas('assignments', fn ($assignmentQuery) => $assignmentQuery->where('session', $session))
                     ->orWhereHas('marks', fn ($markQuery) => $markQuery->where('session', $session))
+                    ->orWhereHas('teacherAttendances', function ($attendanceQuery) use ($sessionStart, $sessionEnd): void {
+                        $attendanceQuery->whereBetween('attendance_date', [$sessionStart->toDateString(), $sessionEnd->toDateString()]);
+                    })
                     ->orWhereHas('acrs', fn ($acrQuery) => $acrQuery->where('session', $session));
             })
             ->whereHas('user', function ($query): void {
@@ -679,7 +691,7 @@ class TeacherAcrService
         $context = [
             'teachers' => $teachers,
             'classes' => $classesByTeacher,
-            'attendance' => $this->attendanceMetrics($session, $classesByTeacher),
+            'attendance' => $this->attendanceMetrics($session, $teacherIds, $classesByTeacher),
             'academic' => $this->academicMetrics($session),
             'improvement' => $this->improvementMetrics($session, $teacherIds),
             'pd' => $this->pdMetrics($teacherIds),
@@ -754,57 +766,99 @@ class TeacherAcrService
      * @param array<int, array{ids:array<int, int>,labels:array<int, string>}> $classesByTeacher
      * @return array<int, array<string, mixed>>
      */
-    private function attendanceMetrics(string $session, array $classesByTeacher): array
+    private function attendanceMetrics(string $session, array $teacherIds, array $classesByTeacher): array
     {
-        $classIds = collect($classesByTeacher)
-            ->pluck('ids')
-            ->flatten()
+        if ($teacherIds === []) {
+            return [];
+        }
+
+        $teacherSummaries = $this->teacherAttendanceService->getAttendanceSummariesForTeachers($teacherIds, $session);
+        $fallbackTeacherIds = collect($teacherIds)
+            ->filter(function (int $teacherId) use ($teacherSummaries): bool {
+                return ((int) ($teacherSummaries[$teacherId]['total_days'] ?? 0)) === 0;
+            })
+            ->values()
+            ->all();
+
+        $classIds = collect($fallbackTeacherIds)
+            ->flatMap(function (int $teacherId) use ($classesByTeacher): array {
+                return $classesByTeacher[$teacherId]['ids'] ?? [];
+            })
             ->map(fn ($id): int => (int) $id)
             ->unique()
             ->values()
             ->all();
 
-        if ($classIds === []) {
-            return [];
+        [$sessionStart, $sessionEnd] = $this->sessionDateRange($session);
+        $attendanceByClass = collect();
+
+        if ($classIds !== []) {
+            $attendanceByClass = Attendance::query()
+                ->whereIn('class_id', $classIds)
+                ->whereBetween('date', [$sessionStart->toDateString(), $sessionEnd->toDateString()])
+                ->selectRaw("
+                    class_id,
+                    COUNT(*) as total_records,
+                    SUM(CASE WHEN status = 'present' THEN 1 ELSE 0 END) as present_records
+                ")
+                ->groupBy('class_id')
+                ->get()
+                ->keyBy('class_id');
         }
 
-        [$sessionStart, $sessionEnd] = $this->sessionDateRange($session);
-
-        $attendanceByClass = Attendance::query()
-            ->whereIn('class_id', $classIds)
-            ->whereBetween('date', [$sessionStart->toDateString(), $sessionEnd->toDateString()])
-            ->selectRaw("
-                class_id,
-                COUNT(*) as total_records,
-                SUM(CASE WHEN status = 'present' THEN 1 ELSE 0 END) as present_records
-            ")
-            ->groupBy('class_id')
-            ->get()
-            ->keyBy('class_id');
-
         $metrics = [];
-        foreach ($classesByTeacher as $teacherId => $classMetric) {
+        foreach ($teacherIds as $teacherId) {
+            $teacherSummary = $teacherSummaries[$teacherId] ?? null;
+            $teacherAttendanceDays = (int) ($teacherSummary['total_days'] ?? 0);
+
+            if ($teacherAttendanceDays > 0) {
+                $percentage = isset($teacherSummary['attendance_percentage'])
+                    ? (float) $teacherSummary['attendance_percentage']
+                    : null;
+
+                $metrics[$teacherId] = [
+                    'attendance_percentage' => $percentage,
+                    'score' => $percentage !== null
+                        ? $this->attendanceScoreFromPercentage($percentage)
+                        : self::ATTENDANCE_NEUTRAL_SCORE,
+                    'source' => 'teacher_attendance',
+                    'notes' => [],
+                    'late_count' => (int) ($teacherSummary['late_days'] ?? 0),
+                    'present_days' => (int) ($teacherSummary['present_days'] ?? 0),
+                    'absent_days' => (int) ($teacherSummary['absent_days'] ?? 0),
+                    'leave_days' => (int) ($teacherSummary['leave_days'] ?? 0),
+                    'total_days' => $teacherAttendanceDays,
+                ];
+
+                continue;
+            }
+
+            $classMetric = $classesByTeacher[$teacherId] ?? ['ids' => []];
             $total = 0;
             $present = 0;
 
-            foreach ($classMetric['ids'] as $classId) {
-                $row = $attendanceByClass->get($classId);
+            foreach (($classMetric['ids'] ?? []) as $classId) {
+                $row = $attendanceByClass->get((int) $classId);
                 $total += (int) ($row->total_records ?? 0);
                 $present += (int) ($row->present_records ?? 0);
             }
 
             $percentage = $total > 0 ? round(($present * 100.0) / $total, 2) : null;
-            $score = $percentage !== null
-                ? round(($this->clampPercent($percentage) / 100.0) * self::ATTENDANCE_WEIGHT, 2)
-                : self::ATTENDANCE_NEUTRAL_SCORE;
 
-            $metrics[(int) $teacherId] = [
+            $metrics[$teacherId] = [
                 'attendance_percentage' => $percentage,
-                'score' => $score,
+                'score' => $percentage !== null
+                    ? $this->attendanceScoreFromPercentage($percentage)
+                    : self::ATTENDANCE_NEUTRAL_SCORE,
                 'source' => $percentage !== null ? 'class_attendance_coverage' : 'neutral_default_no_attendance_records',
                 'notes' => $percentage === null
                     ? ['No session attendance records were found for the assigned classes, so a neutral attendance baseline was applied.']
-                    : [],
+                    : ['Teacher attendance entries were not found for this session, so class attendance coverage was used as fallback evidence.'],
+                'late_count' => 0,
+                'present_days' => 0,
+                'absent_days' => 0,
+                'leave_days' => 0,
+                'total_days' => 0,
             ];
         }
 
@@ -1119,6 +1173,19 @@ class TeacherAcrService
     private function clampPercent(float $value): float
     {
         return round(max(0.0, min(100.0, $value)), 2);
+    }
+
+    private function attendanceScoreFromPercentage(float $percentage): float
+    {
+        $normalized = $this->clampPercent($percentage);
+
+        return match (true) {
+            $normalized >= 95 => self::ATTENDANCE_WEIGHT,
+            $normalized >= 90 => 13.0,
+            $normalized >= 85 => 11.0,
+            $normalized >= 80 => 9.0,
+            default => round(($normalized / 80.0) * 9.0, 2),
+        };
     }
 
     private function normalizeWeightedScore(float $value, float $weight): float

@@ -200,4 +200,9 @@ class User extends Authenticatable
         return $this->hasMany(TeacherAcr::class, 'reviewed_by');
     }
 
+    public function markedTeacherAttendances(): HasMany
+    {
+        return $this->hasMany(TeacherAttendance::class, 'marked_by');
+    }
+
 }
