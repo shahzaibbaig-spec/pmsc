@@ -137,6 +137,21 @@ class TeacherAcrController extends Controller
             ->with('success', 'Teacher ACR finalized successfully.');
     }
 
+    public function refresh(TeacherAcr $acr): RedirectResponse
+    {
+        try {
+            $this->acrService->manualRefreshFinalizedAcr((int) $acr->id, (int) auth()->id());
+        } catch (RuntimeException $exception) {
+            return redirect()
+                ->route('principal.acr.show', $acr)
+                ->with('error', $exception->getMessage());
+        }
+
+        return redirect()
+            ->route('principal.acr.show', $acr)
+            ->with('success', 'ACR refreshed from latest academic results successfully.');
+    }
+
     public function print(TeacherAcr $acr): View
     {
         return view('principal.acr.print', [

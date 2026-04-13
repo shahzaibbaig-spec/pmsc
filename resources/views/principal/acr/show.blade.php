@@ -9,6 +9,8 @@
         $principalScore = data_get(collect($scores)->firstWhere('label', 'Principal review score'), 'score', 0);
         $isFinalized = ($acr['status'] ?? '') === 'finalized';
         $isReviewed = ($acr['status'] ?? '') !== 'draft';
+        $needsRefresh = (bool) ($acr['needs_refresh'] ?? false);
+        $lastMetricsRefreshAt = $acr['last_metrics_refresh_at'] ?? null;
         $statusClasses = match ($acr['status'] ?? 'draft') {
             'reviewed' => 'bg-amber-100 text-amber-800',
             'finalized' => 'bg-emerald-100 text-emerald-800',
@@ -26,6 +28,16 @@
                 <span class="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold {{ $statusClasses }}">
                     {{ $acr['status_label'] }}
                 </span>
+                @can('manage_teacher_acr')
+                    @if ($isFinalized)
+                        <form method="POST" action="{{ route('principal.acr.refresh', $acr['id']) }}">
+                            @csrf
+                            <button type="submit" class="inline-flex min-h-11 items-center rounded-xl border border-indigo-300 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100" onclick="return confirm('Refresh this ACR using the latest academic data? Principal remarks will be preserved.')">
+                                Refresh ACR from Latest Results
+                            </button>
+                        </form>
+                    @endif
+                @endcan
                 <a href="{{ route('principal.acr.print', $acr['id']) }}" class="inline-flex min-h-11 items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
                     Printable View
                 </a>
@@ -47,6 +59,15 @@
             @if (session('error'))
                 <div class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
                     {{ session('error') }}
+                </div>
+            @endif
+
+            @if ($isFinalized && $needsRefresh)
+                <div class="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                    <p class="font-semibold">Academic data has changed after finalization. Refresh is recommended.</p>
+                    @if ($lastMetricsRefreshAt)
+                        <p class="mt-1 text-xs text-amber-700">Latest metrics check: {{ $lastMetricsRefreshAt->format('d M Y, h:i A') }}</p>
+                    @endif
                 </div>
             @endif
 

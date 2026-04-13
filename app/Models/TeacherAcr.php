@@ -34,6 +34,8 @@ class TeacherAcr extends Model
         'reviewed_by',
         'reviewed_at',
         'finalized_at',
+        'needs_refresh',
+        'last_metrics_refresh_at',
     ];
 
     protected function casts(): array
@@ -48,6 +50,8 @@ class TeacherAcr extends Model
             'total_score' => 'float',
             'reviewed_at' => 'datetime',
             'finalized_at' => 'datetime',
+            'needs_refresh' => 'boolean',
+            'last_metrics_refresh_at' => 'datetime',
         ];
     }
 

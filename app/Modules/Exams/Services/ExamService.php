@@ -8,6 +8,7 @@ use App\Models\Student;
 use App\Models\Teacher;
 use App\Models\TeacherAssignment;
 use App\Services\ClassAssessmentModeService;
+use App\Services\TeacherPerformanceSyncService;
 use App\Services\TeacherStudentVisibilityService;
 use App\Modules\Exams\Enums\ExamType;
 use Illuminate\Support\Carbon;
@@ -19,7 +20,8 @@ class ExamService
 {
     public function __construct(
         private readonly TeacherStudentVisibilityService $visibilityService,
-        private readonly ClassAssessmentModeService $assessmentModeService
+        private readonly ClassAssessmentModeService $assessmentModeService,
+        private readonly TeacherPerformanceSyncService $teacherPerformanceSyncService,
     ) {
     }
 
@@ -280,6 +282,8 @@ class ExamService
                 $exam->forceFill(['locked_at' => now()])->save();
             }
         });
+
+        $this->teacherPerformanceSyncService->syncAfterMarksChange((int) $teacher->id, $session, $examType);
     }
 
     private function resolveTeacher(int $userId): ?Teacher

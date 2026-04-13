@@ -596,7 +596,7 @@
                     return;
                 }
 
-                showMessage(result.message || 'Assessment entries saved successfully.');
+                showMessage(result.message || 'Marks saved successfully. Teacher CGPA and ACR metrics have been updated.');
                 await loadSheet();
             } catch (error) {
                 showMessage('Unexpected error while saving assessment entries.', 'error');

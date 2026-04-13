@@ -85,6 +85,6 @@ class TeacherExamController extends Controller
             ], 500);
         }
 
-        return response()->json(['message' => 'Assessment entries saved successfully.']);
+        return response()->json(['message' => 'Marks saved successfully. Teacher CGPA and ACR metrics have been updated.']);
     }
 }

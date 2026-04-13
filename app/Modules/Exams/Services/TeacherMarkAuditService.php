@@ -7,6 +7,7 @@ use App\Models\MarkEditLog;
 use App\Models\Teacher;
 use App\Models\User;
 use App\Services\ClassAssessmentModeService;
+use App\Services\TeacherPerformanceSyncService;
 use App\Modules\Exams\Enums\ExamType;
 use App\Notifications\MarkEntryModifiedNotification;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -17,8 +18,10 @@ use RuntimeException;
 
 class TeacherMarkAuditService
 {
-    public function __construct(private readonly ClassAssessmentModeService $assessmentModeService)
-    {
+    public function __construct(
+        private readonly ClassAssessmentModeService $assessmentModeService,
+        private readonly TeacherPerformanceSyncService $teacherPerformanceSyncService
+    ) {
     }
 
     public function resolveTeacher(int $userId): ?Teacher
@@ -93,6 +96,12 @@ class TeacherMarkAuditService
                 ]);
             });
 
+            $this->teacherPerformanceSyncService->syncAfterMarksChange(
+                (int) $teacher->id,
+                (string) $mark->session,
+                $this->examTypeValue($mark)
+            );
+
             $this->dispatchUpdatedNotification($mark, 'grade', $oldMarks, null, $oldGrade, $normalizedGrade, $editedAt);
 
             return;
@@ -121,6 +130,12 @@ class TeacherMarkAuditService
                 'edited_at' => $editedAt,
             ]);
         });
+
+        $this->teacherPerformanceSyncService->syncAfterMarksChange(
+            (int) $teacher->id,
+            (string) $mark->session,
+            $this->examTypeValue($mark)
+        );
 
         $this->dispatchUpdatedNotification($mark, 'marks', $oldMarks, $newMarks, null, null, $editedAt);
     }
@@ -168,6 +183,12 @@ class TeacherMarkAuditService
 
             $mark->delete();
         });
+
+        $this->teacherPerformanceSyncService->syncAfterMarksChange(
+            (int) $teacher->id,
+            (string) $mark->session,
+            $this->examTypeValue($mark)
+        );
 
         $this->notifyPrincipals($notificationPayload);
     }
@@ -275,5 +296,20 @@ class TeacherMarkAuditService
         }
 
         return str_replace('_', ' ', ucfirst($raw));
+    }
+
+    private function examTypeValue(Mark $mark): ?string
+    {
+        $examType = $mark->exam?->exam_type;
+
+        if ($examType instanceof ExamType) {
+            return $examType->value;
+        }
+
+        if (is_string($examType)) {
+            return $examType;
+        }
+
+        return null;
     }
 }

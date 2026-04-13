@@ -595,6 +595,11 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
         ->whereNumber('acr')
         ->name('principal.acr.finalize');
 
+    Route::post('/principal/acr/{acr}/refresh', [TeacherAcrController::class, 'refresh'])
+        ->middleware(['role:Admin|Principal', 'permission:manage_teacher_acr'])
+        ->whereNumber('acr')
+        ->name('principal.acr.refresh');
+
     Route::get('/principal/acr/{acr}/print', [TeacherAcrController::class, 'print'])
         ->middleware(['role:Admin|Principal', 'permission:view_teacher_acr'])
         ->whereNumber('acr')

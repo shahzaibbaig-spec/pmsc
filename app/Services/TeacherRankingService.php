@@ -267,6 +267,43 @@ class TeacherRankingService
         });
     }
 
+    public function refreshSingleTeacherRanking(int $teacherId, string $session, ?string $examType = null): void
+    {
+        if (! $this->rankingsTableReady()) {
+            return;
+        }
+
+        $this->refreshRankingGroupForTeacher($teacherId, $session, $examType);
+    }
+
+    public function refreshRankingGroupForTeacher(int $teacherId, string $session, ?string $examType = null): void
+    {
+        if (! $this->rankingsTableReady()) {
+            return;
+        }
+
+        $resolvedSession = $this->resolveSession($session);
+        $resolvedExamType = $this->normalizeExamType($examType);
+        $affectedGroups = $this->rankingGroupsForTeacher($teacherId, $resolvedSession, $resolvedExamType);
+
+        if ($affectedGroups === []) {
+            return;
+        }
+
+        $groupedClasswiseRows = $this->groupedClasswiseRows($resolvedSession, $resolvedExamType);
+
+        DB::transaction(function () use ($resolvedSession, $resolvedExamType, $affectedGroups, $groupedClasswiseRows): void {
+            foreach ($affectedGroups as $rankingGroup) {
+                $this->syncSnapshotRowsForGroup(
+                    $resolvedSession,
+                    $resolvedExamType,
+                    $rankingGroup,
+                    $groupedClasswiseRows[$rankingGroup] ?? []
+                );
+            }
+        });
+    }
+
     public function resolveRankingGroupFromClass(SchoolClass|int|string|null $class): string
     {
         $className = $this->resolveClassName($class);
@@ -964,6 +1001,45 @@ class TeacherRankingService
 
                 return $row;
             })
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function rankingGroupsForTeacher(int $teacherId, string $session, ?string $examType): array
+    {
+        $assignmentGroups = TeacherAssignment::query()
+            ->join('school_classes as c', 'c.id', '=', 'teacher_assignments.class_id')
+            ->where('teacher_assignments.teacher_id', $teacherId)
+            ->where('teacher_assignments.session', $session)
+            ->select('c.name')
+            ->distinct()
+            ->get()
+            ->map(fn ($row): string => $this->resolveRankingGroupFromClass((string) $row->name));
+
+        $markGroups = DB::table('marks as m')
+            ->join('exams as e', 'e.id', '=', 'm.exam_id')
+            ->join('school_classes as c', 'c.id', '=', 'e.class_id')
+            ->where('m.teacher_id', $teacherId)
+            ->where('m.session', $session)
+            ->when($examType !== null, fn ($query) => $query->where('e.exam_type', $examType))
+            ->select('c.name')
+            ->distinct()
+            ->get()
+            ->map(fn ($row): string => $this->resolveRankingGroupFromClass((string) $row->name));
+
+        $snapshotGroups = $this->snapshotQuery($session, $examType)
+            ->where('teacher_id', $teacherId)
+            ->pluck('ranking_group')
+            ->map(fn ($value): string => $this->normalizeRankingGroup((string) $value));
+
+        return $assignmentGroups
+            ->merge($markGroups)
+            ->merge($snapshotGroups)
+            ->filter(fn ($group): bool => trim((string) $group) !== '')
+            ->unique()
             ->values()
             ->all();
     }

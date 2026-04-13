@@ -199,6 +199,8 @@ class TeacherAcrService
             $acr->reviewed_at = now();
             $acr->total_score = $this->recalculateTotalScore($acr);
             $acr->final_grade = $this->calculateFinalGrade((float) $acr->total_score);
+            $acr->needs_refresh = false;
+            $acr->last_metrics_refresh_at = now();
             $acr->save();
         });
     }
@@ -225,8 +227,54 @@ class TeacherAcrService
             $acr->finalized_at = now();
             $acr->total_score = $this->recalculateTotalScore($acr);
             $acr->final_grade = $this->calculateFinalGrade((float) $acr->total_score);
+            $acr->needs_refresh = false;
             $acr->save();
         });
+    }
+
+    public function refreshCalculatedFields(int $acrId): void
+    {
+        $this->applyCalculatedFieldRefresh($acrId, false);
+    }
+
+    public function refreshCalculatedFieldsFromLatestResults(int $acrId): void
+    {
+        $this->applyCalculatedFieldRefresh($acrId, true);
+    }
+
+    public function manualRefreshFinalizedAcr(int $acrId, int $principalUserId): void
+    {
+        DB::transaction(function () use ($acrId, $principalUserId): void {
+            /** @var TeacherAcr $acr */
+            $acr = TeacherAcr::query()
+                ->lockForUpdate()
+                ->findOrFail($acrId);
+
+            if ($acr->status !== TeacherAcr::STATUS_FINALIZED) {
+                throw new RuntimeException('Only finalized ACR records can be manually refreshed.');
+            }
+
+            $acr->reviewed_by ??= $principalUserId;
+            $acr->reviewed_at ??= now();
+            $acr->save();
+        });
+
+        $this->applyCalculatedFieldRefresh($acrId, true);
+    }
+
+    public function markNeedsRefreshIfFinalized(int $teacherId, string $session): void
+    {
+        $resolvedSession = $this->resolveSession($session);
+
+        TeacherAcr::query()
+            ->where('teacher_id', $teacherId)
+            ->where('session', $resolvedSession)
+            ->where('status', TeacherAcr::STATUS_FINALIZED)
+            ->update([
+                'needs_refresh' => true,
+                'last_metrics_refresh_at' => now(),
+                'updated_at' => now(),
+            ]);
     }
 
     public function buildPrintableAcr(int $acrId): array
@@ -264,6 +312,8 @@ class TeacherAcrService
                 'reviewed_by' => $acr->reviewedBy?->name,
                 'reviewed_at' => $acr->reviewed_at,
                 'finalized_at' => $acr->finalized_at,
+                'needs_refresh' => (bool) $acr->needs_refresh,
+                'last_metrics_refresh_at' => $acr->last_metrics_refresh_at,
             ],
             'teacher' => [
                 'id' => (int) ($acr->teacher?->id ?? 0),
@@ -292,6 +342,56 @@ class TeacherAcrService
                 'confidential_remarks' => $acr->confidential_remarks,
             ],
         ];
+    }
+
+    private function applyCalculatedFieldRefresh(int $acrId, bool $allowFinalizedOverwrite): void
+    {
+        DB::transaction(function () use ($acrId, $allowFinalizedOverwrite): void {
+            /** @var TeacherAcr $acr */
+            $acr = TeacherAcr::query()
+                ->with([
+                    'teacher:id,teacher_id,user_id,designation,employee_code',
+                    'teacher.user:id,name,status',
+                    'metric',
+                ])
+                ->lockForUpdate()
+                ->findOrFail($acrId);
+
+            $resolvedSession = $this->resolveSession((string) $acr->session);
+            $context = $this->sessionContext($resolvedSession);
+
+            /** @var Teacher|null $teacher */
+            $teacher = $context['teachers']->get((int) $acr->teacher_id);
+            if (! $teacher instanceof Teacher) {
+                $teacher = Teacher::query()
+                    ->with('user:id,name,status')
+                    ->findOrFail((int) $acr->teacher_id, ['id', 'teacher_id', 'user_id', 'designation', 'employee_code']);
+            }
+
+            $draftPayload = $this->buildDraftPayload($teacher, $resolvedSession, $context);
+
+            if ($acr->status === TeacherAcr::STATUS_FINALIZED && ! $allowFinalizedOverwrite) {
+                $acr->needs_refresh = true;
+                $acr->last_metrics_refresh_at = now();
+                $acr->save();
+
+                return;
+            }
+
+            $acr->session = $resolvedSession;
+            $acr->academic_score = $draftPayload['scores']['academic_score'];
+            $acr->improvement_score = $draftPayload['scores']['improvement_score'];
+            $acr->total_score = $this->recalculateTotalScore($acr);
+            $acr->final_grade = $this->calculateFinalGrade((float) $acr->total_score);
+            $acr->needs_refresh = false;
+            $acr->last_metrics_refresh_at = now();
+            $acr->save();
+
+            $acr->metric()->updateOrCreate(
+                ['acr_id' => $acr->id],
+                $draftPayload['metric']
+            );
+        });
     }
 
     private function printableScoreRows(
@@ -413,6 +513,8 @@ class TeacherAcrService
                 $acr->recommendations = $draftPayload['narrative']['recommendations'];
             }
 
+            $acr->needs_refresh = false;
+            $acr->last_metrics_refresh_at = now();
             $acr->save();
 
             $acr->metric()->updateOrCreate(

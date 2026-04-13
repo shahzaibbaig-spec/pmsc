@@ -210,7 +210,7 @@ class TeacherMarkEntryController extends Controller
 
         return redirect()
             ->route('teacher.marks.entries.index')
-            ->with('status', 'Assessment entry updated successfully.');
+            ->with('status', 'Marks saved successfully. Teacher CGPA and ACR metrics have been updated.');
     }
 
     public function destroy(Request $request, Mark $mark): RedirectResponse
@@ -236,7 +236,7 @@ class TeacherMarkEntryController extends Controller
 
         return redirect()
             ->route('teacher.marks.entries.index')
-            ->with('status', 'Assessment entry deleted successfully.');
+            ->with('status', 'Marks saved successfully. Teacher CGPA and ACR metrics have been updated.');
     }
 
     private function normalizedFilters(array $filters): array
