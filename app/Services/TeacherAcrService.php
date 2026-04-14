@@ -380,8 +380,10 @@ class TeacherAcrService
             }
 
             $acr->session = $resolvedSession;
+            $acr->attendance_score = $draftPayload['scores']['attendance_score'];
             $acr->academic_score = $draftPayload['scores']['academic_score'];
             $acr->improvement_score = $draftPayload['scores']['improvement_score'];
+            $acr->pd_score = $draftPayload['scores']['pd_score'];
             $acr->total_score = $this->recalculateTotalScore($acr);
             $acr->final_grade = $this->calculateFinalGrade((float) $acr->total_score);
             $acr->needs_refresh = false;

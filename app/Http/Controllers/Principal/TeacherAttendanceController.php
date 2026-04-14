@@ -6,7 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Principal\StoreTeacherAttendanceRequest;
 use App\Http\Requests\Principal\UpdateTeacherAttendanceRequest;
 use App\Models\Teacher;
+use App\Models\TeacherAcr;
 use App\Models\TeacherAttendance;
+use App\Services\TeacherAcrService;
 use App\Services\TeacherAttendanceService;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
@@ -16,9 +18,10 @@ use RuntimeException;
 
 class TeacherAttendanceController extends Controller
 {
-    public function __construct(private readonly TeacherAttendanceService $attendanceService)
-    {
-    }
+    public function __construct(
+        private readonly TeacherAttendanceService $attendanceService,
+        private readonly TeacherAcrService $acrService
+    ) {}
 
     public function index(Request $request): View
     {
@@ -88,12 +91,17 @@ class TeacherAttendanceController extends Controller
         $validated = $request->validated();
 
         try {
-            $this->attendanceService->markManualAttendance(
+            $attendance = $this->attendanceService->markManualAttendance(
                 (int) $validated['teacher_id'],
                 (string) $validated['attendance_date'],
                 (string) $validated['status'],
                 $validated['remarks'] ?? null,
                 (int) $request->user()->id
+            );
+
+            $this->syncAcrForTeacherSession(
+                (int) $attendance->teacher_id,
+                $this->sessionFromDate((string) $attendance->attendance_date)
             );
         } catch (RuntimeException $exception) {
             return back()
@@ -126,12 +134,30 @@ class TeacherAttendanceController extends Controller
 
     public function update(UpdateTeacherAttendanceRequest $request, TeacherAttendance $attendance): RedirectResponse
     {
+        $originalTeacherId = (int) $attendance->teacher_id;
+        $originalDate = (string) optional($attendance->attendance_date)->toDateString();
+
         try {
-            $this->attendanceService->updateManualAttendance(
+            $updated = $this->attendanceService->updateManualAttendance(
                 (int) $attendance->id,
                 $request->validated(),
                 (int) $request->user()->id
             );
+
+            $this->syncAcrForTeacherSession(
+                (int) $updated->teacher_id,
+                $this->sessionFromDate((string) $updated->attendance_date)
+            );
+
+            if (
+                $originalTeacherId !== (int) $updated->teacher_id
+                || $originalDate !== (string) $updated->attendance_date
+            ) {
+                $this->syncAcrForTeacherSession(
+                    $originalTeacherId,
+                    $this->sessionFromDate($originalDate)
+                );
+            }
         } catch (RuntimeException $exception) {
             return back()
                 ->withInput()
@@ -141,5 +167,33 @@ class TeacherAttendanceController extends Controller
         return redirect()
             ->route('principal.teacher-attendance.index')
             ->with('success', 'Teacher attendance updated successfully.');
+    }
+
+    private function syncAcrForTeacherSession(int $teacherId, string $session): void
+    {
+        $acr = TeacherAcr::query()
+            ->where('teacher_id', $teacherId)
+            ->where('session', $session)
+            ->first(['id', 'status']);
+
+        if (! $acr instanceof TeacherAcr) {
+            return;
+        }
+
+        if ($acr->status === TeacherAcr::STATUS_FINALIZED) {
+            $this->acrService->markNeedsRefreshIfFinalized($teacherId, $session);
+
+            return;
+        }
+
+        $this->acrService->refreshCalculatedFields((int) $acr->id);
+    }
+
+    private function sessionFromDate(string $date): string
+    {
+        $dateTime = Carbon::parse($date);
+        $startYear = $dateTime->month >= 7 ? $dateTime->year : ($dateTime->year - 1);
+
+        return $startYear.'-'.($startYear + 1);
     }
 }
