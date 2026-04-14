@@ -60,6 +60,32 @@
             </div>
 
             <div class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                <h3 class="text-base font-semibold text-slate-900">Class Teacher Assignment</h3>
+                <p class="mt-1 text-sm text-slate-600">
+                    Changing the class teacher will automatically remove the previous class teacher assignment for this class in the selected session.
+                </p>
+
+                <div class="mt-4 max-w-xs">
+                    <label for="classTeacherSessionSelect" class="mb-1 block text-sm font-medium text-slate-700">Session</label>
+                    <select
+                        id="classTeacherSessionSelect"
+                        class="block w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-500"
+                    >
+                        @foreach ($sessions as $session)
+                            <option value="{{ $session }}" @selected($classTeacherSession === $session)>{{ $session }}</option>
+                        @endforeach
+                    </select>
+                </div>
+
+                <div id="classTeacherMatrixContainer" class="mt-4">
+                    @include('principal.teacher-assignments.partials.class-teacher-table', [
+                        'selectedSession' => $classTeacherSession,
+                        'classTeacherRows' => $classTeacherRows,
+                    ])
+                </div>
+            </div>
+
+            <div class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
                 <h3 class="text-base font-semibold text-slate-900">Session Rollover</h3>
                 <p class="mt-1 text-sm text-slate-600">
                     Copy assignments to the next session, then review and modify teacher-by-teacher as needed.
@@ -215,6 +241,80 @@
     </div>
 
     <script>
+        function classTeacherPicker(config) {
+            return {
+                searchUrl: config.searchUrl || '',
+                currentTeacherId: Number(config.currentTeacherId || 0),
+                selectedTeacherId: Number(config.currentTeacherId || 0) || null,
+                selectedTeacherLabel: config.currentTeacherName || '',
+                query: config.currentTeacherName || '',
+                results: [],
+                open: false,
+                loading: false,
+                noResults: false,
+                onFocus() {
+                    const value = this.query.trim();
+                    if (value.length >= 2) {
+                        this.searchTeachers();
+                    } else if (this.results.length > 0) {
+                        this.open = true;
+                    }
+                },
+                async searchTeachers() {
+                    const value = this.query.trim();
+                    if (value.length < 2) {
+                        this.results = [];
+                        this.noResults = false;
+                        this.open = false;
+                        return;
+                    }
+
+                    this.loading = true;
+                    this.open = true;
+                    this.noResults = false;
+
+                    try {
+                        const response = await fetch(`${this.searchUrl}?q=${encodeURIComponent(value)}&limit=12`, {
+                            headers: { 'Accept': 'application/json' },
+                        });
+
+                        if (!response.ok) {
+                            throw new Error('Teacher search failed.');
+                        }
+
+                        const payload = await response.json();
+                        this.results = Array.isArray(payload) ? payload : [];
+                        this.noResults = this.results.length === 0;
+                    } catch (error) {
+                        this.results = [];
+                        this.noResults = true;
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+                chooseTeacher(teacher) {
+                    this.selectedTeacherId = Number(teacher?.id || 0) || null;
+                    this.selectedTeacherLabel = String(teacher?.name || '').trim();
+                    this.query = this.selectedTeacherLabel;
+                    this.results = [];
+                    this.noResults = false;
+                    this.open = false;
+                },
+                confirmReplacement() {
+                    if (!this.selectedTeacherId) {
+                        alert('Please select a teacher first.');
+                        return false;
+                    }
+
+                    if (this.currentTeacherId > 0 && this.currentTeacherId !== this.selectedTeacherId) {
+                        return confirm('The existing class teacher for this class will be removed and replaced. Do you want to continue?');
+                    }
+
+                    return true;
+                },
+            };
+        }
+
         function teacherPanelAssignmentForm(classes, initialClassIds, initialClassTeacherClassId) {
             return {
                 classes: classes || [],
@@ -238,6 +338,8 @@
             const resultsBox = document.getElementById('globalTeacherSearchResults');
             const panel = document.getElementById('selectedTeacherPanel');
             const sessionSelect = document.getElementById('session');
+            const classTeacherSessionSelect = document.getElementById('classTeacherSessionSelect');
+            const classTeacherMatrixContainer = document.getElementById('classTeacherMatrixContainer');
             const escapeHtml = (window.NSMS && typeof window.NSMS.escapeHtml === 'function')
                 ? window.NSMS.escapeHtml
                 : (value) => String(value)
@@ -249,6 +351,7 @@
 
             const searchUrl = @json(route('principal.teacher-assignments.search'));
             const showUrlTemplate = @json(route('principal.teacher-assignments.teacher.show', ['teacher' => '__TEACHER__']));
+            const classTeacherMatrixUrl = @json(route('principal.teacher-assignments.class-teachers'));
             const focusTeacherId = Number(@json((int) request()->query('focus_teacher', 0)));
             let selectedTeacherId = null;
 
@@ -323,6 +426,33 @@
                 }
             }
 
+            async function loadClassTeacherMatrix(session) {
+                if (!classTeacherMatrixContainer || !session) {
+                    return;
+                }
+
+                classTeacherMatrixContainer.innerHTML = '<div class="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">Loading class teacher assignments...</div>';
+
+                try {
+                    const response = await fetch(`${classTeacherMatrixUrl}?session=${encodeURIComponent(session)}`, {
+                        headers: { 'Accept': 'application/json' },
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Failed to load class teacher matrix.');
+                    }
+
+                    const payload = await response.json();
+                    classTeacherMatrixContainer.innerHTML = payload.html || '';
+
+                    if (window.Alpine && typeof window.Alpine.initTree === 'function') {
+                        window.Alpine.initTree(classTeacherMatrixContainer);
+                    }
+                } catch (error) {
+                    classTeacherMatrixContainer.innerHTML = '<div class="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">Failed to load class teacher assignments.</div>';
+                }
+            }
+
             const performSearch = window.NSMS.debounce(async () => {
                 const query = searchInput.value.trim();
                 if (query.length < 2) {
@@ -376,6 +506,10 @@
                 if (selectedTeacherId) {
                     loadTeacherPanel(selectedTeacherId);
                 }
+            });
+
+            classTeacherSessionSelect?.addEventListener('change', () => {
+                loadClassTeacherMatrix(classTeacherSessionSelect.value);
             });
 
             if (focusTeacherId > 0) {

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Principal;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Principal\AssignClassTeacherRequest;
 use App\Http\Requests\Principal\BulkTeacherAssignmentRequest;
 use App\Http\Requests\Principal\ReplaceTeacherSessionAssignmentsRequest;
 use App\Models\SchoolClass;
@@ -32,6 +33,7 @@ class TeacherAssignmentController extends Controller
             ->all();
 
         $selectedSession = trim((string) $request->query('session', $defaultSession));
+        $classTeacherSession = $selectedSession !== '' ? $selectedSession : $defaultSession;
         $search = trim((string) $request->query('search', ''));
 
         $assignments = TeacherAssignment::query()
@@ -74,6 +76,8 @@ class TeacherAssignmentController extends Controller
             'sessions' => $sessions,
             'selectedSession' => $selectedSession,
             'search' => $search,
+            'classTeacherRows' => $service->getClassTeacherAssignmentsBySession($classTeacherSession),
+            'classTeacherSession' => $classTeacherSession,
             'classes' => $this->classes(),
             'subjects' => $this->subjects(),
         ]);
@@ -133,6 +137,27 @@ class TeacherAssignmentController extends Controller
         $results = $service->searchTeachers($query, (int) ($validated['limit'] ?? 15));
 
         return response()->json($results->values()->all());
+    }
+
+    public function classTeacherMatrix(Request $request, TeacherAssignmentService $service): JsonResponse
+    {
+        $defaultSession = $this->academicSessionForDate(now()->toDateString());
+        $selectedSession = trim((string) $request->query('session', $defaultSession));
+        if ($selectedSession === '') {
+            $selectedSession = $defaultSession;
+        }
+
+        $rows = $service->getClassTeacherAssignmentsBySession($selectedSession);
+
+        $html = view('principal.teacher-assignments.partials.class-teacher-table', [
+            'selectedSession' => $selectedSession,
+            'classTeacherRows' => $rows,
+        ])->render();
+
+        return response()->json([
+            'session' => $selectedSession,
+            'html' => $html,
+        ]);
     }
 
     public function showTeacher(int $teacherId, Request $request, TeacherAssignmentService $service): JsonResponse
@@ -218,6 +243,36 @@ class TeacherAssignmentController extends Controller
                 'session' => (string) $payload['session'],
                 'focus_teacher' => $teacherId,
             ])
+            ->with('success', $message);
+    }
+
+    public function assignClassTeacher(
+        AssignClassTeacherRequest $request,
+        TeacherAssignmentService $service
+    ): RedirectResponse|JsonResponse {
+        $payload = $request->validated();
+
+        $result = $service->assignOrReplaceClassTeacher(
+            (int) $payload['teacher_id'],
+            (int) $payload['class_id'],
+            (string) $payload['session']
+        );
+
+        $message = ((string) ($result['status'] ?? '')) === 'unchanged'
+            ? 'This teacher is already assigned as class teacher for this class.'
+            : 'Class teacher updated successfully.';
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'status' => (string) ($result['status'] ?? 'assigned'),
+                'message' => $message,
+                'session' => (string) $payload['session'],
+                'class_id' => (int) $payload['class_id'],
+            ]);
+        }
+
+        return redirect()
+            ->route('principal.teacher-assignments.index', ['session' => (string) $payload['session']])
             ->with('success', $message);
     }
 

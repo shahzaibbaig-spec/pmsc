@@ -469,6 +469,14 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
         ->middleware(['role:Principal|Admin', 'permission:assign_teachers'])
         ->name('principal.teacher-assignments.search');
 
+    Route::get('/principal/teacher-assignments/class-teachers', [PrincipalTeacherAssignmentController::class, 'classTeacherMatrix'])
+        ->middleware(['role:Principal|Admin', 'permission:assign_teachers'])
+        ->name('principal.teacher-assignments.class-teachers');
+
+    Route::post('/principal/teacher-assignments/class-teachers/assign', [PrincipalTeacherAssignmentController::class, 'assignClassTeacher'])
+        ->middleware(['role:Principal|Admin', 'permission:assign_teachers'])
+        ->name('principal.teacher-assignments.class-teachers.assign');
+
     Route::get('/principal/teacher-assignments/teacher/{teacher}', [PrincipalTeacherAssignmentController::class, 'showTeacher'])
         ->middleware(['role:Principal|Admin', 'permission:assign_teachers'])
         ->whereNumber('teacher')

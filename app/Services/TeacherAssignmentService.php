@@ -128,6 +128,151 @@ class TeacherAssignmentService
     }
 
     /**
+     * @return array<int, array{
+     *   class_id:int,
+     *   class_name:string,
+     *   current_teacher_id:int|null,
+     *   current_teacher_name:string|null,
+     *   current_teacher_email:string|null,
+     *   current_teacher_code:string|null,
+     *   current_employee_code:string|null
+     * }>
+     */
+    public function getClassTeacherAssignmentsBySession(string $session): array
+    {
+        $resolvedSession = trim($session);
+
+        $classes = SchoolClass::query()
+            ->orderBy('name')
+            ->orderBy('section')
+            ->get(['id', 'name', 'section']);
+
+        $classTeacherAssignments = TeacherAssignment::query()
+            ->with([
+                'teacher:id,teacher_id,user_id,employee_code',
+                'teacher.user:id,name,email',
+            ])
+            ->where('session', $resolvedSession)
+            ->where('is_class_teacher', true)
+            ->orderByDesc('id')
+            ->get(['id', 'teacher_id', 'class_id', 'subject_id', 'is_class_teacher', 'session'])
+            ->groupBy('class_id');
+
+        return $classes
+            ->map(function (SchoolClass $class) use ($classTeacherAssignments): array {
+                /** @var TeacherAssignment|null $current */
+                $current = $classTeacherAssignments->get((int) $class->id)?->first();
+
+                return [
+                    'class_id' => (int) $class->id,
+                    'class_name' => trim((string) $class->name.' '.(string) ($class->section ?? '')),
+                    'current_teacher_id' => $current !== null ? (int) $current->teacher_id : null,
+                    'current_teacher_name' => $current?->teacher?->user?->name,
+                    'current_teacher_email' => $current?->teacher?->user?->email,
+                    'current_teacher_code' => $current?->teacher?->teacher_id,
+                    'current_employee_code' => $current?->teacher?->employee_code,
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array{
+     *   status:string,
+     *   replaced:bool,
+     *   previous_teacher_id:int|null
+     * }
+     */
+    public function assignOrReplaceClassTeacher(int $teacherId, int $classId, string $session): array
+    {
+        $resolvedSession = trim($session);
+
+        return DB::transaction(function () use ($teacherId, $classId, $resolvedSession): array {
+            $existingRows = TeacherAssignment::query()
+                ->where('class_id', $classId)
+                ->where('session', $resolvedSession)
+                ->where('is_class_teacher', true)
+                ->orderByDesc('id')
+                ->get(['id', 'teacher_id', 'class_id', 'session', 'is_class_teacher']);
+
+            /** @var TeacherAssignment|null $existing */
+            $existing = $existingRows->first();
+            $previousTeacherId = $existing !== null ? (int) $existing->teacher_id : null;
+
+            if (
+                $existing !== null
+                && (int) $existing->teacher_id === $teacherId
+                && $existingRows->count() === 1
+            ) {
+                return [
+                    'status' => 'unchanged',
+                    'replaced' => false,
+                    'previous_teacher_id' => $previousTeacherId,
+                ];
+            }
+
+            $replaced = $existing !== null && (int) $existing->teacher_id !== $teacherId;
+
+            if ($existingRows->isNotEmpty()) {
+                $this->removeExistingClassTeacher($classId, $resolvedSession);
+            }
+
+            TeacherAssignment::query()->create([
+                'teacher_id' => $teacherId,
+                'class_id' => $classId,
+                'subject_id' => null,
+                'is_class_teacher' => true,
+                'session' => $resolvedSession,
+            ]);
+
+            SchoolClass::query()
+                ->whereKey($classId)
+                ->update(['class_teacher_id' => $teacherId]);
+
+            return [
+                'status' => $replaced ? 'replaced' : 'assigned',
+                'replaced' => $replaced,
+                'previous_teacher_id' => $previousTeacherId,
+            ];
+        });
+    }
+
+    public function removeExistingClassTeacher(int $classId, string $session): void
+    {
+        $resolvedSession = trim($session);
+
+        $existing = TeacherAssignment::query()
+            ->where('class_id', $classId)
+            ->where('session', $resolvedSession)
+            ->where('is_class_teacher', true)
+            ->get(['id', 'teacher_id']);
+
+        if ($existing->isEmpty()) {
+            return;
+        }
+
+        $teacherIds = $existing
+            ->pluck('teacher_id')
+            ->map(static fn ($id): int => (int) $id)
+            ->filter(static fn (int $id): bool => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+
+        TeacherAssignment::query()
+            ->whereIn('id', $existing->pluck('id')->all())
+            ->delete();
+
+        if (! empty($teacherIds)) {
+            SchoolClass::query()
+                ->whereKey($classId)
+                ->whereIn('class_teacher_id', $teacherIds)
+                ->update(['class_teacher_id' => null]);
+        }
+    }
+
+    /**
      * @return Collection<int, array{id:int,name:string,email:string,employee_code:string|null,teacher_code:string}>
      */
     public function searchTeachers(string $query, int $limit = 15): Collection
