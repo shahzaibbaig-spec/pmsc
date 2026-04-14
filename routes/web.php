@@ -6,6 +6,7 @@ use App\Http\Controllers\Inventory\InventoryDemandReviewController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\Principal\TeacherAcrController;
 use App\Http\Controllers\Principal\TeacherAttendanceController as PrincipalTeacherAttendanceController;
+use App\Http\Controllers\Principal\TeacherResultEntryController;
 use App\Http\Controllers\Principal\TeacherRankingController;
 use App\Http\Controllers\Principal\TeacherAssignmentController as PrincipalTeacherAssignmentController;
 use App\Http\Controllers\Principal\AnalyticsExportController;
@@ -525,6 +526,20 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
         ->middleware(['role:Admin|Principal', 'permission:generate_results'])
         ->name('principal.results.tabulation');
 
+    Route::get('/principal/results/teacher-entries', [TeacherResultEntryController::class, 'index'])
+        ->middleware(['role:Admin|Principal', 'permission:view_teacher_result_entries'])
+        ->name('principal.results.teacher-entries.index');
+
+    Route::get('/principal/results/teacher-entries/{teacher}', [TeacherResultEntryController::class, 'showTeacher'])
+        ->middleware(['role:Admin|Principal', 'permission:view_teacher_result_entries'])
+        ->whereNumber('teacher')
+        ->name('principal.results.teacher-entries.show');
+
+    Route::get('/principal/results/teacher-entries/{teacher}/logs', [TeacherResultEntryController::class, 'logs'])
+        ->middleware(['role:Admin|Principal', 'permission:view_result_entry_logs'])
+        ->whereNumber('teacher')
+        ->name('principal.results.teacher-entries.logs');
+
     Route::get('/principal/analytics', [PrincipalAnalyticsDashboardController::class, 'index'])
         ->middleware(['role:Admin,Principal'])
         ->name('principal.analytics.dashboard.index');
@@ -580,6 +595,14 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
     Route::post('/principal/acr/generate', [TeacherAcrController::class, 'generate'])
         ->middleware(['role:Admin|Principal', 'permission:manage_teacher_acr'])
         ->name('principal.acr.generate');
+
+    Route::get('/principal/acr/bulk-print', [TeacherAcrController::class, 'bulkPrintForm'])
+        ->middleware(['role:Admin|Principal', 'permission:bulk_print_teacher_acr'])
+        ->name('principal.acr.bulk-print.form');
+
+    Route::post('/principal/acr/bulk-print', [TeacherAcrController::class, 'bulkPrint'])
+        ->middleware(['role:Admin|Principal', 'permission:bulk_print_teacher_acr'])
+        ->name('principal.acr.bulk-print');
 
     Route::get('/principal/acr/{acr}', [TeacherAcrController::class, 'show'])
         ->middleware(['role:Admin|Principal', 'permission:view_teacher_acr'])

@@ -291,7 +291,60 @@ class TeacherAcrService
             ])
             ->findOrFail($acrId);
 
+        return $this->printablePayloadFromAcr($acr, SchoolSetting::cached());
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function buildBulkPrintableAcrs(string $session, string $status = 'all'): array
+    {
+        $resolvedSession = $this->resolveSession($session);
+        $resolvedStatus = $this->normalizeBulkStatus($status);
         $school = SchoolSetting::cached();
+
+        $acrs = TeacherAcr::query()
+            ->with([
+                'teacher:id,teacher_id,user_id,designation,employee_code',
+                'teacher.user:id,name',
+                'metric',
+                'preparedBy:id,name',
+                'reviewedBy:id,name',
+            ])
+            ->where('session', $resolvedSession)
+            ->when(
+                $resolvedStatus !== 'all',
+                fn ($query) => $query->where('status', $resolvedStatus)
+            )
+            ->get()
+            ->sort(function (TeacherAcr $left, TeacherAcr $right): int {
+                return strcasecmp($this->teacherName($left->teacher), $this->teacherName($right->teacher));
+            })
+            ->values();
+
+        $items = $acrs
+            ->map(fn (TeacherAcr $acr): array => $this->printablePayloadFromAcr($acr, $school))
+            ->all();
+
+        return [
+            'session' => $resolvedSession,
+            'status' => $resolvedStatus,
+            'status_label' => $resolvedStatus === 'all' ? 'All' : ucfirst($resolvedStatus),
+            'generated_at' => now(),
+            'school' => [
+                'name' => $school?->school_name ?: config('app.name', 'School Management System'),
+                'address' => $school?->address,
+                'phone' => $school?->phone,
+                'email' => $school?->email,
+            ],
+            'total' => count($items),
+            'acrs' => $items,
+        ];
+    }
+
+    private function printablePayloadFromAcr(TeacherAcr $acr, ?SchoolSetting $school = null): array
+    {
+        $school ??= SchoolSetting::cached();
         $metric = $acr->metric;
         $meta = is_array($metric?->meta) ? $metric->meta : [];
 
@@ -343,6 +396,14 @@ class TeacherAcrService
                 'confidential_remarks' => $acr->confidential_remarks,
             ],
         ];
+    }
+
+    private function normalizeBulkStatus(string $status): string
+    {
+        $candidate = strtolower(trim($status));
+        $allowed = ['all', TeacherAcr::STATUS_DRAFT, TeacherAcr::STATUS_REVIEWED, TeacherAcr::STATUS_FINALIZED];
+
+        return in_array($candidate, $allowed, true) ? $candidate : 'all';
     }
 
     private function applyCalculatedFieldRefresh(int $acrId, bool $allowFinalizedOverwrite): void

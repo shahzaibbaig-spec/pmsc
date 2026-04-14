@@ -99,6 +99,9 @@
         if ($sidebarUser?->can('view_teacher_acr')) {
             $menuItems[] = ['route' => 'principal.acr.index', 'label' => 'Teacher ACR'];
         }
+        if ($sidebarUser?->can('view_teacher_result_entries')) {
+            $menuItems[] = ['route' => 'principal.results.teacher-entries.index', 'label' => 'Teacher Result Entries'];
+        }
         if ($sidebarUser?->can('manage_teacher_attendance')) {
             $menuItems[] = ['route' => 'principal.teacher-attendance.index', 'label' => 'Teacher Attendance'];
         }
@@ -145,6 +148,9 @@
         }
         if ($sidebarUser?->can('view_teacher_acr')) {
             $menuItems[] = ['route' => 'principal.acr.index', 'label' => 'Teacher ACR'];
+        }
+        if ($sidebarUser?->can('view_teacher_result_entries')) {
+            $menuItems[] = ['route' => 'principal.results.teacher-entries.index', 'label' => 'Teacher Result Entries'];
         }
         if ($sidebarUser?->can('manage_teacher_attendance')) {
             $menuItems[] = ['route' => 'principal.teacher-attendance.index', 'label' => 'Teacher Attendance'];

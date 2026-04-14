@@ -5,6 +5,7 @@ namespace App\Modules\Exams\Services;
 use App\Models\Mark;
 use App\Models\MarkEditLog;
 use App\Models\Teacher;
+use App\Models\TeacherResultEntryLog;
 use App\Models\User;
 use App\Services\ClassAssessmentModeService;
 use App\Services\TeacherPerformanceSyncService;
@@ -94,6 +95,23 @@ class TeacherMarkAuditService
                     'action_type' => 'edit',
                     'edited_at' => $editedAt,
                 ]);
+
+                TeacherResultEntryLog::query()->create([
+                    'teacher_id' => (int) $mark->teacher_id,
+                    'student_id' => (int) $mark->student_id,
+                    'class_id' => (int) ($mark->exam?->class_id ?? 0),
+                    'subject_id' => (int) ($mark->exam?->subject_id ?? 0),
+                    'session' => (string) $mark->session,
+                    'exam_type' => (string) $this->examTypeValue($mark),
+                    'old_marks' => $oldMarks,
+                    'new_marks' => null,
+                    'old_grade' => $oldGrade,
+                    'new_grade' => $normalizedGrade,
+                    'action_type' => 'updated',
+                    'action_at' => $editedAt,
+                    'acted_by' => $userId,
+                    'remarks' => $reason,
+                ]);
             });
 
             $this->teacherPerformanceSyncService->syncAfterMarksChange(
@@ -128,6 +146,23 @@ class TeacherMarkAuditService
                 'edit_reason' => $reason,
                 'action_type' => 'edit',
                 'edited_at' => $editedAt,
+            ]);
+
+            TeacherResultEntryLog::query()->create([
+                'teacher_id' => (int) $mark->teacher_id,
+                'student_id' => (int) $mark->student_id,
+                'class_id' => (int) ($mark->exam?->class_id ?? 0),
+                'subject_id' => (int) ($mark->exam?->subject_id ?? 0),
+                'session' => (string) $mark->session,
+                'exam_type' => (string) $this->examTypeValue($mark),
+                'old_marks' => $oldMarks,
+                'new_marks' => $newMarks,
+                'old_grade' => null,
+                'new_grade' => null,
+                'action_type' => 'updated',
+                'action_at' => $editedAt,
+                'acted_by' => $userId,
+                'remarks' => $reason,
             ]);
         });
 
@@ -179,6 +214,23 @@ class TeacherMarkAuditService
                 'edit_reason' => $reason,
                 'action_type' => 'delete',
                 'edited_at' => $editedAt,
+            ]);
+
+            TeacherResultEntryLog::query()->create([
+                'teacher_id' => (int) $mark->teacher_id,
+                'student_id' => (int) $mark->student_id,
+                'class_id' => (int) ($mark->exam?->class_id ?? 0),
+                'subject_id' => (int) ($mark->exam?->subject_id ?? 0),
+                'session' => (string) $mark->session,
+                'exam_type' => (string) $this->examTypeValue($mark),
+                'old_marks' => $oldMarks,
+                'new_marks' => null,
+                'old_grade' => $oldGrade,
+                'new_grade' => null,
+                'action_type' => 'deleted',
+                'action_at' => $editedAt,
+                'acted_by' => $userId,
+                'remarks' => $reason,
             ]);
 
             $mark->delete();

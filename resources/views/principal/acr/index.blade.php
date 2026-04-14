@@ -5,8 +5,15 @@
                 <h2 class="text-xl font-semibold text-slate-900">Teacher ACR</h2>
                 <p class="mt-1 text-sm text-slate-500">Generate draft annual confidential reports from performance data and finalize them after principal review.</p>
             </div>
-            <div class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-                Session: {{ $selectedSession }}
+            <div class="flex items-center gap-2">
+                <div class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                    Session: {{ $selectedSession }}
+                </div>
+                @can('bulk_print_teacher_acr')
+                    <a href="{{ route('principal.acr.bulk-print.form', ['session' => $selectedSession]) }}" class="inline-flex min-h-10 items-center rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                        Bulk Print ACRs
+                    </a>
+                @endcan
             </div>
         </div>
     </x-slot>

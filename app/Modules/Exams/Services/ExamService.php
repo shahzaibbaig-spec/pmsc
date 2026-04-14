@@ -7,6 +7,7 @@ use App\Models\Mark;
 use App\Models\Student;
 use App\Models\Teacher;
 use App\Models\TeacherAssignment;
+use App\Models\TeacherResultEntryLog;
 use App\Services\ClassAssessmentModeService;
 use App\Services\TeacherPerformanceSyncService;
 use App\Services\TeacherStudentVisibilityService;
@@ -173,7 +174,7 @@ class ExamService
             throw new RuntimeException('Total marks are required and must be greater than 0.');
         }
 
-        DB::transaction(function () use ($teacher, $classId, $subjectId, $session, $examType, $totalMarks, $records, $usesGradeSystem): void {
+        DB::transaction(function () use ($teacher, $classId, $subjectId, $session, $examType, $totalMarks, $records, $usesGradeSystem, $userId): void {
             $exam = Exam::query()
                 ->where('class_id', $classId)
                 ->where('subject_id', $subjectId)
@@ -208,6 +209,7 @@ class ExamService
                 $studentId = (int) $row['student_id'];
                 $obtainedRaw = $row['obtained_marks'] ?? null;
                 $gradeRaw = $row['grade'] ?? null;
+                $actionAt = now();
 
                 $existingMark = Mark::query()
                     ->where('exam_id', $exam->id)
@@ -222,6 +224,25 @@ class ExamService
                     $grade = $this->assessmentModeService->normalizeGrade(is_string($gradeRaw) ? $gradeRaw : null);
 
                     if ($grade === null) {
+                        if ($existingMark) {
+                            $this->storeTeacherResultEntryLog([
+                                'teacher_id' => (int) $teacher->id,
+                                'student_id' => $studentId,
+                                'class_id' => $classId,
+                                'subject_id' => $subjectId,
+                                'session' => $session,
+                                'exam_type' => $examType,
+                                'old_marks' => $existingMark->obtained_marks,
+                                'new_marks' => null,
+                                'old_grade' => $existingMark->grade,
+                                'new_grade' => null,
+                                'action_type' => 'deleted',
+                                'action_at' => $actionAt,
+                                'acted_by' => $userId,
+                                'remarks' => 'Result entry removed from teacher exam sheet.',
+                            ]);
+                        }
+
                         Mark::query()
                             ->where('exam_id', $exam->id)
                             ->where('student_id', $studentId)
@@ -247,10 +268,57 @@ class ExamService
                         ]
                     );
 
+                    $actionType = $existingMark ? 'updated' : 'created';
+                    $oldGrade = $existingMark?->grade;
+                    $oldMarks = $existingMark?->obtained_marks;
+                    $shouldLog = $actionType === 'created'
+                        || $oldGrade !== $grade
+                        || $oldMarks !== null;
+
+                    if ($shouldLog) {
+                        $this->storeTeacherResultEntryLog([
+                            'teacher_id' => (int) $teacher->id,
+                            'student_id' => $studentId,
+                            'class_id' => $classId,
+                            'subject_id' => $subjectId,
+                            'session' => $session,
+                            'exam_type' => $examType,
+                            'old_marks' => $oldMarks,
+                            'new_marks' => null,
+                            'old_grade' => $oldGrade,
+                            'new_grade' => $grade,
+                            'action_type' => $actionType,
+                            'action_at' => $actionAt,
+                            'acted_by' => $userId,
+                            'remarks' => $actionType === 'created'
+                                ? 'Result entry created from teacher exam sheet.'
+                                : 'Result entry updated from teacher exam sheet.',
+                        ]);
+                    }
+
                     continue;
                 }
 
                 if ($obtainedRaw === null || $obtainedRaw === '') {
+                    if ($existingMark) {
+                        $this->storeTeacherResultEntryLog([
+                            'teacher_id' => (int) $teacher->id,
+                            'student_id' => $studentId,
+                            'class_id' => $classId,
+                            'subject_id' => $subjectId,
+                            'session' => $session,
+                            'exam_type' => $examType,
+                            'old_marks' => $existingMark->obtained_marks,
+                            'new_marks' => null,
+                            'old_grade' => $existingMark->grade,
+                            'new_grade' => null,
+                            'action_type' => 'deleted',
+                            'action_at' => $actionAt,
+                            'acted_by' => $userId,
+                            'remarks' => 'Result entry removed from teacher exam sheet.',
+                        ]);
+                    }
+
                     Mark::query()
                         ->where('exam_id', $exam->id)
                         ->where('student_id', $studentId)
@@ -276,6 +344,34 @@ class ExamService
                         'session' => $session,
                     ]
                 );
+
+                $actionType = $existingMark ? 'updated' : 'created';
+                $oldMarks = $existingMark?->obtained_marks;
+                $oldGrade = $existingMark?->grade;
+                $shouldLog = $actionType === 'created'
+                    || (int) ($oldMarks ?? -1) !== $obtained
+                    || $oldGrade !== null;
+
+                if ($shouldLog) {
+                    $this->storeTeacherResultEntryLog([
+                        'teacher_id' => (int) $teacher->id,
+                        'student_id' => $studentId,
+                        'class_id' => $classId,
+                        'subject_id' => $subjectId,
+                        'session' => $session,
+                        'exam_type' => $examType,
+                        'old_marks' => $oldMarks,
+                        'new_marks' => $obtained,
+                        'old_grade' => $oldGrade,
+                        'new_grade' => null,
+                        'action_type' => $actionType,
+                        'action_at' => $actionAt,
+                        'acted_by' => $userId,
+                        'remarks' => $actionType === 'created'
+                            ? 'Result entry created from teacher exam sheet.'
+                            : 'Result entry updated from teacher exam sheet.',
+                    ]);
+                }
             }
 
             if (! $exam->locked_at && $exam->created_at && $exam->created_at->lt(now()->subDays(7))) {
@@ -331,4 +427,14 @@ class ExamService
 
         return $createdAt->lt(now()->subDays(7));
     }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function storeTeacherResultEntryLog(array $payload): void
+    {
+        TeacherResultEntryLog::query()->create($payload);
+    }
 }
+
+

@@ -3,12 +3,16 @@
 namespace App\Http\Controllers\Principal;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Principal\TeacherAcrBulkPrintRequest;
 use App\Http\Requests\Principal\GenerateTeacherAcrRequest;
 use App\Http\Requests\Principal\TeacherAcrIndexRequest;
 use App\Http\Requests\Principal\UpdateTeacherAcrRequest;
 use App\Models\TeacherAcr;
 use App\Services\TeacherAcrService;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\Response;
 use Illuminate\View\View;
 use RuntimeException;
 
@@ -157,5 +161,50 @@ class TeacherAcrController extends Controller
         return view('principal.acr.print', [
             'payload' => $this->acrService->buildPrintableAcr((int) $acr->id),
         ]);
+    }
+
+    public function bulkPrintForm(Request $request): View
+    {
+        $selectedSession = $this->acrService->resolveSession($request->query('session'));
+        $selectedStatus = strtolower(trim((string) $request->query('status', 'all')));
+        if (! in_array($selectedStatus, ['all', 'draft', 'reviewed', 'finalized'], true)) {
+            $selectedStatus = 'all';
+        }
+
+        return view('principal.acr.bulk-print-form', [
+            'sessions' => $this->acrService->sessionOptions(),
+            'selectedSession' => $selectedSession,
+            'selectedStatus' => $selectedStatus,
+        ]);
+    }
+
+    public function bulkPrint(TeacherAcrBulkPrintRequest $request): Response|RedirectResponse
+    {
+        $validated = $request->validated();
+        $payload = $this->acrService->buildBulkPrintableAcrs(
+            (string) $validated['session'],
+            (string) ($validated['status'] ?? 'all')
+        );
+
+        if ((int) ($payload['total'] ?? 0) <= 0) {
+            return redirect()
+                ->route('principal.acr.bulk-print.form', [
+                    'session' => $validated['session'],
+                    'status' => $validated['status'] ?? 'all',
+                ])
+                ->with('error', 'No ACR records matched the selected session/status filter.');
+        }
+
+        $filename = sprintf(
+            'teacher-acrs-%s-%s.pdf',
+            (string) ($payload['session'] ?? 'session'),
+            (string) ($payload['status'] ?? 'all')
+        );
+
+        return Pdf::loadView('principal.acr.bulk-print-pdf', [
+            'payload' => $payload,
+        ])
+            ->setPaper('a4')
+            ->download($filename);
     }
 }
