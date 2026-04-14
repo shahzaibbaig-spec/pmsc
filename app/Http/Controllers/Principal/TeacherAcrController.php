@@ -192,7 +192,7 @@ class TeacherAcrController extends Controller
                     'session' => $validated['session'],
                     'status' => $validated['status'] ?? 'all',
                 ])
-                ->with('error', 'No ACR records matched the selected session/status filter.');
+                ->with('error', 'No ACRs found for the selected session and status.');
         }
 
         $filename = sprintf(

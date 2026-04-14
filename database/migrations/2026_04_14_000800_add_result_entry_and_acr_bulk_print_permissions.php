@@ -7,8 +7,6 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration
 {
     private const PERMISSIONS = [
-        'view_teacher_result_entries',
-        'view_result_entry_logs',
         'bulk_print_teacher_acr',
     ];
 
@@ -93,4 +91,3 @@ return new class extends Migration
             ->delete();
     }
 };
-
