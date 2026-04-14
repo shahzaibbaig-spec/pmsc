@@ -10,7 +10,7 @@
             <div class="overflow-hidden rounded-lg bg-white shadow-sm">
                 <div class="p-5 sm:p-6">
                     <h3 class="text-lg font-medium text-gray-900">Exam Setup</h3>
-                    <p class="mt-1 text-sm text-gray-600">Select class, subject, exam type, and session to load the assessment sheet. PG, Prep, Nursery, and Class 1 use grades only; higher classes continue with numeric marks.</p>
+                    <p class="mt-1 text-sm text-gray-600">Select class, subject, exam type, and session to load the assessment sheet. For Early Years, the Principal can configure each assessment to use grades or numeric marks.</p>
                     <p class="mt-1 text-sm text-indigo-700">Only students enrolled in the selected subject are shown.</p>
                     @if (! $hasAssignments)
                         <div class="mt-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
@@ -58,7 +58,7 @@
                     </div>
 
                     <div id="gradeHelpBox" class="mt-3 hidden rounded-md border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm text-indigo-800">
-                        This class uses grade-based assessment only. Choose one of: A*, A, B, C, D, E, F, G, U.
+                        This assessment is in grade mode. Choose one of: A*, A, B, C, D, E, F, G, U.
                     </div>
 
                     <div class="mt-4 flex flex-wrap gap-2">
@@ -146,7 +146,9 @@
             page: 1,
             per_page: 10,
             emptyMessage: 'No students found for selected exam setup.',
+            markingMode: 'numeric',
             usesGradeSystem: false,
+            supportsGradeMode: false,
             gradeOptions: [],
         };
 
@@ -193,17 +195,20 @@
         }
 
         function updateAssessmentModeUi() {
-            assessmentColumnHeader.textContent = state.usesGradeSystem ? 'Grade' : 'Obtained Marks';
-            totalMarksWrapper.classList.toggle('hidden', state.usesGradeSystem);
-            gradeHelpBox.classList.toggle('hidden', !state.usesGradeSystem);
-            assessmentModeBadge.textContent = state.usesGradeSystem
-                ? 'Grade-only mode for early classes'
-                : 'Numeric marks mode';
-            assessmentModeBadge.className = state.usesGradeSystem
+            const isGradeMode = state.markingMode === 'grade';
+            state.usesGradeSystem = isGradeMode;
+
+            assessmentColumnHeader.textContent = isGradeMode ? 'Grade' : 'Obtained Marks';
+            totalMarksWrapper.classList.toggle('hidden', isGradeMode);
+            gradeHelpBox.classList.toggle('hidden', !isGradeMode);
+            assessmentModeBadge.textContent = isGradeMode
+                ? 'Grade mode selected for this assessment'
+                : (state.supportsGradeMode ? 'Numeric marks mode selected for this assessment' : 'Numeric marks mode');
+            assessmentModeBadge.className = isGradeMode
                 ? 'mt-4 inline-flex rounded-full bg-indigo-100 px-3 py-1 text-xs font-semibold text-indigo-700'
                 : 'mt-4 inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700';
 
-            if (state.usesGradeSystem) {
+            if (isGradeMode) {
                 totalMarksInput.value = '';
                 totalMarksInput.readOnly = true;
                 totalMarksInput.classList.add('bg-gray-100');
@@ -212,7 +217,9 @@
 
         function applyAssessmentModeFromAssignment() {
             const assignment = currentAssignment();
-            state.usesGradeSystem = Boolean(assignment?.uses_grade_system);
+            state.supportsGradeMode = Boolean(assignment?.supports_grade_mode);
+            state.markingMode = 'numeric';
+            state.usesGradeSystem = false;
             if (!state.gradeOptions.length) {
                 state.gradeOptions = [
                     { code: 'A*', label: 'Excellent' },
@@ -227,10 +234,8 @@
                 ];
             }
 
-            if (!state.usesGradeSystem) {
-                totalMarksInput.readOnly = false;
-                totalMarksInput.classList.remove('bg-gray-100');
-            }
+            totalMarksInput.readOnly = false;
+            totalMarksInput.classList.remove('bg-gray-100');
 
             updateAssessmentModeUi();
         }
@@ -467,7 +472,9 @@
                     : 'No students found for selected exam setup.';
                 state.locked = Boolean(result.exam?.locked);
                 state.page = 1;
-                state.usesGradeSystem = Boolean(result.uses_grade_system);
+                state.markingMode = result.marking_mode === 'grade' ? 'grade' : 'numeric';
+                state.usesGradeSystem = state.markingMode === 'grade';
+                state.supportsGradeMode = Boolean(result.supports_grade_mode);
                 state.gradeOptions = Array.isArray(result.grade_options) && result.grade_options.length
                     ? result.grade_options
                     : state.gradeOptions;
@@ -655,6 +662,11 @@
         });
 
         subjectInput.addEventListener('change', () => {
+            applyAssessmentModeFromAssignment();
+            resetSheet();
+        });
+
+        examTypeInput.addEventListener('change', () => {
             applyAssessmentModeFromAssignment();
             resetSheet();
         });

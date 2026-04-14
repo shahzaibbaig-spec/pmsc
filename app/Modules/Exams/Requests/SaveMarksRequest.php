@@ -2,6 +2,7 @@
 
 namespace App\Modules\Exams\Requests;
 
+use App\Services\AssessmentMarkingModeService;
 use App\Services\ClassAssessmentModeService;
 use App\Modules\Exams\Enums\ExamType;
 use Illuminate\Foundation\Http\FormRequest;
@@ -24,8 +25,9 @@ class SaveMarksRequest extends FormRequest
 
     public function rules(): array
     {
+        $markingModeService = app(AssessmentMarkingModeService::class);
         $assessmentModeService = app(ClassAssessmentModeService::class);
-        $usesGradeSystem = $assessmentModeService->classUsesGradeSystem((int) $this->input('class_id'));
+        $usesGradeSystem = $this->usesGradeSystem($markingModeService);
 
         return [
             'session' => ['required', 'string', 'max:20'],
@@ -49,8 +51,10 @@ class SaveMarksRequest extends FormRequest
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator): void {
+            $markingModeService = app(AssessmentMarkingModeService::class);
             $assessmentModeService = app(ClassAssessmentModeService::class);
-            $usesGradeSystem = $assessmentModeService->classUsesGradeSystem((int) $this->input('class_id'));
+            $usesGradeSystem = $this->usesGradeSystem($markingModeService);
+            $totalMarks = is_numeric($this->input('total_marks')) ? (float) $this->input('total_marks') : null;
 
             foreach ((array) $this->input('records', []) as $index => $row) {
                 $grade = $assessmentModeService->normalizeGrade(is_string($row['grade'] ?? null) ? $row['grade'] : null);
@@ -71,7 +75,32 @@ class SaveMarksRequest extends FormRequest
                 if ($grade !== null) {
                     $validator->errors()->add("records.$index.grade", 'Grade is only allowed for PG, Prep, Nursery, and Class 1.');
                 }
+
+                if ($marks !== null && $marks !== '' && $totalMarks !== null && is_numeric($marks) && (float) $marks > $totalMarks) {
+                    $validator->errors()->add("records.$index.obtained_marks", 'Obtained marks must be between 0 and total marks.');
+                }
             }
         });
+    }
+
+    private function usesGradeSystem(AssessmentMarkingModeService $markingModeService): bool
+    {
+        $classId = (int) $this->input('class_id');
+        $subjectId = (int) $this->input('subject_id');
+        $session = trim((string) $this->input('session'));
+        $examType = trim((string) $this->input('exam_type'));
+
+        if ($classId <= 0 || $session === '' || $examType === '') {
+            return false;
+        }
+
+        $mode = $markingModeService->resolveMarkingModeForExamContext(
+            $classId,
+            $session,
+            $examType,
+            $subjectId > 0 ? $subjectId : null
+        );
+
+        return $mode === AssessmentMarkingModeService::MODE_GRADE;
     }
 }

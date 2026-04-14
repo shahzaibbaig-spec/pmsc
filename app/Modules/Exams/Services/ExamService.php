@@ -8,6 +8,7 @@ use App\Models\Student;
 use App\Models\Teacher;
 use App\Models\TeacherAssignment;
 use App\Models\TeacherResultEntryLog;
+use App\Services\AssessmentMarkingModeService;
 use App\Services\ClassAssessmentModeService;
 use App\Services\TeacherPerformanceSyncService;
 use App\Services\TeacherStudentVisibilityService;
@@ -22,6 +23,7 @@ class ExamService
     public function __construct(
         private readonly TeacherStudentVisibilityService $visibilityService,
         private readonly ClassAssessmentModeService $assessmentModeService,
+        private readonly AssessmentMarkingModeService $markingModeService,
         private readonly TeacherPerformanceSyncService $teacherPerformanceSyncService,
     ) {
     }
@@ -80,7 +82,8 @@ class ExamService
                     'subject_id' => $assignment->subject_id,
                     'subject_name' => $assignment->subject?->name ?? '',
                     'session' => $assignment->session,
-                    'uses_grade_system' => $this->assessmentModeService->classUsesGradeSystem($assignment->classRoom),
+                    'supports_grade_mode' => $this->markingModeService->canUseGradeMode($assignment->classRoom),
+                    'uses_grade_system' => $this->markingModeService->canUseGradeMode($assignment->classRoom),
                     'class_students' => $classStudents,
                     'subject_students' => $subjectStudents,
                 ];
@@ -104,7 +107,8 @@ class ExamService
         $students = $this->studentsForExam($teacher->id, $classId, $subjectId, $session);
         $studentIds = $students->pluck('id');
         $requiresSubjectFiltering = $this->visibilityService->classRequiresSubjectFiltering($classId);
-        $usesGradeSystem = $this->assessmentModeService->classUsesGradeSystem($classId);
+        $markingMode = $this->markingModeService->resolveMarkingMode($exam, $classId);
+        $usesGradeSystem = $markingMode === AssessmentMarkingModeService::MODE_GRADE;
 
         $marksMap = collect();
         if ($exam && $studentIds->isNotEmpty()) {
@@ -118,11 +122,14 @@ class ExamService
         return [
             'exam' => [
                 'id' => $exam?->id,
-                'total_marks' => $exam?->total_marks,
+                'total_marks' => $usesGradeSystem ? null : $exam?->total_marks,
+                'marking_mode' => $markingMode,
                 'locked' => $exam ? $this->isExamLocked($exam) : false,
                 'locked_message' => ($exam && $this->isExamLocked($exam)) ? 'This exam is locked. Edit window (7 days) has expired.' : null,
             ],
+            'marking_mode' => $markingMode,
             'uses_grade_system' => $usesGradeSystem,
+            'supports_grade_mode' => $this->markingModeService->canUseGradeMode($classId),
             'grade_options' => $this->assessmentModeService->gradeScale(),
             'students' => $students->map(function (Student $student) use ($marksMap): array {
                 /** @var Mark|null $mark */
@@ -154,7 +161,15 @@ class ExamService
     ): void {
         $teacher = $this->resolveTeacherOrFail($userId);
         $this->ensureTeacherAssignment($teacher->id, $classId, $subjectId, $session);
-        $usesGradeSystem = $this->assessmentModeService->classUsesGradeSystem($classId);
+
+        $existingExam = Exam::query()
+            ->where('class_id', $classId)
+            ->where('subject_id', $subjectId)
+            ->where('session', $session)
+            ->where('exam_type', $examType)
+            ->first();
+        $initialMarkingMode = $this->markingModeService->resolveMarkingMode($existingExam, $classId);
+        $usesGradeSystem = $initialMarkingMode === AssessmentMarkingModeService::MODE_GRADE;
 
         $allowedStudents = $this->studentsForExam($teacher->id, $classId, $subjectId, $session)->keyBy('id');
         if ($allowedStudents->isEmpty()) {
@@ -174,13 +189,17 @@ class ExamService
             throw new RuntimeException('Total marks are required and must be greater than 0.');
         }
 
-        DB::transaction(function () use ($teacher, $classId, $subjectId, $session, $examType, $totalMarks, $records, $usesGradeSystem, $userId): void {
+        DB::transaction(function () use ($teacher, $classId, $subjectId, $session, $examType, $totalMarks, $records, $userId): void {
             $exam = Exam::query()
                 ->where('class_id', $classId)
                 ->where('subject_id', $subjectId)
                 ->where('session', $session)
                 ->where('exam_type', $examType)
+                ->lockForUpdate()
                 ->first();
+
+            $markingMode = $this->markingModeService->resolveMarkingMode($exam, $classId);
+            $usesGradeSystem = $markingMode === AssessmentMarkingModeService::MODE_GRADE;
 
             if (! $exam) {
                 $exam = Exam::query()->create([
@@ -188,6 +207,7 @@ class ExamService
                     'subject_id' => $subjectId,
                     'exam_type' => $examType,
                     'session' => $session,
+                    'marking_mode' => $markingMode,
                     'total_marks' => $usesGradeSystem ? null : $totalMarks,
                     'teacher_id' => $teacher->id,
                 ]);
@@ -196,19 +216,41 @@ class ExamService
                     throw new RuntimeException('Exam is locked after 7 days. You cannot edit marks.');
                 }
 
+                $examUpdates = [];
+                if ((string) $exam->marking_mode !== $markingMode) {
+                    $examUpdates['marking_mode'] = $markingMode;
+                }
+
                 if ($usesGradeSystem) {
                     if ($exam->total_marks !== null) {
-                        $exam->forceFill(['total_marks' => null])->save();
+                        $examUpdates['total_marks'] = null;
                     }
-                } elseif ((int) $exam->total_marks !== $totalMarks) {
-                    throw new RuntimeException('Total marks are already set for this exam and cannot be changed.');
+                } else {
+                    if ($totalMarks === null || $totalMarks <= 0) {
+                        throw new RuntimeException('Total marks are required and must be greater than 0.');
+                    }
+
+                    if ($exam->total_marks === null) {
+                        $examUpdates['total_marks'] = $totalMarks;
+                    } elseif ((int) $exam->total_marks !== $totalMarks) {
+                        throw new RuntimeException('Total marks are already set for this exam and cannot be changed.');
+                    }
+                }
+
+                if ($examUpdates !== []) {
+                    $exam->forceFill($examUpdates)->save();
                 }
             }
 
+            $effectiveTotalMarks = ! $usesGradeSystem
+                ? (int) ($exam->total_marks ?? $totalMarks ?? 0)
+                : null;
+
             foreach ($records as $row) {
                 $studentId = (int) $row['student_id'];
-                $obtainedRaw = $row['obtained_marks'] ?? null;
-                $gradeRaw = $row['grade'] ?? null;
+                $normalizedPayload = $this->markingModeService->validateEntryPayloadByMode((array) $row, $markingMode);
+                $obtainedRaw = $normalizedPayload['obtained_marks'];
+                $grade = $normalizedPayload['grade'];
                 $actionAt = now();
 
                 $existingMark = Mark::query()
@@ -221,8 +263,6 @@ class ExamService
                 }
 
                 if ($usesGradeSystem) {
-                    $grade = $this->assessmentModeService->normalizeGrade(is_string($gradeRaw) ? $gradeRaw : null);
-
                     if ($grade === null) {
                         if ($existingMark) {
                             $this->storeTeacherResultEntryLog([
@@ -299,7 +339,7 @@ class ExamService
                     continue;
                 }
 
-                if ($obtainedRaw === null || $obtainedRaw === '') {
+                if ($obtainedRaw === null) {
                     if ($existingMark) {
                         $this->storeTeacherResultEntryLog([
                             'teacher_id' => (int) $teacher->id,
@@ -326,8 +366,8 @@ class ExamService
                     continue;
                 }
 
-                $obtained = (int) round((float) $obtainedRaw);
-                if ($obtained < 0 || $obtained > (int) $totalMarks) {
+                $obtained = (int) $obtainedRaw;
+                if ($obtained < 0 || $effectiveTotalMarks === null || $effectiveTotalMarks <= 0 || $obtained > $effectiveTotalMarks) {
                     throw new RuntimeException('Obtained marks must be between 0 and total marks.');
                 }
 
@@ -339,7 +379,7 @@ class ExamService
                     [
                         'obtained_marks' => $obtained,
                         'grade' => null,
-                        'total_marks' => $totalMarks,
+                        'total_marks' => $effectiveTotalMarks,
                         'teacher_id' => $teacher->id,
                         'session' => $session,
                     ]

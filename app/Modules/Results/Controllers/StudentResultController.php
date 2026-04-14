@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Mark;
 use App\Models\Student;
 use App\Models\StudentResult;
+use App\Services\AssessmentMarkingModeService;
 use App\Services\ClassAssessmentModeService;
 use App\Modules\Exams\Enums\ExamType;
 use Illuminate\Support\Collection;
@@ -14,9 +15,10 @@ use Illuminate\View\View;
 
 class StudentResultController extends Controller
 {
-    public function __construct(private readonly ClassAssessmentModeService $assessmentModeService)
-    {
-    }
+    public function __construct(
+        private readonly ClassAssessmentModeService $assessmentModeService,
+        private readonly AssessmentMarkingModeService $markingModeService
+    ) {}
 
     public function index(): View
     {
@@ -31,8 +33,6 @@ class StudentResultController extends Controller
             ]);
         }
 
-        $usesGradeSystem = $this->assessmentModeService->classUsesGradeSystem($student->classRoom);
-
         $legacyResults = StudentResult::query()
             ->with('subject:id,name')
             ->where('student_id', (int) $student->id)
@@ -41,11 +41,14 @@ class StudentResultController extends Controller
             ->get();
 
         if ($legacyResults->isNotEmpty()) {
-            $groupedResults = $this->groupLegacyResults($legacyResults, $usesGradeSystem);
+            $groupedResults = $this->groupLegacyResults(
+                $legacyResults,
+                $this->assessmentModeService->classUsesGradeSystem($student->classRoom)
+            );
         } else {
             $marks = Mark::query()
                 ->with([
-                    'exam:id,subject_id,exam_type,session,total_marks,created_at',
+                    'exam:id,class_id,subject_id,exam_type,session,total_marks,marking_mode,created_at',
                     'exam.subject:id,name',
                 ])
                 ->where('student_id', (int) $student->id)
@@ -53,7 +56,7 @@ class StudentResultController extends Controller
                 ->orderByDesc('id')
                 ->get();
 
-            $groupedResults = $this->groupMarksResults($marks, $usesGradeSystem);
+            $groupedResults = $this->groupMarksResults($marks, (int) $student->class_id);
         }
 
         return view('modules.student.results', [
@@ -128,7 +131,7 @@ class StudentResultController extends Controller
             });
     }
 
-    private function groupMarksResults(Collection $marks, bool $usesGradeSystem): Collection
+    private function groupMarksResults(Collection $marks, int $classId): Collection
     {
         return $marks
             ->groupBy(function (Mark $mark): string {
@@ -141,7 +144,15 @@ class StudentResultController extends Controller
 
                 return implode(' | ', $parts);
             })
-            ->map(function (Collection $items) use ($usesGradeSystem): array {
+            ->map(function (Collection $items) use ($classId): array {
+                $first = $items->first();
+                $examType = $first?->exam?->exam_type;
+                $examTypeValue = $examType instanceof ExamType ? $examType->value : (string) $examType;
+                $session = (string) ($first?->session ?: $first?->exam?->session ?: '');
+                $usesGradeSystem = $session !== '' && $examTypeValue !== ''
+                    ? $this->markingModeService->resolveMarkingModeForExamContext($classId, $session, $examTypeValue) === AssessmentMarkingModeService::MODE_GRADE
+                    : false;
+
                 $rows = $items->map(function (Mark $mark) use ($usesGradeSystem): array {
                     $grade = $usesGradeSystem
                         ? $this->assessmentModeService->normalizeGrade($mark->grade)

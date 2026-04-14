@@ -66,7 +66,7 @@
 
             @if ($usesGradeSystem)
                 <div class="rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-800">
-                    This class uses grade-based assessment only. Numeric totals, percentages, and rankings are hidden.
+                    The selected exam scope is configured for grade-based assessment. Numeric totals, percentages, and rankings are hidden.
                 </div>
             @endif
 

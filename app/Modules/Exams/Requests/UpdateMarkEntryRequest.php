@@ -3,6 +3,7 @@
 namespace App\Modules\Exams\Requests;
 
 use App\Models\Mark;
+use App\Services\AssessmentMarkingModeService;
 use App\Services\ClassAssessmentModeService;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -28,8 +29,9 @@ class UpdateMarkEntryRequest extends FormRequest
 
     public function rules(): array
     {
+        $markingModeService = app(AssessmentMarkingModeService::class);
         $assessmentModeService = app(ClassAssessmentModeService::class);
-        $usesGradeSystem = $this->usesGradeSystem($assessmentModeService);
+        $usesGradeSystem = $this->usesGradeSystem($markingModeService);
 
         return [
             'obtained_marks' => $usesGradeSystem
@@ -45,8 +47,9 @@ class UpdateMarkEntryRequest extends FormRequest
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator): void {
+            $markingModeService = app(AssessmentMarkingModeService::class);
             $assessmentModeService = app(ClassAssessmentModeService::class);
-            $usesGradeSystem = $this->usesGradeSystem($assessmentModeService);
+            $usesGradeSystem = $this->usesGradeSystem($markingModeService);
             $mark = $this->route('mark');
 
             if (! $mark instanceof Mark) {
@@ -73,7 +76,7 @@ class UpdateMarkEntryRequest extends FormRequest
         });
     }
 
-    private function usesGradeSystem(ClassAssessmentModeService $assessmentModeService): bool
+    private function usesGradeSystem(AssessmentMarkingModeService $markingModeService): bool
     {
         $mark = $this->route('mark');
 
@@ -81,8 +84,13 @@ class UpdateMarkEntryRequest extends FormRequest
             return false;
         }
 
-        $mark->loadMissing('exam.classRoom:id,name,section');
+        $mark->loadMissing('exam:id,class_id,marking_mode', 'exam.classRoom:id,name,section');
 
-        return $assessmentModeService->classUsesGradeSystem($mark->exam?->classRoom);
+        $mode = $markingModeService->resolveMarkingMode(
+            $mark->exam,
+            $mark->exam?->classRoom ?? $mark->exam?->class_id
+        );
+
+        return $mode === AssessmentMarkingModeService::MODE_GRADE;
     }
 }

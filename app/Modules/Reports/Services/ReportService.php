@@ -9,6 +9,7 @@ use App\Models\SchoolSetting;
 use App\Models\Student;
 use App\Models\TeacherAssignment;
 use App\Models\User;
+use App\Services\AssessmentMarkingModeService;
 use App\Services\ClassAssessmentModeService;
 use App\Modules\Exams\Enums\ExamType;
 use App\Modules\Results\Services\ResultService;
@@ -19,6 +20,7 @@ class ReportService
 {
     public function __construct(
         private readonly ResultService $resultService,
+        private readonly AssessmentMarkingModeService $markingModeService,
         private readonly ClassAssessmentModeService $assessmentModeService
     )
     {
@@ -53,7 +55,7 @@ class ReportService
         $marks = Mark::query()
             ->with([
                 'student:id,name,student_id',
-                'exam:id,class_id,subject_id,exam_type,session',
+                'exam:id,class_id,subject_id,exam_type,session,marking_mode',
             ])
             ->where('session', $session)
             ->whereHas('exam', function ($query) use ($classId, $examType, $session): void {
@@ -68,7 +70,8 @@ class ReportService
         }
 
         $grouped = $marks->groupBy('student_id');
-        $usesGradeSystem = $this->assessmentModeService->classUsesGradeSystem($classRoom);
+        $markingMode = $this->markingModeService->resolveMarkingModeForExamContext($classId, $session, $examType);
+        $usesGradeSystem = $markingMode === AssessmentMarkingModeService::MODE_GRADE;
 
         $students = $grouped->map(function (Collection $rows) use ($usesGradeSystem): array {
             $student = $rows->first()?->student;
@@ -124,6 +127,7 @@ class ReportService
                 'exam_type_label' => $this->examTypeLabel($examType),
                 'generated_at' => now()->toDateString(),
             ],
+            'marking_mode' => $markingMode,
             'uses_grade_system' => $usesGradeSystem,
             'students' => $students,
             'summary' => [

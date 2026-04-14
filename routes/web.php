@@ -675,6 +675,14 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
         ->middleware(['role:Admin|Principal', 'permission:generate_results'])
         ->name('principal.results.publish');
 
+    Route::get('/principal/results/marking-mode', [PrincipalResultController::class, 'markingModeContext'])
+        ->middleware(['role:Admin|Principal', 'permission:generate_results'])
+        ->name('principal.results.marking-mode.context');
+
+    Route::post('/principal/results/marking-mode', [PrincipalResultController::class, 'updateMarkingMode'])
+        ->middleware(['role:Admin|Principal', 'permission:generate_results'])
+        ->name('principal.results.marking-mode.update');
+
     Route::get('/principal/results/card', [PrincipalResultController::class, 'card'])
         ->middleware(['role:Admin|Principal', 'permission:generate_results'])
         ->name('principal.results.card');

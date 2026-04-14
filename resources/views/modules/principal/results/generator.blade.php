@@ -19,6 +19,9 @@
             studentPdfUrl: @js(route('reports.pdf.student-result-card')),
             classCardsPdfUrl: @js(route('reports.pdf.class-result-cards')),
             publishUrl: @js(route('principal.results.publish')),
+            markingModeContextUrl: @js(route('principal.results.marking-mode.context')),
+            updateMarkingModeUrl: @js(route('principal.results.marking-mode.update')),
+            initialMarkingModeContext: @js($markingModeContext),
             csrfToken: @js(csrf_token()),
         })"
         x-init="init()"
@@ -49,6 +52,7 @@
                             <select
                                 id="session_filter"
                                 x-model="session"
+                                @change="onExamContextChanged()"
                                 class="mt-1 block min-h-11 w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                             >
                                 @foreach($sessions as $session)
@@ -62,6 +66,7 @@
                             <select
                                 id="exam_type_filter"
                                 x-model="examType"
+                                @change="onExamContextChanged()"
                                 class="mt-1 block min-h-11 w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                             >
                                 @foreach($examTypes as $examType)
@@ -102,6 +107,66 @@
                             </select>
                             <p class="mt-1 text-xs text-slate-500" x-text="loadingStudents ? 'Loading students...' : `${students.length} student(s)`"></p>
                         </div>
+                    </div>
+
+                    <div class="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                        <div class="flex items-start justify-between gap-3">
+                            <div>
+                                <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Assessment Marking Mode</p>
+                                <p class="mt-1 text-xs text-slate-600">
+                                    Principal/Admin can control whether this class exam scope uses grades or numeric marks.
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                @click="loadMarkingModeContext()"
+                                class="inline-flex min-h-9 items-center rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                :disabled="!classId || markingModeLoading"
+                            >
+                                <span x-text="markingModeLoading ? 'Loading...' : 'Refresh'"></span>
+                            </button>
+                        </div>
+
+                        <div x-show="!classId" class="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                            Select a class first to configure mode.
+                        </div>
+
+                        <template x-if="classId">
+                            <div class="mt-3 space-y-3">
+                                <div x-show="!supportsGradeMode" class="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800">
+                                    This class is not Early Years, so numeric mode remains active.
+                                </div>
+
+                                <div x-show="supportsGradeMode" class="space-y-2">
+                                    <label class="flex items-center gap-2 text-sm text-slate-700">
+                                        <input type="radio" class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" value="numeric" x-model="markingMode">
+                                        <span>Numeric Marks</span>
+                                    </label>
+                                    <label class="flex items-center gap-2 text-sm text-slate-700">
+                                        <input type="radio" class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" value="grade" x-model="markingMode">
+                                        <span>Grades (A* to U)</span>
+                                    </label>
+                                </div>
+
+                                <p class="text-xs text-slate-600">
+                                    Applies to selected session + exam type for all assigned subjects in this class.
+                                </p>
+
+                                <p class="text-xs text-slate-600" x-show="markingModeContext">
+                                    Configured subjects:
+                                    <span class="font-semibold text-slate-900" x-text="`${markingModeContext?.configured_subjects ?? 0}/${markingModeContext?.expected_subjects ?? 0}`"></span>
+                                </p>
+
+                                <button
+                                    type="button"
+                                    @click="saveMarkingMode()"
+                                    class="inline-flex min-h-10 w-full items-center justify-center rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+                                    :disabled="markingModeSaving || !classId || !session || !examType"
+                                >
+                                    <span x-text="markingModeSaving ? 'Saving...' : 'Save Marking Mode'"></span>
+                                </button>
+                            </div>
+                        </template>
                     </div>
 
                     <div class="mt-5 space-y-2">
@@ -219,7 +284,7 @@
                         x-show="result?.uses_grade_system"
                         class="mt-4 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-800"
                     >
-                        Grade-based report for PG, Prep, Nursery, and Class 1. Totals, percentages, and positions are not used.
+                        This exam scope is configured for grade-based reporting. Totals, percentages, and positions are not used.
                     </div>
 
                     <div class="mt-4 overflow-x-auto">
@@ -343,9 +408,17 @@
                     message: '',
                     type: 'success',
                 },
+                markingModeContext: config.initialMarkingModeContext || null,
+                markingMode: (config.initialMarkingModeContext && (config.initialMarkingModeContext.marking_mode === 'grade' || config.initialMarkingModeContext.marking_mode === 'numeric'))
+                    ? config.initialMarkingModeContext.marking_mode
+                    : 'numeric',
+                supportsGradeMode: Boolean(config.initialMarkingModeContext?.supports_grade_mode),
+                markingModeLoading: false,
+                markingModeSaving: false,
 
                 async init() {
                     if (this.classId) {
+                        await this.loadMarkingModeContext();
                         await this.loadStudents();
                         if (this.studentId) {
                             await this.previewResult();
@@ -361,6 +434,29 @@
                 setStatus(message, type = 'success') {
                     this.status.message = message;
                     this.status.type = type;
+                },
+
+                resetMarkingModeContext() {
+                    this.markingModeContext = null;
+                    this.supportsGradeMode = false;
+                    this.markingMode = 'numeric';
+                },
+
+                applyMarkingModeContext(context) {
+                    this.markingModeContext = context || null;
+                    this.supportsGradeMode = Boolean(context?.supports_grade_mode);
+
+                    if (!this.supportsGradeMode) {
+                        this.markingMode = 'numeric';
+                        return;
+                    }
+
+                    if (context?.marking_mode === 'grade' || context?.marking_mode === 'numeric') {
+                        this.markingMode = context.marking_mode;
+                        return;
+                    }
+
+                    this.markingMode = 'numeric';
                 },
 
                 canRunClassAction() {
@@ -385,9 +481,23 @@
                     this.previewCardUrl = '';
                     this.studentPdfUrl = '';
                     if (this.classId) {
+                        this.loadMarkingModeContext();
                         this.loadStudents();
                     } else {
                         this.students = [];
+                        this.resetMarkingModeContext();
+                    }
+                },
+
+                onExamContextChanged() {
+                    this.result = null;
+                    this.previewCardUrl = '';
+                    this.studentPdfUrl = '';
+
+                    if (this.classId) {
+                        this.loadMarkingModeContext();
+                    } else {
+                        this.resetMarkingModeContext();
                     }
                 },
 
@@ -395,6 +505,83 @@
                     this.result = null;
                     this.previewCardUrl = '';
                     this.studentPdfUrl = '';
+                },
+
+                async loadMarkingModeContext() {
+                    if (!this.classId || !this.session || !this.examType) {
+                        this.resetMarkingModeContext();
+                        return;
+                    }
+
+                    this.markingModeLoading = true;
+                    try {
+                        const params = new URLSearchParams({
+                            class_id: String(this.classId),
+                            session: String(this.session),
+                            exam_type: String(this.examType),
+                        });
+
+                        const response = await fetch(`${config.markingModeContextUrl}?${params.toString()}`, {
+                            headers: { Accept: 'application/json' },
+                        });
+                        const result = await response.json();
+
+                        if (!response.ok) {
+                            this.resetMarkingModeContext();
+                            this.setStatus(result.message || 'Failed to load marking mode context.', 'error');
+                            return;
+                        }
+
+                        this.applyMarkingModeContext(result);
+                    } catch (error) {
+                        this.resetMarkingModeContext();
+                        this.setStatus('Unexpected error while loading marking mode context.', 'error');
+                    } finally {
+                        this.markingModeLoading = false;
+                    }
+                },
+
+                async saveMarkingMode() {
+                    this.clearStatus();
+                    if (!this.classId || !this.session || !this.examType) {
+                        this.setStatus('Class, session, and exam type are required to configure marking mode.', 'error');
+                        return;
+                    }
+
+                    if (!this.supportsGradeMode) {
+                        this.markingMode = 'numeric';
+                    }
+
+                    this.markingModeSaving = true;
+                    try {
+                        const response = await fetch(config.updateMarkingModeUrl, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                Accept: 'application/json',
+                                'X-CSRF-TOKEN': config.csrfToken,
+                            },
+                            body: JSON.stringify({
+                                class_id: Number(this.classId),
+                                session: String(this.session),
+                                exam_type: String(this.examType),
+                                marking_mode: this.supportsGradeMode ? this.markingMode : 'numeric',
+                            }),
+                        });
+
+                        const result = await response.json();
+                        if (!response.ok) {
+                            this.setStatus(result.message || 'Failed to update marking mode.', 'error');
+                            return;
+                        }
+
+                        await this.loadMarkingModeContext();
+                        this.setStatus(result.message || 'Assessment marking mode saved successfully.');
+                    } catch (error) {
+                        this.setStatus('Unexpected error while saving marking mode.', 'error');
+                    } finally {
+                        this.markingModeSaving = false;
+                    }
                 },
 
                 async loadStudents() {

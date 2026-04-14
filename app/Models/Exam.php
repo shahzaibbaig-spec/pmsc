@@ -14,6 +14,7 @@ class Exam extends Model
         'subject_id',
         'exam_type',
         'session',
+        'marking_mode',
         'total_marks',
         'teacher_id',
         'locked_at',

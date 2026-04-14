@@ -7,6 +7,7 @@ use App\Models\MarkEditLog;
 use App\Models\Teacher;
 use App\Models\TeacherResultEntryLog;
 use App\Models\User;
+use App\Services\AssessmentMarkingModeService;
 use App\Services\ClassAssessmentModeService;
 use App\Services\TeacherPerformanceSyncService;
 use App\Modules\Exams\Enums\ExamType;
@@ -20,6 +21,7 @@ use RuntimeException;
 class TeacherMarkAuditService
 {
     public function __construct(
+        private readonly AssessmentMarkingModeService $markingModeService,
         private readonly ClassAssessmentModeService $assessmentModeService,
         private readonly TeacherPerformanceSyncService $teacherPerformanceSyncService
     ) {
@@ -61,12 +63,16 @@ class TeacherMarkAuditService
         $mark->loadMissing([
             'teacher.user:id,name',
             'student:id,name',
-            'exam:id,class_id,subject_id,exam_type,total_marks',
+            'exam:id,class_id,subject_id,exam_type,total_marks,marking_mode',
             'exam.classRoom:id,name,section',
             'exam.subject:id,name',
         ]);
 
-        $usesGradeSystem = $this->assessmentModeService->classUsesGradeSystem($mark->exam?->classRoom);
+        $markingMode = $this->markingModeService->resolveMarkingMode(
+            $mark->exam,
+            $mark->exam?->classRoom ?? $mark->exam?->class_id
+        );
+        $usesGradeSystem = $markingMode === AssessmentMarkingModeService::MODE_GRADE;
         $oldMarks = $mark->obtained_marks !== null ? (int) $mark->obtained_marks : null;
         $oldGrade = $this->assessmentModeService->normalizeGrade($mark->grade);
         $editedAt = now();
@@ -183,12 +189,16 @@ class TeacherMarkAuditService
         $mark->loadMissing([
             'teacher.user:id,name',
             'student:id,name',
-            'exam:id,class_id,subject_id,exam_type,total_marks',
+            'exam:id,class_id,subject_id,exam_type,total_marks,marking_mode',
             'exam.classRoom:id,name,section',
             'exam.subject:id,name',
         ]);
 
-        $usesGradeSystem = $this->assessmentModeService->classUsesGradeSystem($mark->exam?->classRoom);
+        $markingMode = $this->markingModeService->resolveMarkingMode(
+            $mark->exam,
+            $mark->exam?->classRoom ?? $mark->exam?->class_id
+        );
+        $usesGradeSystem = $markingMode === AssessmentMarkingModeService::MODE_GRADE;
         $oldMarks = $mark->obtained_marks !== null ? (int) $mark->obtained_marks : null;
         $oldGrade = $this->assessmentModeService->normalizeGrade($mark->grade);
         $editedAt = now();
@@ -257,7 +267,7 @@ class TeacherMarkAuditService
         $mark->refresh()->loadMissing([
             'teacher.user:id,name',
             'student:id,name',
-            'exam:id,class_id,subject_id,exam_type,total_marks',
+            'exam:id,class_id,subject_id,exam_type,total_marks,marking_mode',
             'exam.classRoom:id,name,section',
             'exam.subject:id,name',
         ]);

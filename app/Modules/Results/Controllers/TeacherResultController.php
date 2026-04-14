@@ -9,6 +9,7 @@ use App\Models\SchoolClass;
 use App\Models\Subject;
 use App\Models\Teacher;
 use App\Models\TeacherAssignment;
+use App\Services\AssessmentMarkingModeService;
 use App\Services\ClassAssessmentModeService;
 use App\Services\TeacherStudentVisibilityService;
 use App\Modules\Exams\Enums\ExamType;
@@ -19,6 +20,7 @@ class TeacherResultController extends Controller
 {
     public function __construct(
         private readonly TeacherStudentVisibilityService $visibilityService,
+        private readonly AssessmentMarkingModeService $markingModeService,
         private readonly ClassAssessmentModeService $assessmentModeService
     ) {
     }
@@ -82,9 +84,14 @@ class TeacherResultController extends Controller
         $isClassTeacherView = $selectedClass
             ? (int) ($selectedClass->class_teacher_id ?? 0) === (int) $teacher->id
             : false;
-        $usesGradeSystem = $selectedClass
-            ? $this->assessmentModeService->classUsesGradeSystem($selectedClass)
-            : false;
+        $markingMode = $selectedClass
+            ? $this->markingModeService->resolveMarkingModeForExamContext(
+                (int) $selectedClass->id,
+                $selectedSession,
+                $selectedExamType
+            )
+            : AssessmentMarkingModeService::MODE_NUMERIC;
+        $usesGradeSystem = $markingMode === AssessmentMarkingModeService::MODE_GRADE;
 
         $teacherSubjectIds = [];
         $mySubjectResults = ['subjects' => [], 'rows' => [], 'total_rows' => 0];
@@ -125,6 +132,7 @@ class TeacherResultController extends Controller
                     (int) $selectedClassId,
                     $selectedSession,
                     $selectedExamType,
+                    $markingMode,
                     $teacherSubjectIds,
                     $teacherSubjectIds,
                     $selectedClassRequiresFiltering
@@ -135,6 +143,7 @@ class TeacherResultController extends Controller
                     (int) $selectedClassId,
                     $selectedSession,
                     $selectedExamType,
+                    $markingMode,
                     $classSubjectIds,
                     $teacherSubjectIds,
                     $selectedClassRequiresFiltering
@@ -148,6 +157,7 @@ class TeacherResultController extends Controller
                         (int) $selectedClassId,
                         $selectedSession,
                         $selectedExamType,
+                        $markingMode,
                         $teacherSubjectIds,
                         $teacherSubjectIds,
                         $selectedClassRequiresFiltering
@@ -165,6 +175,7 @@ class TeacherResultController extends Controller
             'selectedSession' => $selectedSession,
             'selectedClassId' => $selectedClassId,
             'selectedExamType' => $selectedExamType,
+            'markingMode' => $markingMode,
             'isClassTeacherView' => $isClassTeacherView,
             'usesGradeSystem' => $usesGradeSystem,
             'gradeOptions' => $this->assessmentModeService->gradeScale(),
@@ -251,6 +262,7 @@ class TeacherResultController extends Controller
         int $classId,
         string $session,
         string $examType,
+        string $markingMode,
         array $subjectIds,
         array $editableSubjectIds,
         bool $requiresSubjectFiltering = false
@@ -261,13 +273,14 @@ class TeacherResultController extends Controller
             ->unique()
             ->values()
             ->all();
-        $usesGradeSystem = $this->assessmentModeService->classUsesGradeSystem($classId);
+        $usesGradeSystem = $markingMode === AssessmentMarkingModeService::MODE_GRADE;
 
         if ($normalizedSubjectIds === []) {
             return [
                 'subjects' => [],
                 'rows' => [],
                 'total_rows' => 0,
+                'marking_mode' => $markingMode,
                 'uses_grade_system' => $usesGradeSystem,
             ];
         }
@@ -385,6 +398,7 @@ class TeacherResultController extends Controller
             'subjects' => $subjects,
             'rows' => $rows->all(),
             'total_rows' => $rows->count(),
+            'marking_mode' => $markingMode,
             'uses_grade_system' => $usesGradeSystem,
         ];
     }

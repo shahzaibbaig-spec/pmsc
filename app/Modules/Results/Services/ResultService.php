@@ -8,6 +8,7 @@ use App\Models\SchoolSetting;
 use App\Models\Student;
 use App\Models\TeacherAssignment;
 use App\Models\User;
+use App\Services\AssessmentMarkingModeService;
 use App\Services\ClassAssessmentModeService;
 use App\Notifications\ResultsPublishedNotification;
 use App\Modules\Exams\Enums\ExamType;
@@ -18,9 +19,10 @@ use RuntimeException;
 
 class ResultService
 {
-    public function __construct(private readonly ClassAssessmentModeService $assessmentModeService)
-    {
-    }
+    public function __construct(
+        private readonly ClassAssessmentModeService $assessmentModeService,
+        private readonly AssessmentMarkingModeService $markingModeService
+    ) {}
 
     public function generateStudentResult(int $studentId, string $session, string $examType): array
     {
@@ -34,7 +36,7 @@ class ResultService
 
         $marks = Mark::query()
             ->with([
-                'exam:id,subject_id,exam_type,session',
+                'exam:id,class_id,subject_id,exam_type,session,marking_mode',
                 'exam.subject:id,name',
             ])
             ->where('student_id', $studentId)
@@ -49,7 +51,12 @@ class ResultService
             throw new RuntimeException('No marks found for selected student, session, and exam type.');
         }
 
-        $usesGradeSystem = $this->assessmentModeService->classUsesGradeSystem($student->classRoom);
+        $markingMode = $this->markingModeService->resolveMarkingModeForExamContext(
+            (int) $student->class_id,
+            $session,
+            $examType
+        );
+        $usesGradeSystem = $markingMode === AssessmentMarkingModeService::MODE_GRADE;
 
         $rows = $marks->map(function (Mark $mark) use ($usesGradeSystem): array {
             $subjectName = $mark->exam?->subject?->name ?? 'Subject';
@@ -107,6 +114,7 @@ class ResultService
                 'generated_at' => now()->toDateString(),
             ],
             'uses_grade_system' => $usesGradeSystem,
+            'marking_mode' => $markingMode,
             'subjects' => $rows->all(),
             'summary' => $summary,
             'signatures' => [
@@ -150,6 +158,7 @@ class ResultService
         }
 
         $setting = $this->schoolSetting();
+        $markingMode = $this->markingModeService->resolveMarkingModeForExamContext($classId, $session, $examType);
 
         return [
             'school' => [
@@ -166,7 +175,8 @@ class ResultService
                 'exam_type_label' => $this->examTypeLabel($examType),
                 'generated_at' => now()->toDateString(),
             ],
-            'uses_grade_system' => $this->assessmentModeService->classUsesGradeSystem($classRoom),
+            'uses_grade_system' => $markingMode === AssessmentMarkingModeService::MODE_GRADE,
+            'marking_mode' => $markingMode,
             'summary' => [
                 'students_total' => $students->count(),
                 'cards_generated' => count($cards),

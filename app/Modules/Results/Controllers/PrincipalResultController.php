@@ -7,7 +7,9 @@ use App\Models\FeeBlockOverride;
 use App\Models\Mark;
 use App\Models\SchoolClass;
 use App\Models\Student;
+use App\Services\AssessmentMarkingModeService;
 use App\Modules\Exams\Enums\ExamType;
+use App\Modules\Results\Requests\ConfigureAssessmentMarkingModeRequest;
 use App\Modules\Results\Requests\PublishResultsRequest;
 use App\Modules\Results\Requests\StudentResultPreviewRequest;
 use App\Modules\Fees\Services\FeeDefaulterService;
@@ -23,6 +25,7 @@ class PrincipalResultController extends Controller
     public function __construct(
         private readonly ResultService $resultService,
         private readonly FeeDefaulterService $feeDefaulterService,
+        private readonly AssessmentMarkingModeService $markingModeService,
     )
     {
     }
@@ -57,6 +60,18 @@ class PrincipalResultController extends Controller
         if ($defaultClassId !== null && ! $classes->contains('id', $defaultClassId)) {
             $defaultClassId = null;
         }
+        $markingModeContext = null;
+        if ($defaultClassId !== null) {
+            try {
+                $markingModeContext = $this->markingModeService->classExamModeContext(
+                    (int) $defaultClassId,
+                    $session,
+                    $examType
+                );
+            } catch (RuntimeException) {
+                $markingModeContext = null;
+            }
+        }
 
         return view('modules.principal.results.generator', [
             'classes' => $classes,
@@ -67,6 +82,7 @@ class PrincipalResultController extends Controller
             'defaultClassId' => $defaultClassId,
             'defaultStudentId' => $request->filled('student_id') ? (int) $request->input('student_id') : null,
             'hasMarks' => Mark::query()->exists(),
+            'markingModeContext' => $markingModeContext,
         ]);
     }
 
@@ -149,6 +165,46 @@ class PrincipalResultController extends Controller
         return response()->json([
             'message' => 'Results published notifications sent.',
             'summary' => $payload,
+        ]);
+    }
+
+    public function markingModeContext(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'class_id' => ['required', 'integer', 'exists:school_classes,id'],
+            'session' => ['required', 'string', 'max:20'],
+            'exam_type' => ['required', 'string', 'in:'.implode(',', array_column(ExamType::options(), 'value'))],
+        ]);
+
+        try {
+            $context = $this->markingModeService->classExamModeContext(
+                (int) $validated['class_id'],
+                (string) $validated['session'],
+                (string) $validated['exam_type']
+            );
+        } catch (RuntimeException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 422);
+        }
+
+        return response()->json($context);
+    }
+
+    public function updateMarkingMode(ConfigureAssessmentMarkingModeRequest $request): JsonResponse
+    {
+        try {
+            $result = $this->markingModeService->configureClassExamMarkingMode(
+                (int) $request->input('class_id'),
+                $request->string('session')->toString(),
+                $request->string('exam_type')->toString(),
+                $request->string('marking_mode')->toString()
+            );
+        } catch (RuntimeException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 422);
+        }
+
+        return response()->json([
+            'message' => 'Assessment marking mode updated successfully for the selected class and exam scope.',
+            'summary' => $result,
         ]);
     }
 

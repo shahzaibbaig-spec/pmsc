@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Mark;
 use App\Models\SchoolClass;
 use App\Models\Subject;
+use App\Services\AssessmentMarkingModeService;
 use App\Services\ClassAssessmentModeService;
 use App\Services\TeacherStudentVisibilityService;
 use App\Modules\Exams\Enums\ExamType;
@@ -22,6 +23,7 @@ class TeacherMarkEntryController extends Controller
     public function __construct(
         private readonly TeacherMarkAuditService $auditService,
         private readonly TeacherStudentVisibilityService $visibilityService,
+        private readonly AssessmentMarkingModeService $markingModeService,
         private readonly ClassAssessmentModeService $assessmentModeService
     ) {}
 
@@ -56,7 +58,7 @@ class TeacherMarkEntryController extends Controller
         $entriesQuery = Mark::query()
             ->with([
                 'student:id,student_id,name',
-                'exam:id,class_id,subject_id,exam_type',
+                'exam:id,class_id,subject_id,exam_type,marking_mode',
                 'exam.classRoom:id,name,section',
                 'exam.subject:id,name',
             ])
@@ -89,7 +91,11 @@ class TeacherMarkEntryController extends Controller
 
         $entries = $entriesQuery->paginate(15)->withQueryString();
         $entries->getCollection()->transform(function (Mark $mark): Mark {
-            $usesGradeSystem = $this->assessmentModeService->classUsesGradeSystem($mark->exam?->classRoom);
+            $markingMode = $this->markingModeService->resolveMarkingMode(
+                $mark->exam,
+                $mark->exam?->classRoom ?? $mark->exam?->class_id
+            );
+            $usesGradeSystem = $markingMode === AssessmentMarkingModeService::MODE_GRADE;
 
             $mark->setAttribute('can_edit', $this->auditService->canEdit($mark));
             $mark->setAttribute('uses_grade_system', $usesGradeSystem);
@@ -167,12 +173,16 @@ class TeacherMarkEntryController extends Controller
 
         $mark->load([
             'student:id,student_id,name',
-            'exam:id,class_id,subject_id,exam_type,total_marks',
+            'exam:id,class_id,subject_id,exam_type,total_marks,marking_mode',
             'exam.classRoom:id,name,section',
             'exam.subject:id,name',
         ]);
 
-        $usesGradeSystem = $this->assessmentModeService->classUsesGradeSystem($mark->exam?->classRoom);
+        $markingMode = $this->markingModeService->resolveMarkingMode(
+            $mark->exam,
+            $mark->exam?->classRoom ?? $mark->exam?->class_id
+        );
+        $usesGradeSystem = $markingMode === AssessmentMarkingModeService::MODE_GRADE;
 
         return view('modules.teacher.marks.edit', [
             'mark' => $mark,

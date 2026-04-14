@@ -7,6 +7,7 @@ use App\Models\Exam;
 use App\Models\Mark;
 use App\Models\SchoolClass;
 use App\Models\Student;
+use App\Services\AssessmentMarkingModeService;
 use App\Services\ClassAssessmentModeService;
 use App\Modules\Exams\Enums\ExamType;
 use RuntimeException;
@@ -15,6 +16,7 @@ class ResultSheetService
 {
     public function __construct(
         private readonly ResultService $resultService,
+        private readonly AssessmentMarkingModeService $markingModeService,
         private readonly ClassAssessmentModeService $assessmentModeService
     )
     {
@@ -55,13 +57,14 @@ class ResultSheetService
             ->where('session', $session)
             ->where('exam_type', $resolvedExamType)
             ->orderBy('subject_id')
-            ->get(['id', 'subject_id', 'exam_type', 'session', 'total_marks']);
+            ->get(['id', 'subject_id', 'exam_type', 'session', 'total_marks', 'marking_mode']);
 
         if ($exams->isEmpty()) {
             throw new RuntimeException('No exams found for selected class and session.');
         }
 
-        $usesGradeSystem = $this->assessmentModeService->classUsesGradeSystem($classRoom);
+        $markingMode = $this->markingModeService->resolveMarkingModeForExamContext($classId, $session, $resolvedExamType);
+        $usesGradeSystem = $markingMode === AssessmentMarkingModeService::MODE_GRADE;
 
         $subjects = $exams->map(function (Exam $exam) use ($usesGradeSystem): array {
             return [
@@ -173,6 +176,7 @@ class ResultSheetService
                 'exam_type_label' => $this->examTypeLabel($resolvedExamType),
                 'generated_at' => now()->toDateString(),
             ],
+            'marking_mode' => $markingMode,
             'uses_grade_system' => $usesGradeSystem,
             'subjects' => $subjects->all(),
             'rows' => $rankedRows,
