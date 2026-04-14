@@ -4,6 +4,7 @@ namespace App\Modules\Fees\Services;
 
 use App\Models\FeeBlockOverride;
 use App\Models\FeeChallan;
+use App\Models\FeeChallanItem;
 use App\Models\FeeDefaulter;
 use App\Models\FeeInstallment;
 use App\Models\FeeReminder;
@@ -274,12 +275,21 @@ class FeeDefaulterService
         }
 
         if ($this->arrearsTableExists()) {
+            $linkedArrearIds = $this->linkedArrearIdsFromOverduePendingChallans(
+                $resolvedSession,
+                $asOfDate,
+                $studentId
+            );
+
             $arrears = StudentArrear::query()
                 ->where('student_id', $studentId)
                 ->whereIn('status', [
                     FeeManagementService::ARREAR_STATUS_PENDING,
                     FeeManagementService::ARREAR_STATUS_PARTIAL,
                 ])
+                ->when($linkedArrearIds->isNotEmpty(), function ($query) use ($linkedArrearIds): void {
+                    $query->whereNotIn('id', $linkedArrearIds->all());
+                })
                 ->where(function ($query) use ($resolvedSession): void {
                     $query->whereNull('session')
                         ->orWhere('session', $resolvedSession);
@@ -591,11 +601,16 @@ class FeeDefaulterService
         }
 
         if ($this->arrearsTableExists()) {
+            $linkedArrearIds = $this->linkedArrearIdsFromOverduePendingChallans($session, $asOfDate);
+
             $arrears = StudentArrear::query()
                 ->whereIn('status', [
                     FeeManagementService::ARREAR_STATUS_PENDING,
                     FeeManagementService::ARREAR_STATUS_PARTIAL,
                 ])
+                ->when($linkedArrearIds->isNotEmpty(), function ($query) use ($linkedArrearIds): void {
+                    $query->whereNotIn('id', $linkedArrearIds->all());
+                })
                 ->where(function ($query) use ($session): void {
                     $query->whereNull('session')
                         ->orWhere('session', $session);
@@ -700,5 +715,42 @@ class FeeDefaulterService
     private function arrearsTableExists(): bool
     {
         return Schema::hasTable('student_arrears');
+    }
+
+    private function challanItemLinkColumnsExist(): bool
+    {
+        if (! Schema::hasTable('fee_challan_items')) {
+            return false;
+        }
+
+        return Schema::hasColumn('fee_challan_items', 'student_arrear_id');
+    }
+
+    /**
+     * @return Collection<int, int>
+     */
+    private function linkedArrearIdsFromOverduePendingChallans(
+        string $session,
+        Carbon $asOfDate,
+        ?int $studentId = null
+    ): Collection {
+        if (! $this->challanItemLinkColumnsExist()) {
+            return collect();
+        }
+
+        return FeeChallanItem::query()
+            ->join('fee_challans', 'fee_challans.id', '=', 'fee_challan_items.fee_challan_id')
+            ->where('fee_challans.session', $session)
+            ->whereIn('fee_challans.status', $this->feeManagementService->pendingStatuses())
+            ->whereDate('fee_challans.due_date', '<', $asOfDate->toDateString())
+            ->when($studentId !== null, function ($query) use ($studentId): void {
+                $query->where('fee_challans.student_id', $studentId);
+            })
+            ->whereNotNull('fee_challan_items.student_arrear_id')
+            ->pluck('fee_challan_items.student_arrear_id')
+            ->map(fn ($id): int => (int) $id)
+            ->filter(fn (int $id): bool => $id > 0)
+            ->unique()
+            ->values();
     }
 }

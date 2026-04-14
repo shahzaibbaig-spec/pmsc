@@ -520,12 +520,25 @@ class FeeManagementService
 
         $arrearsDue = 0.0;
         if ($this->studentArrearTableExists()) {
+            $linkedArrearIds = collect();
+            if ($this->challanItemLinkColumnsExist()) {
+                $linkedArrearIds = $this->pendingChallanLinkedArrearIdsByStudent(collect([$studentId]))
+                    ->flatten()
+                    ->map(fn ($id): int => (int) $id)
+                    ->filter(fn (int $id): bool => $id > 0)
+                    ->unique()
+                    ->values();
+            }
+
             $arrears = StudentArrear::query()
                 ->where('student_id', $studentId)
                 ->whereIn('status', [
                     self::ARREAR_STATUS_PENDING,
                     self::ARREAR_STATUS_PARTIAL,
                 ])
+                ->when($linkedArrearIds->isNotEmpty(), function ($query) use ($linkedArrearIds): void {
+                    $query->whereNotIn('id', $linkedArrearIds->all());
+                })
                 ->when($session !== null && $session !== '', function ($query) use ($session): void {
                     $query->where(function ($nested) use ($session): void {
                         $nested->whereNull('session')
@@ -783,13 +796,27 @@ class FeeManagementService
         }
 
         $manualArrearsByStudent = collect();
+        $alreadyLinkedManualArrearIds = collect();
         if ($this->studentArrearTableExists()) {
+            if ($this->challanItemLinkColumnsExist()) {
+                $alreadyLinkedManualArrearIds = $this
+                    ->pendingChallanLinkedArrearIdsByStudent($studentIds, $session, $month)
+                    ->flatten()
+                    ->map(fn ($id): int => (int) $id)
+                    ->filter(fn (int $id): bool => $id > 0)
+                    ->unique()
+                    ->values();
+            }
+
             $manualArrearsByStudent = StudentArrear::query()
                 ->whereIn('student_id', $studentIds)
                 ->whereIn('status', [
                     self::ARREAR_STATUS_PENDING,
                     self::ARREAR_STATUS_PARTIAL,
                 ])
+                ->when($alreadyLinkedManualArrearIds->isNotEmpty(), function ($query) use ($alreadyLinkedManualArrearIds): void {
+                    $query->whereNotIn('id', $alreadyLinkedManualArrearIds->all());
+                })
                 ->where(function ($query) use ($session): void {
                     $query->whereNull('session')
                         ->orWhere('session', $session);
@@ -1780,6 +1807,58 @@ class FeeManagementService
     private function studentArrearTableExists(): bool
     {
         return Schema::hasTable('student_arrears');
+    }
+
+    /**
+     * @param Collection<int, int|string> $studentIds
+     * @return Collection<int, Collection<int, int>>
+     */
+    private function pendingChallanLinkedArrearIdsByStudent(
+        Collection $studentIds,
+        ?string $excludeSession = null,
+        ?string $excludeMonth = null
+    ): Collection {
+        if ($studentIds->isEmpty() || ! $this->challanItemLinkColumnsExist()) {
+            return collect();
+        }
+
+        $studentIdValues = $studentIds
+            ->map(fn ($id): int => (int) $id)
+            ->filter(fn (int $id): bool => $id > 0)
+            ->unique()
+            ->values();
+
+        if ($studentIdValues->isEmpty()) {
+            return collect();
+        }
+
+        $rows = FeeChallanItem::query()
+            ->join('fee_challans', 'fee_challans.id', '=', 'fee_challan_items.fee_challan_id')
+            ->whereIn('fee_challans.student_id', $studentIdValues->all())
+            ->whereIn('fee_challans.status', $this->pendingStatuses())
+            ->whereNotNull('fee_challan_items.student_arrear_id')
+            ->when(
+                trim((string) $excludeSession) !== '' && trim((string) $excludeMonth) !== '',
+                function ($query) use ($excludeSession, $excludeMonth): void {
+                    $query->where(function ($nested) use ($excludeSession, $excludeMonth): void {
+                        $nested->where('fee_challans.session', '!=', $excludeSession)
+                            ->orWhere('fee_challans.month', '!=', $excludeMonth);
+                    });
+                }
+            )
+            ->get([
+                'fee_challans.student_id as student_id',
+                'fee_challan_items.student_arrear_id as student_arrear_id',
+            ]);
+
+        return $rows
+            ->groupBy('student_id')
+            ->map(fn (Collection $items): Collection => $items
+                ->pluck('student_arrear_id')
+                ->map(fn ($id): int => (int) $id)
+                ->filter(fn (int $id): bool => $id > 0)
+                ->unique()
+                ->values());
     }
 
     private function challanItemLinkColumnsExist(): bool
