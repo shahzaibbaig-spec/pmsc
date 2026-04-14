@@ -14,6 +14,16 @@
                         Bulk Print ACRs
                     </a>
                 @endcan
+                @can('export_teacher_acr_summary')
+                    <form method="POST" action="{{ route('principal.acr.export-summary-excel') }}">
+                        @csrf
+                        <input type="hidden" name="session" value="{{ $selectedSession }}">
+                        <input type="hidden" name="status" value="{{ $selectedStatus ?: 'all' }}">
+                        <button type="submit" class="inline-flex min-h-10 items-center rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-100">
+                            Export Summary Excel
+                        </button>
+                    </form>
+                @endcan
             </div>
         </div>
     </x-slot>

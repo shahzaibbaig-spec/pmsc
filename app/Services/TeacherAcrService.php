@@ -342,6 +342,72 @@ class TeacherAcrService
         ];
     }
 
+    /**
+     * @return array<string, mixed>
+     */
+    public function buildBulkAcrSummaryExport(string $session, string $status = 'all'): array
+    {
+        $resolvedSession = $this->resolveSession($session);
+        $resolvedStatus = $this->normalizeBulkStatus($status);
+
+        $acrs = TeacherAcr::query()
+            ->with([
+                'teacher:id,teacher_id,user_id,designation,employee_code',
+                'teacher.user:id,name',
+                'metric',
+            ])
+            ->where('session', $resolvedSession)
+            ->when(
+                $resolvedStatus !== 'all',
+                fn ($query) => $query->where('status', $resolvedStatus)
+            )
+            ->get()
+            ->sort(function (TeacherAcr $left, TeacherAcr $right): int {
+                return strcasecmp($this->teacherName($left->teacher), $this->teacherName($right->teacher));
+            })
+            ->values();
+
+        $rows = $acrs
+            ->map(function (TeacherAcr $acr): array {
+                $metric = $acr->metric;
+
+                return [
+                    'teacher_name' => $this->teacherName($acr->teacher),
+                    'employee_code' => (string) ($acr->teacher?->employee_code ?? ''),
+                    'designation' => (string) ($acr->teacher?->designation ?? ''),
+                    'session' => (string) $acr->session,
+                    'attendance_score' => round((float) $acr->attendance_score, 2),
+                    'academic_score' => round((float) $acr->academic_score, 2),
+                    'improvement_score' => round((float) $acr->improvement_score, 2),
+                    'conduct_score' => round((float) $acr->conduct_score, 2),
+                    'pd_score' => round((float) $acr->pd_score, 2),
+                    'principal_score' => round((float) $acr->principal_score, 2),
+                    'total_score' => round((float) $acr->total_score, 2),
+                    'final_grade' => (string) ($acr->final_grade ?? ''),
+                    'status' => ucfirst((string) $acr->status),
+                    'teacher_cgpa' => $metric?->teacher_cgpa !== null ? round((float) $metric->teacher_cgpa, 2) : null,
+                    'pass_percentage' => $metric?->pass_percentage !== null ? round((float) $metric->pass_percentage, 2) : null,
+                    'student_improvement_percentage' => $metric?->student_improvement_percentage !== null ? round((float) $metric->student_improvement_percentage, 2) : null,
+                    'trainings_attended' => (int) ($metric?->trainings_attended ?? 0),
+                    'strengths' => (string) ($acr->strengths ?? ''),
+                    'areas_for_improvement' => (string) ($acr->areas_for_improvement ?? ''),
+                    'recommendations' => (string) ($acr->recommendations ?? ''),
+                    'reviewed_at' => $acr->reviewed_at?->format('Y-m-d H:i:s') ?? '',
+                    'finalized_at' => $acr->finalized_at?->format('Y-m-d H:i:s') ?? '',
+                ];
+            })
+            ->all();
+
+        return [
+            'session' => $resolvedSession,
+            'status' => $resolvedStatus,
+            'status_label' => $resolvedStatus === 'all' ? 'All' : ucfirst($resolvedStatus),
+            'generated_at' => now(),
+            'total' => count($rows),
+            'rows' => $rows,
+        ];
+    }
+
     private function printablePayloadFromAcr(TeacherAcr $acr, ?SchoolSetting $school = null): array
     {
         $school ??= SchoolSetting::cached();

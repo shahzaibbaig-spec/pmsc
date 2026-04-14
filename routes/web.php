@@ -604,6 +604,10 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
         ->middleware(['role:Admin|Principal', 'permission:bulk_print_teacher_acr'])
         ->name('principal.acr.bulk-print');
 
+    Route::post('/principal/acr/export-summary-excel', [TeacherAcrController::class, 'exportSummaryExcel'])
+        ->middleware(['role:Admin|Principal', 'permission:export_teacher_acr_summary'])
+        ->name('principal.acr.export-summary-excel');
+
     Route::get('/principal/acr/{acr}', [TeacherAcrController::class, 'show'])
         ->middleware(['role:Admin|Principal', 'permission:view_teacher_acr'])
         ->whereNumber('acr')

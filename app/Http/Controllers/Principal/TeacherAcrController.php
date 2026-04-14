@@ -2,19 +2,23 @@
 
 namespace App\Http\Controllers\Principal;
 
+use App\Exports\TeacherAcrSummaryExport;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Principal\TeacherAcrBulkPrintRequest;
 use App\Http\Requests\Principal\GenerateTeacherAcrRequest;
 use App\Http\Requests\Principal\TeacherAcrIndexRequest;
+use App\Http\Requests\Principal\TeacherAcrSummaryExportRequest;
 use App\Http\Requests\Principal\UpdateTeacherAcrRequest;
 use App\Models\TeacherAcr;
 use App\Services\TeacherAcrService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Symfony\Component\HttpFoundation\Response;
 use Illuminate\View\View;
+use Maatwebsite\Excel\Facades\Excel;
 use RuntimeException;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\Response;
 
 class TeacherAcrController extends Controller
 {
@@ -206,5 +210,40 @@ class TeacherAcrController extends Controller
         ])
             ->setPaper('a4')
             ->download($filename);
+    }
+
+    public function exportSummaryExcel(TeacherAcrSummaryExportRequest $request): BinaryFileResponse|RedirectResponse
+    {
+        $validated = $request->validated();
+        $status = (string) ($validated['status'] ?? 'all');
+
+        $payload = $this->acrService->buildBulkAcrSummaryExport(
+            (string) $validated['session'],
+            $status
+        );
+
+        if ((int) ($payload['total'] ?? 0) <= 0) {
+            $query = [
+                'session' => (string) $validated['session'],
+            ];
+            if ($status !== 'all') {
+                $query['status'] = $status;
+            }
+
+            return redirect()
+                ->route('principal.acr.index', $query)
+                ->with('error', 'No ACR summaries found for the selected session and status.');
+        }
+
+        $filename = sprintf(
+            'teacher-acr-summary-%s-%s.xlsx',
+            (string) ($payload['session'] ?? 'session'),
+            (string) ($payload['status'] ?? 'all')
+        );
+
+        return Excel::download(
+            new TeacherAcrSummaryExport((array) ($payload['rows'] ?? [])),
+            $filename
+        );
     }
 }
