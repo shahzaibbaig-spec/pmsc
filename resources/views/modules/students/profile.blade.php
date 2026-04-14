@@ -14,7 +14,9 @@
             ->implode('');
 
         $photoPath = trim((string) ($student->photo_path ?? ''));
-        $photoUrl = $photoPath !== '' ? asset('storage/'.$photoPath) : null;
+        $photoUrl = $photoPath !== ''
+            ? route('students.photo', ['student' => (int) $student->id, 'v' => optional($student->updated_at)->timestamp])
+            : null;
 
         $profileUser = auth()->user();
         $isAdmin = $profileUser?->hasRole('Admin') ?? false;

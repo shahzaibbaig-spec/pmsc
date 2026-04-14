@@ -7,6 +7,7 @@ use App\Models\Attendance;
 use App\Models\FeeChallan;
 use App\Models\Student;
 use App\Models\StudentAttendance;
+use App\Services\StudentPhotoService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
@@ -14,6 +15,10 @@ use Illuminate\View\View;
 
 class StudentQrProfileController extends Controller
 {
+    public function __construct(private readonly StudentPhotoService $studentPhotoService)
+    {
+    }
+
     public function show(Request $request, string $code): View
     {
         $student = $this->resolveStudentByCode($code);
@@ -29,6 +34,16 @@ class StudentQrProfileController extends Controller
             'attendanceSource' => $attendanceSource,
             'feeSummary' => $feeSummary,
         ]);
+    }
+
+    public function photo(Student $student)
+    {
+        $response = $this->studentPhotoService->photoResponse((string) $student->photo_path);
+        if ($response === null) {
+            return $this->fallbackAvatarResponse($student);
+        }
+
+        return $response;
     }
 
     private function resolveStudentByCode(string $code): Student
@@ -202,5 +217,29 @@ class StudentQrProfileController extends Controller
         $hasColumn = Schema::hasTable('students') && Schema::hasColumn('students', 'qr_token');
 
         return $hasColumn;
+    }
+
+    private function fallbackAvatarResponse(Student $student)
+    {
+        $initials = collect(preg_split('/\s+/', trim((string) $student->name)))
+            ->filter()
+            ->take(2)
+            ->map(fn ($part): string => strtoupper(substr((string) $part, 0, 1)))
+            ->implode('');
+
+        $display = $initials !== '' ? $initials : 'ST';
+
+        $svg = <<<SVG
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="320" viewBox="0 0 320 320">
+  <rect width="320" height="320" fill="#1e40af"/>
+  <text x="50%" y="50%" text-anchor="middle" dominant-baseline="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="96" font-weight="700">{$display}</text>
+</svg>
+SVG;
+
+        return response($svg, 200, [
+            'Content-Type' => 'image/svg+xml',
+            'Cache-Control' => 'public, max-age=3600',
+            'Content-Disposition' => 'inline',
+        ]);
     }
 }

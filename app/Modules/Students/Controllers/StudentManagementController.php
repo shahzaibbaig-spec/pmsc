@@ -12,6 +12,7 @@ use App\Models\SchoolClass;
 use App\Models\Student;
 use App\Models\StudentAttendance;
 use App\Models\StudentResult;
+use App\Services\StudentPhotoService;
 use App\Modules\Fees\Services\FeeManagementService;
 use App\Modules\Students\Requests\BulkAddStudentsRequest;
 use App\Modules\Students\Requests\BulkDeleteStudentsRequest;
@@ -24,14 +25,16 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 use Illuminate\View\View;
 use RuntimeException;
 use Throwable;
 
 class StudentManagementController extends Controller
 {
+    public function __construct(private readonly StudentPhotoService $studentPhotoService)
+    {
+    }
+
     public function index(): View
     {
         $classes = SchoolClass::query()
@@ -213,15 +216,15 @@ class StudentManagementController extends Controller
             ]);
         }
 
-        $previousPhotoPath = $student->photo_path;
+        $previousPhotoPath = $this->studentPhotoService->normalizePath((string) $student->photo_path);
         $nextPhotoPath = $previousPhotoPath;
         $successMessage = 'Student photo updated successfully.';
 
         try {
             if ($uploadedPhoto) {
-                $nextPhotoPath = $uploadedPhoto->store('student-photos', 'public');
+                $nextPhotoPath = $this->studentPhotoService->storeUploadedPhoto($uploadedPhoto);
             } elseif ($capturedPhoto !== '') {
-                $nextPhotoPath = $this->storeCapturedStudentPhoto($capturedPhoto);
+                $nextPhotoPath = $this->studentPhotoService->storeCapturedPhoto($capturedPhoto);
             } elseif ($removePhoto) {
                 $nextPhotoPath = null;
                 $successMessage = 'Student photo removed successfully.';
@@ -235,8 +238,8 @@ class StudentManagementController extends Controller
         if ($nextPhotoPath !== $previousPhotoPath) {
             $student->forceFill(['photo_path' => $nextPhotoPath])->save();
 
-            if (! empty($previousPhotoPath)) {
-                Storage::disk('public')->delete($previousPhotoPath);
+            if ($previousPhotoPath !== null) {
+                $this->studentPhotoService->deletePhoto($previousPhotoPath);
             }
         }
 
@@ -756,34 +759,4 @@ class StudentManagementController extends Controller
         };
     }
 
-    private function storeCapturedStudentPhoto(string $capturedPhoto): string
-    {
-        $normalized = trim($capturedPhoto);
-        $pattern = '/^data:image\/(png|jpe?g|webp);base64,([a-zA-Z0-9\/+=\s]+)$/';
-
-        if (! preg_match($pattern, $normalized, $matches)) {
-            throw new RuntimeException('Invalid camera image format. Please capture the photo again.');
-        }
-
-        $extension = strtolower((string) ($matches[1] ?? 'jpg'));
-        if ($extension === 'jpeg') {
-            $extension = 'jpg';
-        }
-
-        $base64Payload = str_replace(' ', '+', (string) ($matches[2] ?? ''));
-        $binary = base64_decode($base64Payload, true);
-
-        if ($binary === false || $binary === '') {
-            throw new RuntimeException('Unable to decode captured image. Please try again.');
-        }
-
-        if (strlen($binary) > 3 * 1024 * 1024) {
-            throw new RuntimeException('Captured image is too large. Please retake with a smaller frame.');
-        }
-
-        $path = 'student-photos/'.Str::uuid().'.'.$extension;
-        Storage::disk('public')->put($path, $binary);
-
-        return $path;
-    }
 }

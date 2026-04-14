@@ -85,6 +85,10 @@ Route::get('/', function () {
 Route::get('/student/qr/{code}', [StudentQrProfileController::class, 'show'])
     ->name('students.qr.profile');
 
+Route::get('/student/photo/{student}', [StudentQrProfileController::class, 'photo'])
+    ->whereNumber('student')
+    ->name('students.photo');
+
 Route::get('/dashboard', DashboardRedirectController::class)
     ->middleware(['auth', 'verified', 'force-password-change'])
     ->name('dashboard');
