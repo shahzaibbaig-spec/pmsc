@@ -6,7 +6,7 @@ use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
-class BulkTeacherAssignmentRequest extends FormRequest
+class ReplaceTeacherSessionAssignmentsRequest extends FormRequest
 {
     public function authorize(): bool
     {
@@ -17,29 +17,24 @@ class BulkTeacherAssignmentRequest extends FormRequest
             && $user->can('assign_teachers');
     }
 
-    protected function prepareForValidation(): void
-    {
-        $routeTeacher = $this->route('teacher');
-        $routeTeacherId = is_object($routeTeacher) ? ($routeTeacher->id ?? null) : $routeTeacher;
-
-        if ($routeTeacherId !== null && ! $this->filled('teacher_id')) {
-            $this->merge([
-                'teacher_id' => (int) $routeTeacherId,
-            ]);
-        }
-    }
-
     public function rules(): array
     {
         return [
-            'teacher_id' => ['required', Rule::exists('teachers', 'id')],
             'session' => ['required', 'string', 'max:20'],
-            'class_ids' => ['required', 'array', 'min:1'],
+            'class_ids' => ['nullable', 'array'],
             'class_ids.*' => ['required', 'integer', 'distinct', Rule::exists('school_classes', 'id')],
-            'subject_ids' => ['required', 'array', 'min:1'],
+            'subject_ids' => ['nullable', 'array'],
             'subject_ids.*' => ['required', 'integer', 'distinct', Rule::exists('subjects', 'id')],
             'class_teacher_class_id' => ['nullable', 'integer', Rule::exists('school_classes', 'id')],
         ];
+    }
+
+    protected function prepareForValidation(): void
+    {
+        $this->merge([
+            'class_ids' => is_array($this->input('class_ids')) ? $this->input('class_ids') : [],
+            'subject_ids' => is_array($this->input('subject_ids')) ? $this->input('subject_ids') : [],
+        ]);
     }
 
     public function withValidator(Validator $validator): void
@@ -63,3 +58,4 @@ class BulkTeacherAssignmentRequest extends FormRequest
         });
     }
 }
+

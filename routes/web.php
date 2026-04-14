@@ -9,6 +9,7 @@ use App\Http\Controllers\Principal\TeacherAttendanceController as PrincipalTeach
 use App\Http\Controllers\Principal\TeacherResultEntryController;
 use App\Http\Controllers\Principal\TeacherRankingController;
 use App\Http\Controllers\Principal\TeacherAssignmentController as PrincipalTeacherAssignmentController;
+use App\Http\Controllers\Principal\TeacherAssignmentRolloverController;
 use App\Http\Controllers\Principal\AnalyticsExportController;
 use App\Http\Controllers\Principal\PrincipalPromotionController;
 use App\Http\Controllers\Teacher\TeacherDeviceDeclarationController;
@@ -463,6 +464,37 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
     Route::get('/principal/teacher-assignments/create', [PrincipalTeacherAssignmentController::class, 'create'])
         ->middleware(['role:Principal|Admin', 'permission:assign_teachers'])
         ->name('principal.teacher-assignments.create');
+
+    Route::get('/principal/teacher-assignments/search', [PrincipalTeacherAssignmentController::class, 'search'])
+        ->middleware(['role:Principal|Admin', 'permission:assign_teachers'])
+        ->name('principal.teacher-assignments.search');
+
+    Route::get('/principal/teacher-assignments/teacher/{teacher}', [PrincipalTeacherAssignmentController::class, 'showTeacher'])
+        ->middleware(['role:Principal|Admin', 'permission:assign_teachers'])
+        ->whereNumber('teacher')
+        ->name('principal.teacher-assignments.teacher.show');
+
+    Route::post('/principal/teacher-assignments/teacher/{teacher}/bulk-store', [PrincipalTeacherAssignmentController::class, 'storeBulkForTeacher'])
+        ->middleware(['role:Principal|Admin', 'permission:assign_teachers'])
+        ->whereNumber('teacher')
+        ->name('principal.teacher-assignments.teacher.bulk-store');
+
+    Route::post('/principal/teacher-assignments/teacher/{teacher}/replace-session-assignments', [PrincipalTeacherAssignmentController::class, 'replaceSessionAssignmentsForTeacher'])
+        ->middleware(['role:Principal|Admin', 'permission:assign_teachers'])
+        ->whereNumber('teacher')
+        ->name('principal.teacher-assignments.teacher.replace-session-assignments');
+
+    Route::get('/principal/teacher-assignments/rollover', [TeacherAssignmentRolloverController::class, 'index'])
+        ->middleware(['role:Principal|Admin', 'permission:assign_teachers'])
+        ->name('principal.teacher-assignments.rollover.index');
+
+    Route::post('/principal/teacher-assignments/rollover/preview', [TeacherAssignmentRolloverController::class, 'preview'])
+        ->middleware(['role:Principal|Admin', 'permission:assign_teachers'])
+        ->name('principal.teacher-assignments.rollover.preview');
+
+    Route::post('/principal/teacher-assignments/rollover', [TeacherAssignmentRolloverController::class, 'store'])
+        ->middleware(['role:Principal|Admin', 'permission:assign_teachers'])
+        ->name('principal.teacher-assignments.rollover.store');
 
     Route::get('/principal/teachers', [PrincipalTeacherListController::class, 'index'])
         ->middleware(['role:Principal'])

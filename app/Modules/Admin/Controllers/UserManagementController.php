@@ -3,25 +3,50 @@
 namespace App\Modules\Admin\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Models\SchoolClass;
+use App\Models\Subject;
 use App\Models\User;
 use App\Modules\Admin\Requests\AssignRoleRequest;
 use App\Modules\Admin\Requests\StoreUserRequest;
 use App\Modules\Admin\Requests\UpdateUserRequest;
+use App\Services\TeacherAssignmentService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Spatie\Permission\Models\Role;
 
 class UserManagementController extends Controller
 {
-    public function index()
+    public function index(TeacherAssignmentService $assignmentService)
     {
         $roles = Role::query()
             ->orderBy('name')
             ->pluck('name')
             ->values();
 
-        return view('modules.admin.users.index', compact('roles'));
+        $defaultSession = $this->academicSessionForDate(now()->toDateString());
+        $assignmentSessions = collect(array_merge([$defaultSession], $assignmentService->availableSessions()))
+            ->filter(static fn ($value): bool => is_string($value) && trim($value) !== '')
+            ->unique()
+            ->values();
+
+        $assignmentClasses = SchoolClass::query()
+            ->orderBy('name')
+            ->orderBy('section')
+            ->get(['id', 'name', 'section']);
+
+        $assignmentSubjects = Subject::query()
+            ->orderBy('name')
+            ->get(['id', 'name', 'code']);
+
+        return view('modules.admin.users.index', compact(
+            'roles',
+            'assignmentSessions',
+            'assignmentClasses',
+            'assignmentSubjects',
+            'defaultSession'
+        ));
     }
 
     public function data(Request $request): JsonResponse
@@ -72,23 +97,70 @@ class UserManagementController extends Controller
         ]);
     }
 
-    public function store(StoreUserRequest $request): JsonResponse
+    public function store(StoreUserRequest $request, TeacherAssignmentService $assignmentService): JsonResponse
     {
-        $user = DB::transaction(function () use ($request): User {
+        $validated = $request->validated();
+        $role = (string) ($validated['role'] ?? '');
+        $assignmentSummary = null;
+
+        $user = DB::transaction(function () use ($validated, $role, $assignmentService, &$assignmentSummary): User {
             $user = User::query()->create([
-                'name' => $request->string('name')->toString(),
-                'email' => $request->string('email')->toString(),
-                'password' => $request->string('password')->toString(),
-                'status' => $request->string('status')->toString(),
+                'name' => (string) $validated['name'],
+                'email' => (string) $validated['email'],
+                'password' => (string) $validated['password'],
+                'status' => (string) $validated['status'],
             ]);
 
-            $user->syncRoles([$request->string('role')->toString()]);
+            $user->syncRoles([$role]);
+
+            if (strcasecmp($role, 'Teacher') === 0) {
+                $teacher = $assignmentService->ensureTeacherProfileForUser((int) $user->id, 'Teacher');
+
+                $classIds = is_array($validated['assignment_class_ids'] ?? null)
+                    ? $validated['assignment_class_ids']
+                    : [];
+                $subjectIds = is_array($validated['assignment_subject_ids'] ?? null)
+                    ? $validated['assignment_subject_ids']
+                    : [];
+                $classTeacherClassId = isset($validated['class_teacher_class_id'])
+                    ? (int) $validated['class_teacher_class_id']
+                    : null;
+
+                $hasAssignmentPayload = ! empty($classIds)
+                    || ! empty($subjectIds)
+                    || $classTeacherClassId !== null;
+
+                if ($hasAssignmentPayload) {
+                    $session = trim((string) ($validated['assignment_session'] ?? ''));
+                    if ($session === '') {
+                        $session = $this->academicSessionForDate(now()->toDateString());
+                    }
+
+                    $assignmentSummary = $assignmentService->assignBulk(
+                        (int) $teacher->id,
+                        $session,
+                        $classIds,
+                        $subjectIds,
+                        $classTeacherClassId
+                    );
+                }
+            }
 
             return $user;
         });
 
+        $message = 'User created successfully.';
+        if (strcasecmp($role, 'Teacher') === 0 && is_array($assignmentSummary)) {
+            $message = 'Teacher user created and initial assignments saved. '
+                .(int) ($assignmentSummary['created_subject_assignments'] ?? 0).' subject assignment(s) created, '
+                .(int) ($assignmentSummary['skipped_duplicates'] ?? 0).' duplicate(s) skipped.';
+            if ((bool) ($assignmentSummary['class_teacher_assigned'] ?? false)) {
+                $message .= ' Class teacher assignment created.';
+            }
+        }
+
         return response()->json([
-            'message' => 'User created successfully.',
+            'message' => $message,
             'user_id' => $user->id,
         ], 201);
     }
@@ -128,5 +200,13 @@ class UserManagementController extends Controller
         $user->syncRoles([$request->string('role')->toString()]);
 
         return response()->json(['message' => 'Role assigned successfully.']);
+    }
+
+    private function academicSessionForDate(string $date): string
+    {
+        $dateTime = Carbon::parse($date);
+        $startYear = $dateTime->month >= 7 ? $dateTime->year : ($dateTime->year - 1);
+
+        return $startYear.'-'.($startYear + 1);
     }
 }

@@ -2,12 +2,20 @@
     <x-slot name="header">
         <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <h2 class="text-xl font-semibold text-slate-900">Teacher Assignments</h2>
-            <a
-                href="{{ route('principal.teacher-assignments.create') }}"
-                class="inline-flex min-h-10 items-center justify-center rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
-            >
-                New Bulk Assignment
-            </a>
+            <div class="flex flex-wrap items-center gap-2">
+                <a
+                    href="{{ route('principal.teacher-assignments.rollover.index') }}"
+                    class="inline-flex min-h-10 items-center justify-center rounded-md border border-indigo-300 bg-white px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-50"
+                >
+                    Session Rollover
+                </a>
+                <a
+                    href="{{ route('principal.teacher-assignments.create') }}"
+                    class="inline-flex min-h-10 items-center justify-center rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                >
+                    New Bulk Assignment
+                </a>
+            </div>
         </div>
     </x-slot>
 
@@ -18,6 +26,53 @@
                     {{ session('success') }}
                 </div>
             @endif
+
+            @if ($errors->any())
+                <div class="rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                    <p class="font-semibold">Please fix the following errors:</p>
+                    <ul class="mt-2 list-disc space-y-1 ps-5">
+                        @foreach ($errors->all() as $error)
+                            <li>{{ $error }}</li>
+                        @endforeach
+                    </ul>
+                </div>
+            @endif
+
+            <div class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                <h3 class="text-base font-semibold text-slate-900">Teacher Search & Assign</h3>
+                <p class="mt-1 text-sm text-slate-600">Search by teacher name, email, employee code, or teacher code.</p>
+
+                <div class="relative mt-4">
+                    <input
+                        id="globalTeacherSearchInput"
+                        type="text"
+                        autocomplete="off"
+                        placeholder="Type at least 2 characters..."
+                        class="block w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-500"
+                    >
+                    <div
+                        id="globalTeacherSearchResults"
+                        class="absolute z-20 mt-2 hidden max-h-72 w-full overflow-y-auto rounded-md border border-slate-200 bg-white shadow-lg"
+                    ></div>
+                </div>
+
+                <div id="selectedTeacherPanel" class="mt-6"></div>
+            </div>
+
+            <div class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                <h3 class="text-base font-semibold text-slate-900">Session Rollover</h3>
+                <p class="mt-1 text-sm text-slate-600">
+                    Copy assignments to the next session, then review and modify teacher-by-teacher as needed.
+                </p>
+                <div class="mt-4">
+                    <a
+                        href="{{ route('principal.teacher-assignments.rollover.index') }}"
+                        class="inline-flex min-h-10 items-center rounded-md border border-indigo-300 bg-white px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-50"
+                    >
+                        Open Session Rollover
+                    </a>
+                </div>
+            </div>
 
             <div class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
                 <form method="GET" action="{{ route('principal.teacher-assignments.index') }}" class="grid grid-cols-1 gap-4 md:grid-cols-4">
@@ -158,4 +213,174 @@
             @endforelse
         </div>
     </div>
+
+    <script>
+        function teacherPanelAssignmentForm(classes, initialClassIds, initialClassTeacherClassId) {
+            return {
+                classes: classes || [],
+                selectedClassIds: (initialClassIds || []).map(String),
+                classTeacherClassId: initialClassTeacherClassId ? String(initialClassTeacherClassId) : '',
+                init() {
+                    this.$watch('selectedClassIds', () => {
+                        if (this.classTeacherClassId && !this.selectedClassIds.includes(this.classTeacherClassId)) {
+                            this.classTeacherClassId = '';
+                        }
+                    });
+                },
+                selectedClassOptions() {
+                    return this.classes.filter((classOption) => this.selectedClassIds.includes(String(classOption.id)));
+                },
+            };
+        }
+
+        (() => {
+            const searchInput = document.getElementById('globalTeacherSearchInput');
+            const resultsBox = document.getElementById('globalTeacherSearchResults');
+            const panel = document.getElementById('selectedTeacherPanel');
+            const sessionSelect = document.getElementById('session');
+            const escapeHtml = (window.NSMS && typeof window.NSMS.escapeHtml === 'function')
+                ? window.NSMS.escapeHtml
+                : (value) => String(value)
+                    .replaceAll('&', '&amp;')
+                    .replaceAll('<', '&lt;')
+                    .replaceAll('>', '&gt;')
+                    .replaceAll('"', '&quot;')
+                    .replaceAll("'", '&#039;');
+
+            const searchUrl = @json(route('principal.teacher-assignments.search'));
+            const showUrlTemplate = @json(route('principal.teacher-assignments.teacher.show', ['teacher' => '__TEACHER__']));
+            const focusTeacherId = Number(@json((int) request()->query('focus_teacher', 0)));
+            let selectedTeacherId = null;
+
+            function showTeacherUrl(teacherId) {
+                return showUrlTemplate.replace('__TEACHER__', String(teacherId));
+            }
+
+            function setResultsLoading() {
+                resultsBox.classList.remove('hidden');
+                resultsBox.innerHTML = '<div class="px-3 py-2 text-sm text-slate-500">Searching...</div>';
+            }
+
+            function clearResults() {
+                resultsBox.classList.add('hidden');
+                resultsBox.innerHTML = '';
+            }
+
+            function renderSearchResults(rows) {
+                if (!rows || rows.length === 0) {
+                    resultsBox.classList.remove('hidden');
+                    resultsBox.innerHTML = '<div class="px-3 py-2 text-sm text-slate-500">No teachers found.</div>';
+                    return;
+                }
+
+                resultsBox.classList.remove('hidden');
+                resultsBox.innerHTML = rows.map((row) => {
+                    const label = escapeHtml(row.name || 'Unknown Teacher');
+                    const email = escapeHtml(row.email || '');
+                    const teacherCode = escapeHtml(row.teacher_code || '-');
+                    const employeeCode = escapeHtml(row.employee_code || '-');
+
+                    return `
+                        <button
+                            type="button"
+                            class="block w-full border-b border-slate-100 px-3 py-2 text-left text-sm hover:bg-slate-50"
+                            data-teacher-id="${row.id}"
+                        >
+                            <div class="font-medium text-slate-900">${label}</div>
+                            <div class="text-xs text-slate-600">${email}</div>
+                            <div class="mt-0.5 text-xs text-slate-500">Teacher Code: ${teacherCode} | Employee Code: ${employeeCode}</div>
+                        </button>
+                    `;
+                }).join('');
+            }
+
+            async function loadTeacherPanel(teacherId) {
+                selectedTeacherId = Number(teacherId);
+                panel.innerHTML = '<div class="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">Loading teacher assignments...</div>';
+
+                try {
+                    const url = new URL(showTeacherUrl(teacherId), window.location.origin);
+                    if (sessionSelect && sessionSelect.value) {
+                        url.searchParams.set('session', sessionSelect.value);
+                    }
+
+                    const response = await fetch(url.toString(), {
+                        headers: { 'Accept': 'application/json' },
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Failed to load teacher assignment panel.');
+                    }
+
+                    const payload = await response.json();
+                    panel.innerHTML = payload.html || '';
+
+                    if (window.Alpine && typeof window.Alpine.initTree === 'function') {
+                        window.Alpine.initTree(panel);
+                    }
+                } catch (error) {
+                    panel.innerHTML = '<div class="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">Failed to load teacher assignment panel.</div>';
+                }
+            }
+
+            const performSearch = window.NSMS.debounce(async () => {
+                const query = searchInput.value.trim();
+                if (query.length < 2) {
+                    clearResults();
+                    return;
+                }
+
+                setResultsLoading();
+
+                try {
+                    const response = await fetch(`${searchUrl}?q=${encodeURIComponent(query)}`, {
+                        headers: { 'Accept': 'application/json' },
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Search failed.');
+                    }
+
+                    const payload = await response.json();
+                    renderSearchResults(Array.isArray(payload) ? payload : []);
+                } catch (error) {
+                    resultsBox.classList.remove('hidden');
+                    resultsBox.innerHTML = '<div class="px-3 py-2 text-sm text-rose-700">Search failed. Please try again.</div>';
+                }
+            }, 300);
+
+            searchInput.addEventListener('input', performSearch);
+            resultsBox.addEventListener('click', (event) => {
+                const button = event.target.closest('button[data-teacher-id]');
+                if (!button) {
+                    return;
+                }
+
+                const teacherId = Number(button.dataset.teacherId || 0);
+                if (teacherId <= 0) {
+                    return;
+                }
+
+                clearResults();
+                searchInput.value = '';
+                loadTeacherPanel(teacherId);
+            });
+
+            document.addEventListener('click', (event) => {
+                if (!resultsBox.contains(event.target) && event.target !== searchInput) {
+                    clearResults();
+                }
+            });
+
+            sessionSelect?.addEventListener('change', () => {
+                if (selectedTeacherId) {
+                    loadTeacherPanel(selectedTeacherId);
+                }
+            });
+
+            if (focusTeacherId > 0) {
+                loadTeacherPanel(focusTeacherId);
+            }
+        })();
+    </script>
 </x-app-layout>

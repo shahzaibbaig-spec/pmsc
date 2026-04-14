@@ -50,6 +50,50 @@
                             </select>
                         </div>
 
+                        <div id="teacherAssignmentSection" class="hidden md:col-span-2 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                            <h4 class="text-sm font-semibold text-slate-900">Initial Teacher Subject Assignment</h4>
+                            <p class="mt-1 text-xs text-slate-600">
+                                You may assign the teacher's classes and subjects now, or leave this empty and assign later.
+                            </p>
+
+                            <div class="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2">
+                                <div>
+                                    <x-input-label for="assignment_session" value="Assignment Session" />
+                                    <select id="assignment_session" class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                        @foreach($assignmentSessions as $session)
+                                            <option value="{{ $session }}" @selected($defaultSession === $session)>{{ $session }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2">
+                                <div>
+                                    <x-input-label for="assignment_class_ids" value="Classes" />
+                                    <select id="assignment_class_ids" multiple class="mt-1 block h-40 w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                        @foreach($assignmentClasses as $class)
+                                            <option value="{{ $class->id }}">{{ trim($class->name . ' ' . ($class->section ?? '')) }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                                <div>
+                                    <x-input-label for="assignment_subject_ids" value="Subjects" />
+                                    <select id="assignment_subject_ids" multiple class="mt-1 block h-40 w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                        @foreach($assignmentSubjects as $subject)
+                                            <option value="{{ $subject->id }}">{{ $subject->name }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="mt-3">
+                                <x-input-label for="class_teacher_class_id" value="Optional Class Teacher Class" />
+                                <select id="class_teacher_class_id" class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                    <option value="">No class teacher assignment</option>
+                                </select>
+                            </div>
+                        </div>
+
                         <div class="flex items-end gap-3">
                             <x-primary-button id="saveButton">Save User</x-primary-button>
                             <button type="button" id="cancelEdit" class="hidden inline-flex items-center rounded-md border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
@@ -112,6 +156,10 @@
 
     <script>
         const roles = @json($roles);
+        const assignmentClasses = @json($assignmentClasses->map(fn ($class) => [
+            'id' => (int) $class->id,
+            'label' => trim($class->name . ' ' . ($class->section ?? '')),
+        ])->values());
         const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
 
         let state = {
@@ -128,12 +176,71 @@
         const userIdInput = document.getElementById('userId');
         const saveButton = document.getElementById('saveButton');
         const cancelEditButton = document.getElementById('cancelEdit');
+        const roleSelect = document.getElementById('role');
+        const teacherAssignmentSection = document.getElementById('teacherAssignmentSection');
+        const assignmentSessionSelect = document.getElementById('assignment_session');
+        const assignmentClassSelect = document.getElementById('assignment_class_ids');
+        const assignmentSubjectSelect = document.getElementById('assignment_subject_ids');
+        const classTeacherClassSelect = document.getElementById('class_teacher_class_id');
         const usersTableBody = document.getElementById('usersTableBody');
         const paginationInfo = document.getElementById('paginationInfo');
         const prevPageButton = document.getElementById('prevPage');
         const nextPageButton = document.getElementById('nextPage');
         const searchInput = document.getElementById('searchInput');
         const perPageInput = document.getElementById('perPage');
+        const escapeHtml = (window.NSMS && typeof window.NSMS.escapeHtml === 'function')
+            ? window.NSMS.escapeHtml
+            : (value) => String(value)
+                .replaceAll('&', '&amp;')
+                .replaceAll('<', '&lt;')
+                .replaceAll('>', '&gt;')
+                .replaceAll('"', '&quot;')
+                .replaceAll("'", '&#039;');
+
+        function selectedMultiValues(selectElement) {
+            if (!selectElement) {
+                return [];
+            }
+
+            return Array.from(selectElement.selectedOptions || []).map(option => Number(option.value)).filter(value => value > 0);
+        }
+
+        function rebuildClassTeacherOptions() {
+            const selectedClassIds = new Set(selectedMultiValues(assignmentClassSelect));
+            const currentValue = Number(classTeacherClassSelect.value || 0);
+
+            const options = ['<option value="">No class teacher assignment</option>'];
+            assignmentClasses.forEach((row) => {
+                if (selectedClassIds.has(Number(row.id))) {
+                    options.push(`<option value="${row.id}">${escapeHtml(String(row.label || 'Class'))}</option>`);
+                }
+            });
+
+            classTeacherClassSelect.innerHTML = options.join('');
+
+            if (currentValue > 0 && selectedClassIds.has(currentValue)) {
+                classTeacherClassSelect.value = String(currentValue);
+            }
+        }
+
+        function clearTeacherAssignmentFields() {
+            assignmentSessionSelect.selectedIndex = 0;
+            Array.from(assignmentClassSelect.options || []).forEach((option) => { option.selected = false; });
+            Array.from(assignmentSubjectSelect.options || []).forEach((option) => { option.selected = false; });
+            classTeacherClassSelect.innerHTML = '<option value="">No class teacher assignment</option>';
+        }
+
+        function toggleTeacherAssignmentSection() {
+            const role = String(roleSelect.value || '').toLowerCase();
+            const show = role === 'teacher' && userIdInput.value === '';
+            teacherAssignmentSection.classList.toggle('hidden', !show);
+
+            if (show) {
+                rebuildClassTeacherOptions();
+            } else {
+                clearTeacherAssignmentFields();
+            }
+        }
 
         function resetForm() {
             userForm.reset();
@@ -141,6 +248,8 @@
             formTitle.textContent = 'Create User';
             saveButton.textContent = 'Save User';
             cancelEditButton.classList.add('hidden');
+            clearTeacherAssignmentFields();
+            toggleTeacherAssignmentSection();
             hideErrors();
         }
 
@@ -255,6 +364,13 @@
                 delete payload.password;
             }
 
+             if (!isEdit && String(payload.role || '').toLowerCase() === 'teacher') {
+                payload.assignment_session = assignmentSessionSelect.value || '';
+                payload.assignment_class_ids = selectedMultiValues(assignmentClassSelect);
+                payload.assignment_subject_ids = selectedMultiValues(assignmentSubjectSelect);
+                payload.class_teacher_class_id = classTeacherClassSelect.value ? Number(classTeacherClassSelect.value) : null;
+            }
+
             try {
                 const response = await fetch(endpoint, {
                     method,
@@ -303,6 +419,7 @@
             formTitle.textContent = 'Edit User';
             saveButton.textContent = 'Update User';
             cancelEditButton.classList.remove('hidden');
+            toggleTeacherAssignmentSection();
             hideErrors();
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
@@ -356,6 +473,8 @@
 
         userForm.addEventListener('submit', submitUserForm);
         cancelEditButton.addEventListener('click', resetForm);
+        roleSelect.addEventListener('change', toggleTeacherAssignmentSection);
+        assignmentClassSelect.addEventListener('change', rebuildClassTeacherOptions);
 
         prevPageButton.addEventListener('click', async () => {
             if (state.page > 1) {
@@ -402,6 +521,7 @@
             }
         });
 
+        toggleTeacherAssignmentSection();
         window.NSMS.lazyInit(usersTableBody, loadUsers);
     </script>
 </x-app-layout>
