@@ -13,6 +13,7 @@ use App\Http\Controllers\Principal\TeacherAssignmentRolloverController;
 use App\Http\Controllers\Principal\AnalyticsExportController;
 use App\Http\Controllers\Principal\PrincipalPromotionController;
 use App\Http\Controllers\Teacher\TeacherDeviceDeclarationController;
+use App\Http\Controllers\Teacher\TeacherEResourceController;
 use App\Http\Controllers\Teacher\TeacherInventoryController;
 use App\Http\Controllers\Teacher\TeacherInventoryDemandController;
 use App\Http\Controllers\Teacher\TeacherPromotionController;
@@ -1138,6 +1139,14 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
     Route::get('/teacher/dashboard', TeacherDashboardController::class)
         ->middleware('role:Teacher')
         ->name('teacher.dashboard');
+
+    Route::get('/teacher/e-resources', [TeacherEResourceController::class, 'index'])
+        ->middleware(['role:Teacher'])
+        ->name('teacher.e-resources.index');
+
+    Route::get('/teacher/e-resources/file', [TeacherEResourceController::class, 'file'])
+        ->middleware(['role:Teacher'])
+        ->name('teacher.e-resources.file');
 
     Route::prefix('teacher/my-inventory')
         ->name('teacher.my-inventory.')

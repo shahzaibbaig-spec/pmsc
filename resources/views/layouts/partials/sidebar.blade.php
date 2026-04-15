@@ -219,6 +219,7 @@
         }
 
         $menuItems[] = ['route' => 'teacher.timetable.index', 'label' => 'Timetable'];
+        $menuItems[] = ['route' => 'teacher.e-resources.index', 'label' => 'E Resources'];
         if (
             $sidebarUser?->can('view_own_inventory')
             || $sidebarUser?->can('view_own_inventory_demands')
