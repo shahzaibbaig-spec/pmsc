@@ -197,6 +197,7 @@
             $menuItems[] = ['route' => 'principal.payroll.reports.index', 'label' => 'Payroll Reports'];
         }
 
+        $menuItems[] = ['route' => 'teacher.e-resources.index', 'label' => 'E Resources'];
         $menuItems[] = ['route' => 'notifications.index', 'label' => 'Notifications'];
     } elseif ($sidebarUser?->hasRole('Teacher')) {
         $menuItems = [

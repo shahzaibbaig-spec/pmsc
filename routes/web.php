@@ -1141,11 +1141,11 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
         ->name('teacher.dashboard');
 
     Route::get('/teacher/e-resources', [TeacherEResourceController::class, 'index'])
-        ->middleware(['role:Teacher'])
+        ->middleware(['role:Principal,Teacher'])
         ->name('teacher.e-resources.index');
 
     Route::get('/teacher/e-resources/file', [TeacherEResourceController::class, 'file'])
-        ->middleware(['role:Teacher'])
+        ->middleware(['role:Principal,Teacher'])
         ->name('teacher.e-resources.file');
 
     Route::prefix('teacher/my-inventory')

@@ -26,11 +26,12 @@
             @endif
 
             @if (! $teacher)
-                <div class="rounded-lg border border-amber-200 bg-amber-50 p-6 text-sm text-amber-800">
-                    Teacher profile was not found for this account.
+                <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                    Showing shared resources for all classes.
                 </div>
-            @else
-                <div class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+            @endif
+
+            <div class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
                     <div class="grid grid-cols-1 gap-4 md:grid-cols-3" x-data="{ q: '' }">
                         <div>
                             <label for="session" class="mb-1 block text-sm font-medium text-slate-700">Session</label>
@@ -185,8 +186,6 @@
                         </div>
                     </div>
                 </div>
-            @endif
         </div>
     </div>
 </x-app-layout>
-

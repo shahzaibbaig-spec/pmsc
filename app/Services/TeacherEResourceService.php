@@ -129,7 +129,7 @@ class TeacherEResourceService
         $defaultSession = $this->sessionFromDate(now()->toDateString());
         $sessions = $teacher instanceof Teacher
             ? $this->availableSessionsForTeacher((int) $teacher->id, $defaultSession)
-            : [$defaultSession];
+            : $this->availableSessionsAcrossAssignments($defaultSession);
 
         $selectedSession = trim((string) $requestedSession);
         if ($selectedSession === '') {
@@ -140,27 +140,7 @@ class TeacherEResourceService
             $sessions = array_values(array_unique($sessions));
         }
 
-        if (! $teacher instanceof Teacher) {
-            return [
-                'teacher' => null,
-                'sessions' => $sessions,
-                'selected_session' => $selectedSession,
-                'class_resources' => [],
-                'general_resources' => [],
-            ];
-        }
-
-        $assignedClassIds = TeacherAssignment::query()
-            ->where('teacher_id', (int) $teacher->id)
-            ->where('session', $selectedSession)
-            ->pluck('class_id')
-            ->map(static fn ($id): int => (int) $id)
-            ->filter(static fn (int $id): bool => $id > 0)
-            ->unique()
-            ->values();
-
-        $assignedClasses = SchoolClass::query()
-            ->whereIn('id', $assignedClassIds->all())
+        $availableClasses = SchoolClass::query()
             ->orderBy('name')
             ->orderBy('section')
             ->get(['id', 'name', 'section']);
@@ -169,7 +149,7 @@ class TeacherEResourceService
         $classResources = [];
         $generalResources = [];
 
-        foreach ($assignedClasses as $class) {
+        foreach ($availableClasses as $class) {
             $classResources[(int) $class->id] = [
                 'class_id' => (int) $class->id,
                 'class_name' => trim((string) $class->name.' '.(string) ($class->section ?? '')),
@@ -178,7 +158,7 @@ class TeacherEResourceService
         }
 
         foreach ($fileIndex as $file) {
-            $matchedClassIds = $this->matchClassIdsForResource((string) ($file['relative_path'] ?? ''), $assignedClasses);
+            $matchedClassIds = $this->matchClassIdsForResource((string) ($file['relative_path'] ?? ''), $availableClasses);
             $resource = $this->mapResourceForSession($file, $selectedSession);
 
             if (empty($matchedClassIds)) {
@@ -346,6 +326,27 @@ class TeacherEResourceService
     {
         $sessions = TeacherAssignment::query()
             ->where('teacher_id', $teacherId)
+            ->select('session')
+            ->distinct()
+            ->orderByDesc('session')
+            ->pluck('session')
+            ->filter(static fn ($value): bool => is_string($value) && trim($value) !== '')
+            ->values()
+            ->all();
+
+        if (! in_array($defaultSession, $sessions, true)) {
+            array_unshift($sessions, $defaultSession);
+        }
+
+        return array_values(array_unique($sessions));
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function availableSessionsAcrossAssignments(string $defaultSession): array
+    {
+        $sessions = TeacherAssignment::query()
             ->select('session')
             ->distinct()
             ->orderByDesc('session')
