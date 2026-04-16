@@ -1,0 +1,41 @@
+<?php
+
+namespace App\Http\Requests;
+
+use Illuminate\Foundation\Http\FormRequest;
+
+class StoreDailyDiaryRequest extends FormRequest
+{
+    public function authorize(): bool
+    {
+        $user = $this->user();
+
+        return $user !== null
+            && $user->hasRole('Teacher')
+            && $user->can('create_daily_diary');
+    }
+
+    public function rules(): array
+    {
+        return [
+            'class_id' => ['required', 'integer', 'exists:school_classes,id'],
+            'subject_id' => ['required', 'integer', 'exists:subjects,id'],
+            'session' => ['required', 'string', 'max:20'],
+            'diary_date' => ['required', 'date'],
+            'title' => ['nullable', 'string', 'max:255'],
+            'homework_text' => ['required', 'string'],
+            'instructions' => ['nullable', 'string'],
+            'is_published' => ['nullable', 'boolean'],
+        ];
+    }
+
+    protected function prepareForValidation(): void
+    {
+        $this->merge([
+            'session' => trim((string) $this->input('session', '')),
+            'title' => trim((string) $this->input('title', '')) ?: null,
+            'instructions' => trim((string) $this->input('instructions', '')) ?: null,
+            'is_published' => $this->has('is_published') ? $this->boolean('is_published') : false,
+        ]);
+    }
+}

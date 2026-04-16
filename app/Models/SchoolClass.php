@@ -100,4 +100,9 @@ class SchoolClass extends Model
     {
         return $this->hasMany(ClassPromotionMapping::class, 'to_class_id');
     }
+
+    public function dailyDiaries(): HasMany
+    {
+        return $this->hasMany(DailyDiary::class, 'class_id');
+    }
 }

@@ -205,4 +205,9 @@ class User extends Authenticatable
         return $this->hasMany(TeacherAttendance::class, 'marked_by');
     }
 
+    public function createdDailyDiaries(): HasMany
+    {
+        return $this->hasMany(DailyDiary::class, 'created_by');
+    }
+
 }

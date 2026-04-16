@@ -88,4 +88,9 @@ class Subject extends Model
     {
         return $this->hasMany(TeacherSubjectAssignment::class);
     }
+
+    public function dailyDiaries(): HasMany
+    {
+        return $this->hasMany(DailyDiary::class);
+    }
 }

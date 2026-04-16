@@ -94,4 +94,9 @@ class Teacher extends Model
     {
         return $this->hasMany(TeacherAttendance::class);
     }
+
+    public function dailyDiaries(): HasMany
+    {
+        return $this->hasMany(DailyDiary::class);
+    }
 }

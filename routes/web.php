@@ -11,7 +11,10 @@ use App\Http\Controllers\Principal\TeacherRankingController;
 use App\Http\Controllers\Principal\TeacherAssignmentController as PrincipalTeacherAssignmentController;
 use App\Http\Controllers\Principal\TeacherAssignmentRolloverController;
 use App\Http\Controllers\Principal\AnalyticsExportController;
+use App\Http\Controllers\Principal\DailyDiaryMonitoringController;
 use App\Http\Controllers\Principal\PrincipalPromotionController;
+use App\Http\Controllers\Student\StudentDailyDiaryController;
+use App\Http\Controllers\Teacher\DailyDiaryController;
 use App\Http\Controllers\Teacher\TeacherDeviceDeclarationController;
 use App\Http\Controllers\Teacher\TeacherEResourceController;
 use App\Http\Controllers\Teacher\TeacherInventoryController;
@@ -700,6 +703,14 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
         ->whereNumber('attendance')
         ->name('principal.teacher-attendance.update');
 
+    Route::get('/principal/daily-diary', [DailyDiaryMonitoringController::class, 'index'])
+        ->middleware(['role:Admin,Principal', 'permission:view_all_daily_diary'])
+        ->name('principal.daily-diary.index');
+
+    Route::get('/principal/daily-diary/completion-report', [DailyDiaryMonitoringController::class, 'completionReport'])
+        ->middleware(['role:Admin,Principal', 'permission:monitor_daily_diary'])
+        ->name('principal.daily-diary.completion-report');
+
     Route::get('/principal/analytics/performance-insights/data', [PerformanceInsightsController::class, 'data'])
         ->middleware(['role:Principal', 'permission:view_teacher_performance'])
         ->name('principal.analytics.performance-insights.data');
@@ -1148,6 +1159,28 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
         ->middleware(['role:Principal,Teacher'])
         ->name('teacher.e-resources.file');
 
+    Route::get('/teacher/daily-diary', [DailyDiaryController::class, 'index'])
+        ->middleware(['role:Teacher', 'permission:view_own_daily_diary_entries'])
+        ->name('teacher.daily-diary.index');
+
+    Route::get('/teacher/daily-diary/create', [DailyDiaryController::class, 'create'])
+        ->middleware(['role:Teacher', 'permission:create_daily_diary'])
+        ->name('teacher.daily-diary.create');
+
+    Route::post('/teacher/daily-diary', [DailyDiaryController::class, 'store'])
+        ->middleware(['role:Teacher', 'permission:create_daily_diary'])
+        ->name('teacher.daily-diary.store');
+
+    Route::get('/teacher/daily-diary/{dailyDiary}/edit', [DailyDiaryController::class, 'edit'])
+        ->middleware(['role:Teacher', 'permission:edit_own_daily_diary'])
+        ->whereNumber('dailyDiary')
+        ->name('teacher.daily-diary.edit');
+
+    Route::put('/teacher/daily-diary/{dailyDiary}', [DailyDiaryController::class, 'update'])
+        ->middleware(['role:Teacher', 'permission:edit_own_daily_diary'])
+        ->whereNumber('dailyDiary')
+        ->name('teacher.daily-diary.update');
+
     Route::prefix('teacher/my-inventory')
         ->name('teacher.my-inventory.')
         ->middleware(['role:Teacher'])
@@ -1292,6 +1325,10 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
     Route::get('/student/results', [StudentResultController::class, 'index'])
         ->middleware('role:Student')
         ->name('student.results.index');
+
+    Route::get('/student/daily-diary', [StudentDailyDiaryController::class, 'index'])
+        ->middleware(['role:Student', 'permission:view_student_daily_diary'])
+        ->name('student.daily-diary.index');
 
     Route::prefix('student/assessments')
         ->name('student.assessments.')

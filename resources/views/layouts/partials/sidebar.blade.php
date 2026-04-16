@@ -105,6 +105,12 @@
         if ($sidebarUser?->can('manage_teacher_attendance')) {
             $menuItems[] = ['route' => 'principal.teacher-attendance.index', 'label' => 'Teacher Attendance'];
         }
+        if ($sidebarUser?->can('view_all_daily_diary')) {
+            $menuItems[] = ['route' => 'principal.daily-diary.index', 'label' => 'Daily Diary Monitoring'];
+        }
+        if ($sidebarUser?->can('monitor_daily_diary')) {
+            $menuItems[] = ['route' => 'principal.daily-diary.completion-report', 'label' => 'Diary Completion Report'];
+        }
     } elseif ($sidebarUser?->hasRole('Principal')) {
         $menuItems = [
             ['route' => 'principal.dashboard', 'label' => 'Dashboard'],
@@ -154,6 +160,12 @@
         }
         if ($sidebarUser?->can('manage_teacher_attendance')) {
             $menuItems[] = ['route' => 'principal.teacher-attendance.index', 'label' => 'Teacher Attendance'];
+        }
+        if ($sidebarUser?->can('view_all_daily_diary')) {
+            $menuItems[] = ['route' => 'principal.daily-diary.index', 'label' => 'Daily Diary Monitoring'];
+        }
+        if ($sidebarUser?->can('monitor_daily_diary')) {
+            $menuItems[] = ['route' => 'principal.daily-diary.completion-report', 'label' => 'Diary Completion Report'];
         }
     } elseif ($sidebarUser?->hasRole('Accountant')) {
         $menuItems = [
@@ -207,6 +219,9 @@
         if ($sidebarUser?->can('mark_attendance')) {
             $menuItems[] = ['route' => 'teacher.attendance.index', 'label' => 'Attendance'];
         }
+        if ($sidebarUser?->can('view_own_daily_diary_entries') || $sidebarUser?->can('create_daily_diary')) {
+            $menuItems[] = ['route' => 'teacher.daily-diary.index', 'label' => 'Daily Diary'];
+        }
         if ($sidebarUser?->can('enter_marks')) {
             $menuItems[] = ['route' => 'teacher.exams.index', 'label' => 'Marks Entry'];
             $menuItems[] = ['route' => 'teacher.results.class', 'label' => 'Class Results'];
@@ -242,8 +257,13 @@
         $menuItems = [
             ['route' => 'student.dashboard', 'label' => 'Dashboard'],
             ['route' => 'student.results.index', 'label' => 'My Results'],
-            ['route' => 'notifications.index', 'label' => 'Notifications'],
         ];
+
+        if ($sidebarUser?->can('view_student_daily_diary')) {
+            $menuItems[] = ['route' => 'student.daily-diary.index', 'label' => 'Daily Diary'];
+        }
+
+        $menuItems[] = ['route' => 'notifications.index', 'label' => 'Notifications'];
 
         if ($sidebarUser?->hasAnyPermission(['take_cognitive_assessment', 'view_own_cognitive_results']) && $studentAssessmentMenuVisible) {
             array_splice($menuItems, 1, 0, [[
