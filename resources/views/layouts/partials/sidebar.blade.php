@@ -133,6 +133,7 @@
             ['route' => 'principal.fees.defaulters.index', 'label' => 'Fee Defaulters'],
             ['route' => 'principal.analytics.dashboard.index', 'label' => 'Principal Analytics'],
             ['route' => 'principal.analytics.teachers.index', 'label' => 'Teacher Analytics'],
+            ['route' => 'teacher.e-resources.index', 'label' => 'E Resources'],
             ['route' => 'principal.medical.referrals.index', 'label' => 'Medical Referrals'],
             ['route' => 'academic-calendar.index', 'label' => 'Academic Calendar'],
             ['route' => 'notifications.index', 'label' => 'Notifications'],
