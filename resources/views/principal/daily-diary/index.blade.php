@@ -6,13 +6,20 @@
                 <p class="mt-1 text-sm text-slate-500">Track expected teacher postings and verify submitted diary entries.</p>
             </div>
             <a
-                href="{{ route('principal.daily-diary.completion-report', ['session' => $filters['session'], 'date' => $filters['date']]) }}"
+                href="{{ route('principal.daily-diary.completion-report', ['session' => $filters['session'], 'date' => $filters['date'], 'class_id' => $filters['class_id'], 'teacher_id' => $filters['teacher_id'], 'subject_id' => $filters['subject_id']]) }}"
                 class="inline-flex min-h-11 items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
             >
                 View Completion Report
             </a>
         </div>
     </x-slot>
+
+    @php
+        $cards = $cards ?? $stats ?? [];
+        $missingPostings = (int) ($cards['missing_postings'] ?? 0);
+        $completionPercentage = (float) ($cards['completion_percentage'] ?? 0);
+        $hasExpectations = (int) ($cards['total_expected_postings'] ?? 0) > 0;
+    @endphp
 
     <div class="py-8">
         <div class="mx-auto max-w-7xl space-y-6 sm:px-6 lg:px-8">
@@ -76,23 +83,68 @@
                 </form>
             </section>
 
+            @if (! $hasExpectations)
+                <section class="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800">
+                    No diary posting expectations found for the selected date and session.
+                </section>
+            @elseif ($missingPostings > 0)
+                <section class="rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-700">
+                    <p class="font-semibold">Attention needed: {{ number_format($missingPostings) }} diary posting(s) are still missing.</p>
+                    <p class="mt-1">Use the monitoring table below or open completion report for class-wise details.</p>
+                </section>
+            @elseif ($completionPercentage >= 100)
+                <section class="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm text-emerald-700">
+                    Great progress: diary posting completion is at 100% for the selected scope.
+                </section>
+            @endif
+
             <section class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                     <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Total Expected Postings</p>
-                    <p class="mt-2 text-2xl font-semibold text-slate-900">{{ number_format((int) ($stats['total_expected_postings'] ?? 0)) }}</p>
+                    <p class="mt-2 text-2xl font-semibold text-slate-900">{{ number_format((int) ($cards['total_expected_postings'] ?? 0)) }}</p>
                 </article>
                 <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                     <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Total Posted</p>
-                    <p class="mt-2 text-2xl font-semibold text-emerald-700">{{ number_format((int) ($stats['total_posted'] ?? 0)) }}</p>
+                    <p class="mt-2 text-2xl font-semibold text-emerald-700">{{ number_format((int) ($cards['total_posted'] ?? 0)) }}</p>
                 </article>
-                <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <article class="{{ $missingPostings > 0 ? 'border-rose-200 bg-rose-50' : 'border-emerald-200 bg-emerald-50' }} rounded-2xl border p-5 shadow-sm">
                     <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Missing Postings</p>
-                    <p class="mt-2 text-2xl font-semibold text-rose-700">{{ number_format((int) ($stats['missing_postings'] ?? 0)) }}</p>
+                    <p class="mt-2 text-2xl font-semibold {{ $missingPostings > 0 ? 'text-rose-700' : 'text-emerald-700' }}">{{ number_format($missingPostings) }}</p>
                 </article>
-                <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <article class="rounded-2xl border border-indigo-200 bg-indigo-50 p-5 shadow-sm">
                     <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Completion</p>
-                    <p class="mt-2 text-2xl font-semibold text-slate-900">{{ number_format((float) ($stats['completion_percentage'] ?? 0), 2) }}%</p>
+                    <p class="mt-2 text-2xl font-semibold text-indigo-700">{{ number_format($completionPercentage, 2) }}%</p>
                 </article>
+            </section>
+
+            <section class="grid grid-cols-1 gap-4 md:grid-cols-3">
+                <article class="rounded-2xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
+                    <p class="text-xs font-semibold uppercase tracking-wide text-amber-700">Teachers Missing Diary</p>
+                    <p class="mt-2 text-2xl font-semibold text-amber-800">{{ number_format((int) ($cards['teachers_missing_count'] ?? 0)) }}</p>
+                </article>
+                <article class="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 shadow-sm">
+                    <p class="text-xs font-semibold uppercase tracking-wide text-emerald-700">Fully Covered Classes</p>
+                    <p class="mt-2 text-2xl font-semibold text-emerald-800">{{ number_format((int) ($cards['fully_covered_classes_count'] ?? 0)) }}</p>
+                </article>
+                <article class="rounded-2xl border border-rose-200 bg-rose-50 p-5 shadow-sm">
+                    <p class="text-xs font-semibold uppercase tracking-wide text-rose-700">Classes With Missing Entries</p>
+                    <p class="mt-2 text-2xl font-semibold text-rose-800">{{ number_format((int) ($cards['classes_with_missing_entries_count'] ?? 0)) }}</p>
+                </article>
+            </section>
+
+            <section class="flex flex-wrap gap-2">
+                <a
+                    href="{{ route('principal.daily-diary.completion-report', ['session' => $filters['session'], 'date' => $filters['date'], 'class_id' => $filters['class_id'], 'teacher_id' => $filters['teacher_id'], 'subject_id' => $filters['subject_id']]).'#missing-entries' }}"
+                    class="inline-flex min-h-11 items-center rounded-xl border border-rose-300 bg-white px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50"
+                >
+                    View Missing Entries
+                </a>
+                <a
+                    href="{{ route('principal.daily-diary.index', ['session' => $filters['session'], 'date' => $filters['date']]) }}"
+                    class="inline-flex min-h-11 items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                    View All Diary Entries
+                </a>
             </section>
 
             <section class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -141,7 +193,7 @@
                             @empty
                                 <tr>
                                     <td colspan="7" class="px-4 py-10 text-center text-sm text-slate-500">
-                                        No teacher assignment rows found for the selected filters.
+                                        No diary posting expectations found for the selected date and session.
                                     </td>
                                 </tr>
                             @endforelse
@@ -152,4 +204,3 @@
         </div>
     </div>
 </x-app-layout>
-

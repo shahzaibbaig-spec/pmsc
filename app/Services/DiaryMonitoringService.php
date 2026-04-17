@@ -5,12 +5,19 @@ namespace App\Services;
 use App\Models\DailyDiary;
 use App\Models\TeacherAssignment;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
 class DiaryMonitoringService
 {
+    /**
+     * @var array<string, bool>
+     */
+    private array $visibilityCache = [];
+
     public function __construct(
-        private readonly DailyDiaryService $dailyDiaryService
+        private readonly DailyDiaryService $dailyDiaryService,
+        private readonly TeacherStudentVisibilityService $visibilityService
     ) {
     }
 
@@ -20,43 +27,81 @@ class DiaryMonitoringService
      *     total_posted:int,
      *     missing_postings:int,
      *     completion_percentage:float,
+     *     teachers_missing_count:int,
+     *     fully_covered_classes_count:int,
+     *     classes_with_missing_entries_count:int,
      *     missing_rows:array<int, array<string, mixed>>,
-     *     rows:array<int, array<string, mixed>>
+     *     rows:array<int, array<string, mixed>>,
+     *     classwise_completion:array<int, array{
+     *         class_id:int,
+     *         class_name:string,
+     *         expected_postings:int,
+     *         posted:int,
+     *         missing:int,
+     *         completion_percentage:float
+     *     }>
      * }
      */
-    public function getPostingCompletionReport(string $session, string $date): array
+    public function getPostingCompletionReport(string $session, string $date, array $filters = []): array
     {
-        $rows = $this->getMonitoringRows($session, $date);
+        $rows = $this->getMonitoringRows($session, $date, $filters);
+        $cards = $this->buildCompletionDashboardCards($rows);
+        $classwise = $this->buildClasswiseCompletionRows($rows);
 
-        $totalExpected = count($rows);
-        $totalPosted = collect($rows)->where('posted', true)->count();
-        $missing = max($totalExpected - $totalPosted, 0);
-        $completionPercentage = $totalExpected > 0
-            ? round(($totalPosted / $totalExpected) * 100, 2)
-            : 100.0;
-
-        return [
-            'total_expected_postings' => $totalExpected,
-            'total_posted' => $totalPosted,
-            'missing_postings' => $missing,
-            'completion_percentage' => $completionPercentage,
+        return array_merge($cards, [
             'missing_rows' => collect($rows)
                 ->where('posted', false)
                 ->values()
                 ->all(),
             'rows' => $rows,
-        ];
+            'classwise_completion' => $classwise,
+        ]);
     }
 
     /**
      * @return array<int, array<string, mixed>>
      */
-    public function getMissingDiaryTeachers(string $session, string $date): array
+    public function getMissingDiaryTeachers(string $session, string $date, array $filters = []): array
     {
-        return collect($this->getMonitoringRows($session, $date))
+        return collect($this->getMonitoringRows($session, $date, $filters))
             ->where('posted', false)
             ->values()
             ->all();
+    }
+
+    /**
+     * @return array{
+     *     total_expected_postings:int,
+     *     total_posted:int,
+     *     missing_postings:int,
+     *     completion_percentage:float,
+     *     teachers_missing_count:int,
+     *     fully_covered_classes_count:int,
+     *     classes_with_missing_entries_count:int
+     * }
+     */
+    public function getCompletionDashboardCards(string $session, string $date, array $filters = []): array
+    {
+        $rows = $this->getMonitoringRows($session, $date, $filters);
+
+        return $this->buildCompletionDashboardCards($rows);
+    }
+
+    /**
+     * @return array<int, array{
+     *     class_id:int,
+     *     class_name:string,
+     *     expected_postings:int,
+     *     posted:int,
+     *     missing:int,
+     *     completion_percentage:float
+     * }>
+     */
+    public function getClasswiseDiaryCompletion(string $session, string $date, array $filters = []): array
+    {
+        $rows = $this->getMonitoringRows($session, $date, $filters);
+
+        return $this->buildClasswiseCompletionRows($rows);
     }
 
     /**
@@ -65,38 +110,13 @@ class DiaryMonitoringService
      */
     public function getMonitoringRows(string $session, string $date, array $filters = []): array
     {
+        $this->visibilityCache = [];
+
         $resolvedSession = $this->dailyDiaryService->resolveSession($session);
         $resolvedDate = Carbon::parse(trim((string) $date) !== '' ? $date : now()->toDateString())->toDateString();
+        $normalizedFilters = $this->normalizeFilters($filters);
 
-        $teacherId = isset($filters['teacher_id']) && $filters['teacher_id'] !== ''
-            ? (int) $filters['teacher_id']
-            : null;
-        $classId = isset($filters['class_id']) && $filters['class_id'] !== ''
-            ? (int) $filters['class_id']
-            : null;
-        $subjectId = isset($filters['subject_id']) && $filters['subject_id'] !== ''
-            ? (int) $filters['subject_id']
-            : null;
-
-        $assignments = TeacherAssignment::query()
-            ->with([
-                'teacher.user:id,name',
-                'classRoom:id,name,section',
-                'subject:id,name',
-            ])
-            ->where('session', $resolvedSession)
-            ->whereNotNull('subject_id')
-            ->when($teacherId !== null, fn ($query) => $query->where('teacher_id', $teacherId))
-            ->when($classId !== null, fn ($query) => $query->where('class_id', $classId))
-            ->when($subjectId !== null, fn ($query) => $query->where('subject_id', $subjectId))
-            ->get(['id', 'teacher_id', 'class_id', 'subject_id', 'session'])
-            ->unique(fn (TeacherAssignment $assignment): string => $this->scopeKey(
-                (int) $assignment->teacher_id,
-                (int) $assignment->class_id,
-                (int) $assignment->subject_id,
-                (string) $assignment->session
-            ))
-            ->values();
+        $assignments = $this->expectedAssignments($resolvedSession, $normalizedFilters);
 
         $postedDiaries = DailyDiary::query()
             ->with([
@@ -106,9 +126,9 @@ class DiaryMonitoringService
             ])
             ->where('session', $resolvedSession)
             ->whereDate('diary_date', $resolvedDate)
-            ->when($teacherId !== null, fn ($query) => $query->where('teacher_id', $teacherId))
-            ->when($classId !== null, fn ($query) => $query->where('class_id', $classId))
-            ->when($subjectId !== null, fn ($query) => $query->where('subject_id', $subjectId))
+            ->when($normalizedFilters['teacher_id'] !== null, fn ($query) => $query->where('teacher_id', $normalizedFilters['teacher_id']))
+            ->when($normalizedFilters['class_id'] !== null, fn ($query) => $query->where('class_id', $normalizedFilters['class_id']))
+            ->when($normalizedFilters['subject_id'] !== null, fn ($query) => $query->where('subject_id', $normalizedFilters['subject_id']))
             ->get();
 
         $postedDiaryMap = $postedDiaries->keyBy(fn (DailyDiary $diary): string => $this->scopeKey(
@@ -155,6 +175,180 @@ class DiaryMonitoringService
             ->sortBy(fn (array $row): string => (string) ($row['teacher_name'].'|'.$row['class_name'].'|'.$row['subject_name']))
             ->values()
             ->all();
+    }
+
+    /**
+     * @param array<string, mixed> $filters
+     * @return Collection<int, TeacherAssignment>
+     */
+    private function expectedAssignments(string $session, array $filters): Collection
+    {
+        return TeacherAssignment::query()
+            ->with([
+                'teacher.user:id,name',
+                'classRoom:id,name,section',
+                'subject:id,name',
+            ])
+            ->where('session', $session)
+            ->whereNotNull('teacher_id')
+            ->whereNotNull('class_id')
+            ->whereNotNull('subject_id')
+            ->when($filters['teacher_id'] !== null, fn ($query) => $query->where('teacher_id', $filters['teacher_id']))
+            ->when($filters['class_id'] !== null, fn ($query) => $query->where('class_id', $filters['class_id']))
+            ->when($filters['subject_id'] !== null, fn ($query) => $query->where('subject_id', $filters['subject_id']))
+            ->get(['id', 'teacher_id', 'class_id', 'subject_id', 'session'])
+            ->unique(fn (TeacherAssignment $assignment): string => $this->scopeKey(
+                (int) $assignment->teacher_id,
+                (int) $assignment->class_id,
+                (int) $assignment->subject_id,
+                (string) $assignment->session
+            ))
+            ->filter(fn (TeacherAssignment $assignment): bool => $this->hasValidLinkedModels($assignment))
+            ->filter(fn (TeacherAssignment $assignment): bool => $this->assignmentHasVisibleStudents($assignment))
+            ->values();
+    }
+
+    private function hasValidLinkedModels(TeacherAssignment $assignment): bool
+    {
+        return (int) $assignment->teacher_id > 0
+            && (int) $assignment->class_id > 0
+            && (int) ($assignment->subject_id ?? 0) > 0
+            && $assignment->teacher !== null
+            && $assignment->teacher?->user !== null
+            && $assignment->classRoom !== null
+            && $assignment->subject !== null;
+    }
+
+    private function assignmentHasVisibleStudents(TeacherAssignment $assignment): bool
+    {
+        $cacheKey = $this->scopeKey(
+            (int) $assignment->teacher_id,
+            (int) $assignment->class_id,
+            (int) $assignment->subject_id,
+            (string) $assignment->session
+        );
+
+        if (array_key_exists($cacheKey, $this->visibilityCache)) {
+            return $this->visibilityCache[$cacheKey];
+        }
+
+        $hasStudents = $this->visibilityService
+            ->getVisibleStudentsForSubjectTeacher(
+                (int) $assignment->teacher_id,
+                (int) $assignment->class_id,
+                (int) $assignment->subject_id,
+                (string) $assignment->session
+            )
+            ->isNotEmpty();
+
+        $this->visibilityCache[$cacheKey] = $hasStudents;
+
+        return $hasStudents;
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $rows
+     * @return array{
+     *     total_expected_postings:int,
+     *     total_posted:int,
+     *     missing_postings:int,
+     *     completion_percentage:float,
+     *     teachers_missing_count:int,
+     *     fully_covered_classes_count:int,
+     *     classes_with_missing_entries_count:int
+     * }
+     */
+    private function buildCompletionDashboardCards(array $rows): array
+    {
+        $totalExpected = count($rows);
+        $totalPosted = collect($rows)->where('posted', true)->count();
+        $missing = max($totalExpected - $totalPosted, 0);
+        $completionPercentage = $totalExpected > 0
+            ? round(($totalPosted / $totalExpected) * 100, 2)
+            : 0.0;
+
+        $teachersMissingCount = collect($rows)
+            ->where('posted', false)
+            ->pluck('teacher_id')
+            ->map(static fn ($id): int => (int) $id)
+            ->filter(static fn (int $id): bool => $id > 0)
+            ->unique()
+            ->count();
+
+        $classwiseRows = $this->buildClasswiseCompletionRows($rows);
+        $fullyCoveredClassesCount = collect($classwiseRows)
+            ->where('expected_postings', '>', 0)
+            ->where('missing', 0)
+            ->count();
+        $classesWithMissingEntriesCount = collect($classwiseRows)
+            ->where('missing', '>', 0)
+            ->count();
+
+        return [
+            'total_expected_postings' => $totalExpected,
+            'total_posted' => $totalPosted,
+            'missing_postings' => $missing,
+            'completion_percentage' => $completionPercentage,
+            'teachers_missing_count' => $teachersMissingCount,
+            'fully_covered_classes_count' => $fullyCoveredClassesCount,
+            'classes_with_missing_entries_count' => $classesWithMissingEntriesCount,
+        ];
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $rows
+     * @return array<int, array{
+     *     class_id:int,
+     *     class_name:string,
+     *     expected_postings:int,
+     *     posted:int,
+     *     missing:int,
+     *     completion_percentage:float
+     * }>
+     */
+    private function buildClasswiseCompletionRows(array $rows): array
+    {
+        return collect($rows)
+            ->groupBy(fn (array $row): int => (int) ($row['class_id'] ?? 0))
+            ->map(function (Collection $classRows, int $classId): array {
+                $expected = $classRows->count();
+                $posted = $classRows->where('posted', true)->count();
+                $missing = max($expected - $posted, 0);
+                $completionPercentage = $expected > 0
+                    ? round(($posted / $expected) * 100, 2)
+                    : 0.0;
+
+                return [
+                    'class_id' => $classId,
+                    'class_name' => (string) ($classRows->first()['class_name'] ?? 'Class'),
+                    'expected_postings' => $expected,
+                    'posted' => $posted,
+                    'missing' => $missing,
+                    'completion_percentage' => $completionPercentage,
+                ];
+            })
+            ->sortBy('class_name')
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param array<string, mixed> $filters
+     * @return array{teacher_id:?int,class_id:?int,subject_id:?int}
+     */
+    private function normalizeFilters(array $filters): array
+    {
+        return [
+            'teacher_id' => isset($filters['teacher_id']) && $filters['teacher_id'] !== ''
+                ? (int) $filters['teacher_id']
+                : null,
+            'class_id' => isset($filters['class_id']) && $filters['class_id'] !== ''
+                ? (int) $filters['class_id']
+                : null,
+            'subject_id' => isset($filters['subject_id']) && $filters['subject_id'] !== ''
+                ? (int) $filters['subject_id']
+                : null,
+        ];
     }
 
     /**
@@ -233,4 +427,3 @@ class DiaryMonitoringService
         return $teacherId.'|'.$classId.'|'.$subjectId.'|'.$session;
     }
 }
-
