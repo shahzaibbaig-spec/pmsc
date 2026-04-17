@@ -1310,6 +1310,10 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
         ->middleware(['role:Doctor', 'permission:view_medical_requests'])
         ->name('doctor.medical.referrals.data');
 
+    Route::get('/doctor/medical/referrals/notifications', [MedicalReferralController::class, 'doctorNotifications'])
+        ->middleware(['role:Doctor', 'permission:view_medical_requests'])
+        ->name('doctor.medical.referrals.notifications');
+
     Route::put('/doctor/medical/referrals/{medicalReferral}', [MedicalReferralController::class, 'update'])
         ->middleware(['role:Doctor', 'permission:view_medical_requests'])
         ->name('doctor.medical.referrals.update');

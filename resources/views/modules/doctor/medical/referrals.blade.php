@@ -19,18 +19,21 @@
                         </a>
                     </div>
                     <div class="mt-3">
-                        @if($unreadNotifications->isEmpty())
-                            <p class="text-sm text-gray-500">No unread notifications.</p>
-                        @else
-                            <ul class="space-y-2">
-                                @foreach($unreadNotifications as $notification)
-                                    <li class="rounded-md border border-gray-200 px-3 py-2 text-sm">
-                                        <span class="font-medium">{{ $notification->data['message'] ?? 'New medical referral' }}</span>
-                                        <span class="text-gray-500"> | Student: {{ $notification->data['student_name'] ?? '-' }}</span>
-                                    </li>
-                                @endforeach
-                            </ul>
-                        @endif
+                        <div id="doctorNotificationList">
+                            @if($unreadNotifications->isEmpty())
+                                <p class="text-sm text-gray-500">No unread notifications.</p>
+                            @else
+                                <ul class="space-y-2">
+                                    @foreach($unreadNotifications as $notification)
+                                        <li class="rounded-md border border-gray-200 px-3 py-2 text-sm">
+                                            <span class="font-medium">{{ $notification->data['message'] ?? 'New medical referral' }}</span>
+                                            <span class="text-gray-500"> | Student: {{ $notification->data['student_name'] ?? '-' }}</span>
+                                            <span class="text-gray-400"> | {{ optional($notification->created_at)->format('Y-m-d H:i') }}</span>
+                                        </li>
+                                    @endforeach
+                                </ul>
+                            @endif
+                        </div>
                     </div>
                 </div>
             </div>
@@ -164,9 +167,12 @@
         const updateStatusInput = document.getElementById('update_status');
         const saveRecordBtn = document.getElementById('saveRecordBtn');
         const selectedReferralText = document.getElementById('selectedReferralText');
+        const doctorNotificationList = document.getElementById('doctorNotificationList');
+        const updateRouteTemplate = `{{ route('doctor.medical.referrals.update', ['medicalReferral' => '__REFERRAL__']) }}`;
 
         let state = { page: 1, per_page: 10, search: '', status: '', month: '', year: new Date().getFullYear() };
         let referralsCache = [];
+        let pollingHandle = null;
 
         function escapeHtml(value) {
             if (value === null || value === undefined) return '';
@@ -186,6 +192,42 @@
             } else {
                 messageBox.classList.add('bg-green-50', 'text-green-700');
             }
+        }
+
+        function renderNotifications(items = []) {
+            if (!doctorNotificationList) {
+                return;
+            }
+
+            if (!items.length) {
+                doctorNotificationList.innerHTML = '<p class="text-sm text-gray-500">No unread notifications.</p>';
+                return;
+            }
+
+            doctorNotificationList.innerHTML = `
+                <ul class="space-y-2">
+                    ${items.map(item => `
+                        <li class="rounded-md border border-gray-200 px-3 py-2 text-sm">
+                            <span class="font-medium">${escapeHtml(item.message || 'New medical referral')}</span>
+                            <span class="text-gray-500"> | Student: ${escapeHtml(item.student_name || '-')}</span>
+                            <span class="text-gray-400"> | ${escapeHtml(item.created_at || '-')}</span>
+                        </li>
+                    `).join('')}
+                </ul>
+            `;
+        }
+
+        async function loadNotifications() {
+            const response = await fetch(`{{ route('doctor.medical.referrals.notifications') }}`, {
+                headers: { 'Accept': 'application/json' }
+            });
+
+            if (!response.ok) {
+                return;
+            }
+
+            const result = await response.json();
+            renderNotifications(result.data || []);
         }
 
         async function loadReferrals() {
@@ -274,7 +316,7 @@
             saveRecordBtn.textContent = 'Saving...';
 
             try {
-                const response = await fetch(`/doctor/medical/referrals/${referralId}`, {
+                const response = await fetch(updateRouteTemplate.replace('__REFERRAL__', String(referralId)), {
                     method: 'PUT',
                     headers: {
                         'Content-Type': 'application/json',
@@ -348,6 +390,27 @@
             await loadReferrals();
         });
 
-        window.NSMS.lazyInit(referralBody, loadReferrals);
+        async function refreshDoctorPanel() {
+            await Promise.all([
+                loadReferrals(),
+                loadNotifications(),
+            ]);
+        }
+
+        window.NSMS.lazyInit(referralBody, refreshDoctorPanel);
+
+        pollingHandle = window.setInterval(() => {
+            if (document.visibilityState !== 'visible') {
+                return;
+            }
+
+            refreshDoctorPanel();
+        }, 15000);
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                refreshDoctorPanel();
+            }
+        });
     </script>
 </x-app-layout>

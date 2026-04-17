@@ -14,6 +14,20 @@ use RuntimeException;
 
 class MedicalService
 {
+    public function listAvailableDoctors(): array
+    {
+        return $this->activeDoctorQuery()
+            ->orderBy('name')
+            ->get(['id', 'name', 'email'])
+            ->map(static fn (User $doctor): array => [
+                'id' => (int) $doctor->id,
+                'name' => (string) $doctor->name,
+                'email' => (string) ($doctor->email ?? ''),
+            ])
+            ->values()
+            ->all();
+    }
+
     public function studentSearch(string $query): array
     {
         if (trim($query) === '') {
@@ -45,13 +59,8 @@ class MedicalService
 
     public function createReferral(int $principalUserId, array $data): MedicalReferral
     {
-        $doctor = User::role('Doctor')
-            ->where(function ($query): void {
-                $query->where('status', 'active')
-                    ->orWhereNull('status');
-            })
-            ->orderBy('id')
-            ->first(['id', 'name', 'email']);
+        $doctorId = (int) ($data['doctor_id'] ?? 0);
+        $doctor = $this->resolveDoctorForReferral($doctorId);
 
         if (! $doctor) {
             throw new RuntimeException('No active doctor user found to receive this referral.');
@@ -61,7 +70,7 @@ class MedicalService
             $referral = MedicalReferral::query()->create([
                 'student_id' => (int) $data['student_id'],
                 'principal_id' => $principalUserId,
-                'doctor_id' => $doctor->id,
+                'doctor_id' => (int) $doctor->id,
                 'illness_type' => $data['illness_type'],
                 'illness_other_text' => $data['illness_other_text'] ?? null,
                 'status' => 'pending',
@@ -304,5 +313,26 @@ class MedicalService
             'referred_at' => optional($referral->referred_at ?? $referral->created_at)->format('Y-m-d H:i'),
             'created_at' => optional($referral->created_at)->format('Y-m-d H:i'),
         ];
+    }
+
+    private function resolveDoctorForReferral(int $doctorId): ?User
+    {
+        $query = $this->activeDoctorQuery();
+
+        if ($doctorId > 0) {
+            return $query->whereKey($doctorId)->first(['id', 'name', 'email']);
+        }
+
+        return $query->orderBy('id')->first(['id', 'name', 'email']);
+    }
+
+    private function activeDoctorQuery(): Builder
+    {
+        return User::query()
+            ->role('Doctor')
+            ->where(function (Builder $query): void {
+                $query->whereNull('status')
+                    ->orWhereIn('status', ['active', 'Active', 'ACTIVE', 'enabled', 'Enabled', 'ENABLED', '1', 1]);
+            });
     }
 }

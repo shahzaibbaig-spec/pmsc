@@ -10,11 +10,11 @@
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
                 <div class="p-6">
                     <h3 class="text-lg font-medium text-gray-900">Create Referral</h3>
-                    <p class="text-sm text-gray-600 mt-1">Search student, select illness, and submit referral to Doctor.</p>
+                    <p class="text-sm text-gray-600 mt-1">Search student, choose doctor, select illness, and submit referral.</p>
 
                     <div id="messageBox" class="mt-4 hidden rounded-md p-3 text-sm"></div>
 
-                    <form id="referralForm" class="mt-4 grid grid-cols-1 md:grid-cols-5 gap-4">
+                    <form id="referralForm" class="mt-4 grid grid-cols-1 md:grid-cols-6 gap-4">
                         <input type="hidden" id="student_id" name="student_id">
 
                         <div class="md:col-span-2 relative">
@@ -22,6 +22,17 @@
                             <x-text-input id="student_search" type="text" class="mt-1 block w-full" placeholder="Name, student ID, father name" autocomplete="off" />
                             <div id="searchResults" class="absolute z-20 mt-1 w-full rounded-md border border-gray-200 bg-white shadow-lg hidden max-h-56 overflow-y-auto"></div>
                             <p id="selectedStudentText" class="mt-2 text-xs text-gray-600"></p>
+                        </div>
+
+                        <div>
+                            <x-input-label for="doctor_id" value="Doctor" />
+                            <select id="doctor_id" name="doctor_id" class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500" @disabled(empty($availableDoctors))>
+                                @forelse($availableDoctors as $doctor)
+                                    <option value="{{ $doctor['id'] }}">{{ $doctor['name'] }}{{ $doctor['email'] !== '' ? ' ('.$doctor['email'].')' : '' }}</option>
+                                @empty
+                                    <option value="">No doctor account available</option>
+                                @endforelse
+                            </select>
                         </div>
 
                         <div>
@@ -39,8 +50,11 @@
                             <x-text-input id="illness_other_text" name="illness_other_text" type="text" class="mt-1 block w-full" />
                         </div>
 
-                        <div class="md:col-span-5">
-                            <x-primary-button id="submitReferralBtn">Submit Referral</x-primary-button>
+                        <div class="md:col-span-6">
+                            <x-primary-button id="submitReferralBtn" @disabled(empty($availableDoctors))>Submit Referral</x-primary-button>
+                            @if (empty($availableDoctors))
+                                <p class="mt-2 text-xs text-red-600">No active doctor account found. Ask admin to activate a doctor user first.</p>
+                            @endif
                         </div>
                     </form>
                 </div>
@@ -133,6 +147,7 @@
         const illnessTypeInput = document.getElementById('illness_type');
         const otherIllnessWrapper = document.getElementById('otherIllnessWrapper');
         const otherIllnessInput = document.getElementById('illness_other_text');
+        const doctorIdInput = document.getElementById('doctor_id');
         const submitReferralBtn = document.getElementById('submitReferralBtn');
         const referralForm = document.getElementById('referralForm');
         const messageBox = document.getElementById('messageBox');
@@ -266,9 +281,14 @@
                 showMessage('Please select a student from search results.', 'error');
                 return;
             }
+            if (!doctorIdInput || !doctorIdInput.value) {
+                showMessage('Please select a doctor for this referral.', 'error');
+                return;
+            }
 
             const payload = {
                 student_id: Number(studentIdInput.value),
+                doctor_id: Number(doctorIdInput.value),
                 illness_type: illnessTypeInput.value,
                 illness_other_text: illnessTypeInput.value === 'other' ? otherIllnessInput.value.trim() : null
             };
@@ -299,10 +319,14 @@
                 }
 
                 showMessage('Referral submitted and doctor notified.');
+                const selectedDoctorId = doctorIdInput.value;
                 referralForm.reset();
                 studentIdInput.value = '';
                 selectedStudentText.textContent = '';
                 otherIllnessWrapper.classList.add('hidden');
+                if (doctorIdInput) {
+                    doctorIdInput.value = selectedDoctorId;
+                }
                 await loadHistory();
             } catch (error) {
                 showMessage('Unexpected error while submitting referral.', 'error');

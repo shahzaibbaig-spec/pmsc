@@ -22,7 +22,9 @@ class MedicalReferralController extends Controller
 
     public function principalIndex(): View
     {
-        return view('modules.principal.medical.referrals');
+        return view('modules.principal.medical.referrals', [
+            'availableDoctors' => $this->service->listAvailableDoctors(),
+        ]);
     }
 
     public function doctorIndex(): View
@@ -31,6 +33,24 @@ class MedicalReferralController extends Controller
 
         return view('modules.doctor.medical.referrals', [
             'unreadNotifications' => $user?->unreadNotifications()->latest()->limit(10)->get() ?? collect(),
+        ]);
+    }
+
+    public function doctorNotifications(): JsonResponse
+    {
+        $user = auth()->user();
+        $notifications = $user?->unreadNotifications()->latest()->limit(10)->get() ?? collect();
+
+        return response()->json([
+            'data' => $notifications->map(static function ($notification): array {
+                return [
+                    'id' => (string) $notification->id,
+                    'message' => (string) ($notification->data['message'] ?? 'New medical referral'),
+                    'student_name' => (string) ($notification->data['student_name'] ?? '-'),
+                    'referral_id' => (int) ($notification->data['referral_id'] ?? 0),
+                    'created_at' => optional($notification->created_at)->format('Y-m-d H:i'),
+                ];
+            })->values()->all(),
         ]);
     }
 
