@@ -23,6 +23,7 @@ class DashboardRedirectController extends Controller
             $user->hasRole('Accountant') => redirect()->route('accountant.dashboard'),
             $user->hasRole('Teacher') => redirect()->route('teacher.dashboard'),
             $user->hasRole('Doctor') => redirect()->route('doctor.dashboard'),
+            $user->hasRole('Warden') => redirect()->route('warden.dashboard'),
             $user->hasRole('Student') => redirect()->route('student.dashboard'),
             default => redirect()->route('profile.edit'),
         };

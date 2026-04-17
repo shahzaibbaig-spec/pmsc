@@ -20,6 +20,7 @@ class RbacMatrixController extends Controller
         'Accountant',
         'Teacher',
         'Doctor',
+        'Warden',
         'Student',
     ];
 
@@ -74,6 +75,9 @@ class RbacMatrixController extends Controller
         'view_student_daily_diary',
         'view_all_daily_diary',
         'monitor_daily_diary',
+        'view_student_discipline_reports',
+        'view_student_academic_records',
+        'view_student_profiles_basic',
         'take_cognitive_assessment',
         'view_own_cognitive_results',
         'view_cognitive_assessment_reports',

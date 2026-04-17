@@ -69,6 +69,15 @@ class RolePermissionSeeder extends Seeder
             'view_cognitive_profile_reports',
             'manage_cognitive_question_banks',
             'manage_cognitive_assessment_setup',
+            'create_daily_diary',
+            'edit_own_daily_diary',
+            'view_own_daily_diary_entries',
+            'view_student_daily_diary',
+            'view_all_daily_diary',
+            'monitor_daily_diary',
+            'view_student_discipline_reports',
+            'view_student_academic_records',
+            'view_student_profiles_basic',
         ];
 
         foreach ($permissions as $permission) {
@@ -81,6 +90,7 @@ class RolePermissionSeeder extends Seeder
         $doctor = Role::firstOrCreate(['name' => 'Doctor', 'guard_name' => 'web']);
         $student = Role::firstOrCreate(['name' => 'Student', 'guard_name' => 'web']);
         $accountant = Role::firstOrCreate(['name' => 'Accountant', 'guard_name' => 'web']);
+        $warden = Role::firstOrCreate(['name' => 'Warden', 'guard_name' => 'web']);
 
         $admin->syncPermissions($permissions);
         $principal->syncPermissions([
@@ -106,6 +116,11 @@ class RolePermissionSeeder extends Seeder
             'manage_student_cognitive_assessment_access',
             'reset_student_cognitive_assessment',
             'view_cognitive_profile_reports',
+            'view_all_daily_diary',
+            'monitor_daily_diary',
+            'view_student_discipline_reports',
+            'view_student_academic_records',
+            'view_student_profiles_basic',
         ]);
         $teacher->syncPermissions([
             'view_attendance',
@@ -114,6 +129,9 @@ class RolePermissionSeeder extends Seeder
             'view_own_mark_entries',
             'edit_own_mark_entries',
             'delete_own_mark_entries',
+            'create_daily_diary',
+            'edit_own_daily_diary',
+            'view_own_daily_diary_entries',
             'view_own_inventory',
             'create_inventory_demand',
             'view_own_inventory_demands',
@@ -121,6 +139,7 @@ class RolePermissionSeeder extends Seeder
         ]);
         $doctor->syncPermissions(['view_medical_requests']);
         $student->syncPermissions([
+            'view_student_daily_diary',
             'take_cognitive_assessment',
             'view_own_cognitive_results',
         ]);
@@ -139,6 +158,12 @@ class RolePermissionSeeder extends Seeder
             'view_salary_slips',
             'view_payroll_reports',
         ]);
+        $warden->syncPermissions([
+            'view_all_daily_diary',
+            'view_student_discipline_reports',
+            'view_student_academic_records',
+            'view_student_profiles_basic',
+        ]);
 
         $this->createUserWithRole('System Admin', 'admin@pmsc.edu.pk', 'Admin');
         $this->createUserWithRole('School Principal', 'principal@pmsc.edu.pk', 'Principal');
@@ -146,6 +171,7 @@ class RolePermissionSeeder extends Seeder
         $this->createUserWithRole('School Doctor', 'doctor@pmsc.edu.pk', 'Doctor');
         $this->createUserWithRole('Student User', 'student@pmsc.edu.pk', 'Student');
         $this->createUserWithRole('School Accountant', 'accountant@pmsc.edu.pk', 'Accountant');
+        $this->createUserWithRole('School Warden', 'warden@pmsc.edu.pk', 'Warden');
     }
 
     private function createUserWithRole(string $name, string $email, string $role): void

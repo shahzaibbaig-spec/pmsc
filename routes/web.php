@@ -20,6 +20,10 @@ use App\Http\Controllers\Teacher\TeacherEResourceController;
 use App\Http\Controllers\Teacher\TeacherInventoryController;
 use App\Http\Controllers\Teacher\TeacherInventoryDemandController;
 use App\Http\Controllers\Teacher\TeacherPromotionController;
+use App\Http\Controllers\Warden\WardenDailyDiaryController;
+use App\Http\Controllers\Warden\WardenDashboardController;
+use App\Http\Controllers\Warden\WardenDisciplineController;
+use App\Http\Controllers\Warden\WardenStudentRecordController;
 use App\Modules\Academic\Controllers\AcademicCalendarController;
 use App\Modules\Academic\Controllers\AcademicNotificationController;
 use App\Modules\Accountant\Controllers\AccountantDashboardController;
@@ -1321,6 +1325,37 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
     Route::get('/doctor/dashboard', DoctorDashboardController::class)
         ->middleware('role:Doctor')
         ->name('doctor.dashboard');
+
+    Route::get('/warden/dashboard', WardenDashboardController::class)
+        ->middleware(['role:Warden'])
+        ->name('warden.dashboard');
+
+    Route::get('/warden/daily-diary', [WardenDailyDiaryController::class, 'index'])
+        ->middleware(['role:Warden', 'permission:view_all_daily_diary'])
+        ->name('warden.daily-diary.index');
+
+    Route::get('/warden/daily-diary/{dailyDiary}', [WardenDailyDiaryController::class, 'show'])
+        ->middleware(['role:Warden', 'permission:view_all_daily_diary'])
+        ->whereNumber('dailyDiary')
+        ->name('warden.daily-diary.show');
+
+    Route::get('/warden/discipline-reports', [WardenDisciplineController::class, 'index'])
+        ->middleware(['role:Warden', 'permission:view_student_discipline_reports'])
+        ->name('warden.discipline-reports.index');
+
+    Route::get('/warden/discipline-reports/{report}', [WardenDisciplineController::class, 'show'])
+        ->middleware(['role:Warden', 'permission:view_student_discipline_reports'])
+        ->whereNumber('report')
+        ->name('warden.discipline-reports.show');
+
+    Route::get('/warden/students', [WardenStudentRecordController::class, 'index'])
+        ->middleware(['role:Warden', 'permission:view_student_profiles_basic'])
+        ->name('warden.students.index');
+
+    Route::get('/warden/students/{student}', [WardenStudentRecordController::class, 'show'])
+        ->middleware(['role:Warden', 'permission:view_student_academic_records'])
+        ->whereNumber('student')
+        ->name('warden.students.show');
 
     Route::get('/student/dashboard', StudentDashboardController::class)
         ->middleware('role:Student')

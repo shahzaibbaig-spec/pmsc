@@ -247,6 +247,22 @@
         }
         $menuItems[] = ['route' => 'academic-calendar.index', 'label' => 'Academic Calendar'];
         $menuItems[] = ['route' => 'notifications.index', 'label' => 'Notifications'];
+    } elseif ($sidebarUser?->hasRole('Warden')) {
+        $menuItems = [
+            ['route' => 'warden.dashboard', 'label' => 'Dashboard'],
+        ];
+
+        if ($sidebarUser?->can('view_all_daily_diary')) {
+            $menuItems[] = ['route' => 'warden.daily-diary.index', 'label' => 'Daily Diary'];
+        }
+        if ($sidebarUser?->can('view_student_discipline_reports')) {
+            $menuItems[] = ['route' => 'warden.discipline-reports.index', 'label' => 'Discipline Reports'];
+        }
+        if ($sidebarUser?->can('view_student_profiles_basic') || $sidebarUser?->can('view_student_academic_records')) {
+            $menuItems[] = ['route' => 'warden.students.index', 'label' => 'Students / Records'];
+        }
+
+        $menuItems[] = ['route' => 'notifications.index', 'label' => 'Notifications'];
     } elseif ($sidebarUser?->hasRole('Doctor')) {
         $menuItems = [
             ['route' => 'doctor.dashboard', 'label' => 'Dashboard'],
