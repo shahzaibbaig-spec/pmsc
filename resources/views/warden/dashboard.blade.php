@@ -2,7 +2,7 @@
     <x-slot name="header">
         <div>
             <h2 class="text-xl font-semibold text-slate-900">Warden Dashboard</h2>
-            <p class="mt-1 text-sm text-slate-500">Read-only overview for daily diary, discipline reports, and student records.</p>
+            <p class="mt-1 text-sm text-slate-500">Read-only monitoring for diary, discipline, records, and hostel workflow operations.</p>
         </div>
     </x-slot>
 
@@ -45,14 +45,49 @@
                 </article>
             </section>
 
-            <section class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <section class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Hostel Rooms</p>
+                    <p class="mt-2 text-2xl font-semibold text-slate-900">{{ number_format((int) ($summary['total_hostel_rooms'] ?? 0)) }}</p>
+                </article>
+                <article class="rounded-2xl border border-cyan-200 bg-cyan-50 p-5 shadow-sm">
+                    <p class="text-xs font-semibold uppercase tracking-wide text-cyan-700">Active Room Allocations</p>
+                    <p class="mt-2 text-2xl font-semibold text-cyan-800">{{ number_format((int) ($summary['active_room_allocations'] ?? 0)) }}</p>
+                </article>
+                <article class="rounded-2xl border border-rose-200 bg-rose-50 p-5 shadow-sm">
+                    <p class="text-xs font-semibold uppercase tracking-wide text-rose-700">Pending Leave Requests</p>
+                    <p class="mt-2 text-2xl font-semibold text-rose-800">{{ number_format((int) ($summary['pending_hostel_leave_requests'] ?? 0)) }}</p>
+                </article>
+                <article class="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 shadow-sm">
+                    <p class="text-xs font-semibold uppercase tracking-wide text-emerald-700">Night Attendance Marked (Date)</p>
+                    <p class="mt-2 text-2xl font-semibold text-emerald-800">{{ number_format((int) ($summary['night_attendance_marked_today'] ?? 0)) }}</p>
+                </article>
+            </section>
+
+            <section class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                 <a href="{{ route('warden.daily-diary.index') }}" class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:bg-slate-50">
                     <h3 class="text-base font-semibold text-slate-900">Daily Diary</h3>
                     <p class="mt-1 text-sm text-slate-500">Browse all teacher diary postings by class, subject, and date.</p>
                 </a>
+                <a href="{{ route('warden.discipline-reports.index') }}" class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:bg-slate-50">
+                    <h3 class="text-base font-semibold text-slate-900">Discipline Reports</h3>
+                    <p class="mt-1 text-sm text-slate-500">Review student incidents and case status updates.</p>
+                </a>
                 <a href="{{ route('warden.students.index') }}" class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:bg-slate-50">
                     <h3 class="text-base font-semibold text-slate-900">Students / Educational Records</h3>
                     <p class="mt-1 text-sm text-slate-500">Open student profiles for attendance and academic history.</p>
+                </a>
+                <a href="{{ route('warden.hostel.rooms.index') }}" class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:bg-slate-50">
+                    <h3 class="text-base font-semibold text-slate-900">Hostel Rooms</h3>
+                    <p class="mt-1 text-sm text-slate-500">Manage room capacity, floor mapping, and active room status.</p>
+                </a>
+                <a href="{{ route('warden.hostel.allocations.index') }}" class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:bg-slate-50">
+                    <h3 class="text-base font-semibold text-slate-900">Room Allocations</h3>
+                    <p class="mt-1 text-sm text-slate-500">Allocate students, shift rooms, and manage active hostel placements.</p>
+                </a>
+                <a href="{{ route('warden.hostel.leaves.index') }}" class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:bg-slate-50">
+                    <h3 class="text-base font-semibold text-slate-900">Hostel Leave & Night Attendance</h3>
+                    <p class="mt-1 text-sm text-slate-500">Manage leave approvals and monitor nightly hostel attendance.</p>
                 </a>
             </section>
 
@@ -97,3 +132,4 @@
         </div>
     </div>
 </x-app-layout>
+

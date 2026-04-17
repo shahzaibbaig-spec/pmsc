@@ -23,6 +23,10 @@ use App\Http\Controllers\Teacher\TeacherPromotionController;
 use App\Http\Controllers\Warden\WardenDailyDiaryController;
 use App\Http\Controllers\Warden\WardenDashboardController;
 use App\Http\Controllers\Warden\WardenDisciplineController;
+use App\Http\Controllers\Warden\HostelLeaveController;
+use App\Http\Controllers\Warden\HostelNightAttendanceController;
+use App\Http\Controllers\Warden\HostelRoomAllocationController;
+use App\Http\Controllers\Warden\HostelRoomController;
 use App\Http\Controllers\Warden\WardenStudentRecordController;
 use App\Modules\Academic\Controllers\AcademicCalendarController;
 use App\Modules\Academic\Controllers\AcademicNotificationController;
@@ -1356,6 +1360,104 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
         ->middleware(['role:Warden', 'permission:view_student_academic_records'])
         ->whereNumber('student')
         ->name('warden.students.show');
+
+    Route::get('/warden/hostel/rooms', [HostelRoomController::class, 'index'])
+        ->middleware(['role:Warden', 'permission:manage_hostel_rooms'])
+        ->name('warden.hostel.rooms.index');
+
+    Route::get('/warden/hostel/rooms/create', [HostelRoomController::class, 'create'])
+        ->middleware(['role:Warden', 'permission:manage_hostel_rooms'])
+        ->name('warden.hostel.rooms.create');
+
+    Route::post('/warden/hostel/rooms', [HostelRoomController::class, 'store'])
+        ->middleware(['role:Warden', 'permission:manage_hostel_rooms'])
+        ->name('warden.hostel.rooms.store');
+
+    Route::get('/warden/hostel/rooms/{room}/edit', [HostelRoomController::class, 'edit'])
+        ->middleware(['role:Warden', 'permission:manage_hostel_rooms'])
+        ->whereNumber('room')
+        ->name('warden.hostel.rooms.edit');
+
+    Route::put('/warden/hostel/rooms/{room}', [HostelRoomController::class, 'update'])
+        ->middleware(['role:Warden', 'permission:manage_hostel_rooms'])
+        ->whereNumber('room')
+        ->name('warden.hostel.rooms.update');
+
+    Route::get('/warden/hostel/allocations', [HostelRoomAllocationController::class, 'index'])
+        ->middleware(['role:Warden', 'permission:view_hostel_room_allocations'])
+        ->name('warden.hostel.allocations.index');
+
+    Route::get('/warden/hostel/allocations/create', [HostelRoomAllocationController::class, 'create'])
+        ->middleware(['role:Warden', 'permission:assign_students_to_rooms'])
+        ->name('warden.hostel.allocations.create');
+
+    Route::post('/warden/hostel/allocations', [HostelRoomAllocationController::class, 'store'])
+        ->middleware(['role:Warden', 'permission:assign_students_to_rooms'])
+        ->name('warden.hostel.allocations.store');
+
+    Route::get('/warden/hostel/allocations/{student}/shift', [HostelRoomAllocationController::class, 'editShift'])
+        ->middleware(['role:Warden', 'permission:assign_students_to_rooms'])
+        ->whereNumber('student')
+        ->name('warden.hostel.allocations.shift.edit');
+
+    Route::put('/warden/hostel/allocations/{student}/shift', [HostelRoomAllocationController::class, 'shift'])
+        ->middleware(['role:Warden', 'permission:assign_students_to_rooms'])
+        ->whereNumber('student')
+        ->name('warden.hostel.allocations.shift.update');
+
+    Route::post('/warden/hostel/allocations/{student}/remove', [HostelRoomAllocationController::class, 'remove'])
+        ->middleware(['role:Warden', 'permission:assign_students_to_rooms'])
+        ->whereNumber('student')
+        ->name('warden.hostel.allocations.remove');
+
+    Route::get('/warden/hostel/rooms/{room}/students', [HostelRoomAllocationController::class, 'roomStudents'])
+        ->middleware(['role:Warden', 'permission:view_hostel_room_allocations'])
+        ->whereNumber('room')
+        ->name('warden.hostel.rooms.students');
+
+    Route::get('/warden/hostel/leaves', [HostelLeaveController::class, 'index'])
+        ->middleware(['role:Warden', 'permission:manage_hostel_leave'])
+        ->name('warden.hostel.leaves.index');
+
+    Route::get('/warden/hostel/leaves/create', [HostelLeaveController::class, 'create'])
+        ->middleware(['role:Warden', 'permission:manage_hostel_leave'])
+        ->name('warden.hostel.leaves.create');
+
+    Route::post('/warden/hostel/leaves', [HostelLeaveController::class, 'store'])
+        ->middleware(['role:Warden', 'permission:manage_hostel_leave'])
+        ->name('warden.hostel.leaves.store');
+
+    Route::get('/warden/hostel/leaves/{leave}', [HostelLeaveController::class, 'show'])
+        ->middleware(['role:Warden', 'permission:manage_hostel_leave'])
+        ->whereNumber('leave')
+        ->name('warden.hostel.leaves.show');
+
+    Route::post('/warden/hostel/leaves/{leave}/approve', [HostelLeaveController::class, 'approve'])
+        ->middleware(['role:Warden', 'permission:manage_hostel_leave'])
+        ->whereNumber('leave')
+        ->name('warden.hostel.leaves.approve');
+
+    Route::post('/warden/hostel/leaves/{leave}/reject', [HostelLeaveController::class, 'reject'])
+        ->middleware(['role:Warden', 'permission:manage_hostel_leave'])
+        ->whereNumber('leave')
+        ->name('warden.hostel.leaves.reject');
+
+    Route::post('/warden/hostel/leaves/{leave}/returned', [HostelLeaveController::class, 'returned'])
+        ->middleware(['role:Warden', 'permission:manage_hostel_leave'])
+        ->whereNumber('leave')
+        ->name('warden.hostel.leaves.returned');
+
+    Route::get('/warden/hostel/night-attendance', [HostelNightAttendanceController::class, 'index'])
+        ->middleware(['role:Warden', 'permission:view_night_attendance'])
+        ->name('warden.hostel.night-attendance.index');
+
+    Route::get('/warden/hostel/night-attendance/create', [HostelNightAttendanceController::class, 'create'])
+        ->middleware(['role:Warden', 'permission:mark_night_attendance'])
+        ->name('warden.hostel.night-attendance.create');
+
+    Route::post('/warden/hostel/night-attendance', [HostelNightAttendanceController::class, 'store'])
+        ->middleware(['role:Warden', 'permission:mark_night_attendance'])
+        ->name('warden.hostel.night-attendance.store');
 
     Route::get('/student/dashboard', StudentDashboardController::class)
         ->middleware('role:Student')

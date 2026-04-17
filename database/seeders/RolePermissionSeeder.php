@@ -78,6 +78,12 @@ class RolePermissionSeeder extends Seeder
             'view_student_discipline_reports',
             'view_student_academic_records',
             'view_student_profiles_basic',
+            'manage_hostel_rooms',
+            'assign_students_to_rooms',
+            'view_hostel_room_allocations',
+            'manage_hostel_leave',
+            'mark_night_attendance',
+            'view_night_attendance',
         ];
 
         foreach ($permissions as $permission) {
@@ -163,6 +169,12 @@ class RolePermissionSeeder extends Seeder
             'view_student_discipline_reports',
             'view_student_academic_records',
             'view_student_profiles_basic',
+            'manage_hostel_rooms',
+            'assign_students_to_rooms',
+            'view_hostel_room_allocations',
+            'manage_hostel_leave',
+            'mark_night_attendance',
+            'view_night_attendance',
         ]);
 
         $this->createUserWithRole('System Admin', 'admin@pmsc.edu.pk', 'Admin');

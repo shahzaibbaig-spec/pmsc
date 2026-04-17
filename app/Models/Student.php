@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Student extends Model
@@ -208,5 +209,26 @@ class Student extends Model
     public function certificates(): HasMany
     {
         return $this->hasMany(Certificate::class);
+    }
+
+    public function hostelRoomAllocations(): HasMany
+    {
+        return $this->hasMany(HostelRoomAllocation::class);
+    }
+
+    public function activeHostelRoomAllocation(): HasOne
+    {
+        return $this->hasOne(HostelRoomAllocation::class)
+            ->where('status', HostelRoomAllocation::STATUS_ACTIVE);
+    }
+
+    public function hostelLeaveRequests(): HasMany
+    {
+        return $this->hasMany(HostelLeaveRequest::class);
+    }
+
+    public function hostelNightAttendances(): HasMany
+    {
+        return $this->hasMany(HostelNightAttendance::class);
     }
 }

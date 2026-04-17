@@ -261,6 +261,18 @@
         if ($sidebarUser?->can('view_student_profiles_basic') || $sidebarUser?->can('view_student_academic_records')) {
             $menuItems[] = ['route' => 'warden.students.index', 'label' => 'Students / Records'];
         }
+        if ($sidebarUser?->can('manage_hostel_rooms')) {
+            $menuItems[] = ['route' => 'warden.hostel.rooms.index', 'label' => 'Hostel Rooms'];
+        }
+        if ($sidebarUser?->can('view_hostel_room_allocations') || $sidebarUser?->can('assign_students_to_rooms')) {
+            $menuItems[] = ['route' => 'warden.hostel.allocations.index', 'label' => 'Room Allocations'];
+        }
+        if ($sidebarUser?->can('manage_hostel_leave')) {
+            $menuItems[] = ['route' => 'warden.hostel.leaves.index', 'label' => 'Hostel Leave'];
+        }
+        if ($sidebarUser?->can('view_night_attendance') || $sidebarUser?->can('mark_night_attendance')) {
+            $menuItems[] = ['route' => 'warden.hostel.night-attendance.index', 'label' => 'Night Attendance'];
+        }
 
         $menuItems[] = ['route' => 'notifications.index', 'label' => 'Notifications'];
     } elseif ($sidebarUser?->hasRole('Doctor')) {

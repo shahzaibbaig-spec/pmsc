@@ -4,6 +4,10 @@ namespace App\Services;
 
 use App\Models\DailyDiary;
 use App\Models\DisciplineComplaint;
+use App\Models\HostelLeaveRequest;
+use App\Models\HostelNightAttendance;
+use App\Models\HostelRoom;
+use App\Models\HostelRoomAllocation;
 use App\Models\Student;
 use Illuminate\Support\Carbon;
 
@@ -16,6 +20,10 @@ class WardenDashboardService
      *     total_discipline_reports:int,
      *     open_discipline_reports:int,
      *     total_students:int,
+     *     total_hostel_rooms:int,
+     *     active_room_allocations:int,
+     *     pending_hostel_leave_requests:int,
+     *     night_attendance_marked_today:int,
      *     recent_discipline_cases:array<int, array{
      *         id:int,
      *         student_name:string,
@@ -65,6 +73,16 @@ class WardenDashboardService
                 ->whereNotIn('status', ['closed', 'resolved'])
                 ->count(),
             'total_students' => Student::query()->count(),
+            'total_hostel_rooms' => HostelRoom::query()->count(),
+            'active_room_allocations' => HostelRoomAllocation::query()
+                ->where('status', HostelRoomAllocation::STATUS_ACTIVE)
+                ->count(),
+            'pending_hostel_leave_requests' => HostelLeaveRequest::query()
+                ->where('status', HostelLeaveRequest::STATUS_PENDING)
+                ->count(),
+            'night_attendance_marked_today' => HostelNightAttendance::query()
+                ->whereDate('attendance_date', $resolvedDate)
+                ->count(),
             'recent_discipline_cases' => $recentCases,
         ];
     }
