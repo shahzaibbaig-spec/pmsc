@@ -88,7 +88,7 @@ class TeacherPromotionController extends Controller
         $validated = $request->validated();
 
         try {
-            $campaign = $this->promotionService->createCampaign([
+            $campaign = $this->promotionService->createTeacherCampaign([
                 'from_session' => (string) $validated['from_session'],
                 'to_session' => (string) $validated['to_session'],
                 'class_id' => (int) $validated['class_id'],

@@ -760,9 +760,21 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
         ->middleware(['role:Admin|Principal', 'permission:generate_results'])
         ->name('principal.promotions.index');
 
+    Route::get('/principal/promotions/create', [PrincipalPromotionController::class, 'create'])
+        ->middleware(['role:Admin|Principal', 'permission:generate_results'])
+        ->name('principal.promotions.create');
+
+    Route::post('/principal/promotions', [PrincipalPromotionController::class, 'storeCampaign'])
+        ->middleware(['role:Admin|Principal', 'permission:generate_results'])
+        ->name('principal.promotions.store');
+
     Route::get('/principal/promotions/{promotionCampaign}', [PrincipalPromotionController::class, 'show'])
         ->middleware(['role:Admin|Principal', 'permission:generate_results'])
         ->name('principal.promotions.show');
+
+    Route::post('/principal/promotions/{promotionCampaign}/group-action', [PrincipalPromotionController::class, 'applyGroupAction'])
+        ->middleware(['role:Admin|Principal', 'permission:generate_results'])
+        ->name('principal.promotions.group-action');
 
     Route::put('/principal/promotions/{promotionCampaign}/review', [PrincipalPromotionController::class, 'review'])
         ->middleware(['role:Admin|Principal', 'permission:generate_results'])
