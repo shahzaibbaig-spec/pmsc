@@ -564,6 +564,7 @@ class PromotionService
             );
 
             $rows = StudentPromotion::query()
+                ->with('student:id,name,student_id')
                 ->where('promotion_campaign_id', (int) $campaign->id)
                 ->orderBy('id')
                 ->get();
@@ -572,13 +573,28 @@ class PromotionService
                 throw new RuntimeException('No student promotion rows found for this campaign.');
             }
 
+            $studentsWithPendingDecision = $rows
+                ->filter(fn (StudentPromotion $row): bool => ($row->principal_decision ?? $row->teacher_decision) === null)
+                ->map(function (StudentPromotion $row): string {
+                    return sprintf(
+                        '%s (%s)',
+                        (string) ($row->student?->name ?? 'Student'),
+                        (string) ($row->student?->student_id ?? $row->student_id)
+                    );
+                })
+                ->values();
+
+            if ($studentsWithPendingDecision->isNotEmpty()) {
+                throw new RuntimeException(sprintf(
+                    'Campaign approval failed because decisions are pending for: %s.',
+                    $studentsWithPendingDecision->implode(', ')
+                ));
+            }
+
             $nextClassId = $this->resolveNextClassId((int) $campaign->class_id);
 
             foreach ($rows as $row) {
                 $decision = $row->principal_decision ?? $row->teacher_decision;
-                if ($decision === null) {
-                    throw new RuntimeException('Campaign approval failed because some students have no decision.');
-                }
 
                 $effectiveNote = $this->normalizeNote($row->principal_note) ?? $this->normalizeNote($row->teacher_note);
                 $this->assertDecisionNote($decision, $effectiveNote, 'Decision note is required');
