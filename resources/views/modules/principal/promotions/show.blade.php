@@ -49,7 +49,7 @@
 
         @if ($isTerminalClass)
             <div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                This is a terminal class. Promote will mark students as pass out, and conditional promotion is not allowed.
+                This is a terminal class. Use Pass Out for passed students, and conditional promotion is not allowed.
             </div>
         @endif
 
@@ -59,8 +59,8 @@
                 <p class="mt-2 text-2xl font-semibold text-slate-900">{{ (int) ($summary['total_students'] ?? 0) }}</p>
             </article>
             <article class="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
-                <p class="text-xs font-semibold uppercase tracking-wide text-emerald-700">Promote</p>
-                <p class="mt-2 text-2xl font-semibold text-emerald-800">{{ (int) ($summary['promoted'] ?? 0) }}</p>
+                <p class="text-xs font-semibold uppercase tracking-wide text-emerald-700">{{ $isTerminalClass ? 'Passed Out' : 'Promote' }}</p>
+                <p class="mt-2 text-2xl font-semibold text-emerald-800">{{ (int) ($isTerminalClass ? ($summary['passed_out'] ?? 0) : ($summary['promoted'] ?? 0)) }}</p>
             </article>
             <article class="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
                 <p class="text-xs font-semibold uppercase tracking-wide text-amber-700">Conditional</p>
@@ -95,7 +95,7 @@
                         class="block min-h-11 w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                         @disabled(! $canReview)
                     >
-                        <option value="promote">Promote Selected Students</option>
+                        <option value="promote">{{ $isTerminalClass ? 'Pass Out Selected Students' : 'Promote Selected Students' }}</option>
                         @unless ($isTerminalClass)
                             <option value="conditional_promote">Conditionally Promote Selected Students</option>
                         @endunless
@@ -111,7 +111,7 @@
                         type="text"
                         maxlength="1000"
                         class="block min-h-11 w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                        placeholder="Required for retain / conditional (terminal class: retain only)"
+                        placeholder="{{ $isTerminalClass ? 'Required for retain decision' : 'Required for retain / conditional' }}"
                         @disabled(! $canReview)
                     >
                 </div>
@@ -229,6 +229,11 @@
                             @php
                                 $effectiveDecision = $row->principal_decision ?? $row->teacher_decision;
                                 $effectiveNote = $row->principal_note ?? $row->teacher_note;
+                                $effectiveDecisionLabel = $effectiveDecision
+                                    ? (($isTerminalClass && (bool) $row->is_passed && $effectiveDecision === 'promote')
+                                        ? 'Pass Out'
+                                        : str_replace('_', ' ', ucfirst($effectiveDecision)))
+                                    : 'Pending';
                             @endphp
                             <tr>
                                 <td class="px-4 py-3">
@@ -263,7 +268,7 @@
                                     </span>
                                 </td>
                                 <td class="px-4 py-3 text-xs font-semibold text-slate-700">
-                                    {{ $effectiveDecision ? str_replace('_', ' ', ucfirst($effectiveDecision)) : 'Pending' }}
+                                    {{ $effectiveDecisionLabel }}
                                 </td>
                                 <td class="px-4 py-3 text-xs text-slate-600">{{ $effectiveNote ?: '-' }}</td>
                             </tr>
@@ -316,7 +321,7 @@
                                             @disabled(! $canReview)
                                         >
                                             <option value="">Use Current Decision</option>
-                                            <option value="promote" @selected($principalDecision === 'promote')>Promote</option>
+                                            <option value="promote" @selected($principalDecision === 'promote')>{{ $isTerminalClass ? 'Pass Out' : 'Promote' }}</option>
                                             @unless ($isTerminalClass)
                                                 <option value="conditional_promote" @selected($principalDecision === 'conditional_promote')>Conditional Promote</option>
                                             @endunless
@@ -328,7 +333,7 @@
                                             name="rows[{{ $index }}][principal_note]"
                                             rows="2"
                                             class="block w-64 rounded-lg border-slate-300 text-xs shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                            placeholder="Required for conditional/retain (terminal class: retain only)"
+                                            placeholder="{{ $isTerminalClass ? 'Required for retain decision' : 'Required for conditional/retain' }}"
                                             @disabled(! $canReview)
                                         >{{ $principalNote }}</textarea>
                                     </td>

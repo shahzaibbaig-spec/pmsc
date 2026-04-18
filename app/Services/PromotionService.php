@@ -1288,7 +1288,7 @@ class PromotionService
         }
 
         if ($decision === StudentPromotion::DECISION_PROMOTE && $nextClassId === null && ! $isPassed) {
-            throw new RuntimeException('Terminal class students can only be promoted when marked passed. Use retain for failed students.');
+            throw new RuntimeException('Terminal class students can only be marked pass out when they are passed. Use retain for failed students.');
         }
     }
 
