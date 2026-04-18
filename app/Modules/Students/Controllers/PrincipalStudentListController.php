@@ -31,12 +31,14 @@ class PrincipalStudentListController extends Controller
             'per_page' => ['nullable', 'integer', 'min:5', 'max:100'],
             'sort' => ['nullable', 'string', 'in:student_id,name,father_name,class_name,status'],
             'dir' => ['nullable', 'string', 'in:asc,desc'],
+            'class_id' => ['nullable', 'integer', 'exists:school_classes,id'],
         ]);
 
         $search = trim((string) ($validated['search'] ?? ''));
         $perPage = (int) ($validated['per_page'] ?? 10);
         $sort = (string) ($validated['sort'] ?? 'id');
         $dir = (string) ($validated['dir'] ?? 'desc');
+        $classId = isset($validated['class_id']) ? (int) $validated['class_id'] : null;
 
         $sortColumn = match ($sort) {
             'student_id' => 'student_id',
@@ -52,6 +54,9 @@ class PrincipalStudentListController extends Controller
 
         $query = Student::query()
             ->with('classRoom:id,name,section')
+            ->when($classId !== null, function ($builder) use ($classId): void {
+                $builder->where('class_id', $classId);
+            })
             ->when($search !== '', function ($builder) use ($contains, $prefix): void {
                 $builder->where(function ($q) use ($contains, $prefix): void {
                     $q->where('name', 'like', $contains)

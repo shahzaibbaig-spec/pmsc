@@ -4,8 +4,17 @@
     </x-slot>
 
     <x-ui.card title="Students" subtitle="Server-side pagination, search, and sorting.">
-        <div class="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div class="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-4">
             <x-ui.input id="studentsSearch" label="Search" placeholder="Student name, ID, father name, class" />
+            <div>
+                <label for="studentsClassFilter" class="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">Class</label>
+                <select id="studentsClassFilter" class="block w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
+                    <option value="">All Classes</option>
+                    @foreach($classes as $class)
+                        <option value="{{ $class->id }}">{{ trim($class->name.' '.($class->section ?? '')) }}</option>
+                    @endforeach
+                </select>
+            </div>
             <div>
                 <label for="studentsPerPage" class="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">Per Page</label>
                 <select id="studentsPerPage" class="block w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
@@ -56,7 +65,8 @@
 
     <script>
         window.addEventListener('DOMContentLoaded', () => {
-            new window.AjaxTable({
+            const classFilter = document.getElementById('studentsClassFilter');
+            const studentsTable = new window.AjaxTable({
                 endpoint: `{{ route('principal.students.data') }}`,
                 tbody: '#studentsRows',
                 searchInput: '#studentsSearch',
@@ -65,6 +75,9 @@
                 nextBtn: '#studentsNextBtn',
                 paginationInfo: '#studentsPaginationInfo',
                 sortHeaders: 'th[data-sort]',
+                extraParams: () => ({
+                    class_id: classFilter?.value || '',
+                }),
                 rowRenderer: (row) => `
                     <tr>
                         <td class="px-4 py-3 text-sm font-medium text-slate-900">${window.NSMS.escapeHtml(row.student_id)}</td>
@@ -84,6 +97,11 @@
                         </td>
                     </tr>
                 `,
+            });
+
+            classFilter?.addEventListener('change', () => {
+                studentsTable.state.page = 1;
+                studentsTable.reload();
             });
 
             const classSelect = document.getElementById('idCardClassSelect');
