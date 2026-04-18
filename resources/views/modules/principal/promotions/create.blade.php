@@ -15,6 +15,12 @@
     </x-slot>
 
     <div class="space-y-6">
+        @if (session('status'))
+            <div class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                {{ session('status') }}
+            </div>
+        @endif
+
         @if (session('error'))
             <div class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
                 {{ session('error') }}
@@ -53,15 +59,16 @@
 
                 <div>
                     <label for="to_session" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">To Session</label>
-                    <input
+                    <select
                         id="to_session"
                         name="to_session"
-                        type="text"
-                        value="{{ old('to_session', $defaultToSession) }}"
                         class="block min-h-11 w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                        placeholder="2027-2028"
                         required
                     >
+                        @foreach ($sessionOptions as $session)
+                            <option value="{{ $session }}" @selected(old('to_session', $defaultToSession) === $session)>{{ $session }}</option>
+                        @endforeach
+                    </select>
                 </div>
 
                 <div>
@@ -88,6 +95,56 @@
                 </div>
             </form>
         </section>
+
+        <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h3 class="text-base font-semibold text-slate-900">Need a New Class?</h3>
+            <p class="mt-1 text-xs text-slate-500">Create a class here and it will appear in the class dropdown above.</p>
+
+            <form method="POST" action="{{ route('principal.promotions.store-class') }}" class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-4">
+                @csrf
+                <input type="hidden" name="from_session_context" value="{{ old('from_session_context', old('from_session', $defaultFromSession)) }}">
+                <input type="hidden" name="to_session_context" value="{{ old('to_session_context', old('to_session', $defaultToSession)) }}">
+
+                <div>
+                    <label for="new_class_name" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Class Name</label>
+                    <input
+                        id="new_class_name"
+                        name="name"
+                        type="text"
+                        value="{{ old('name') }}"
+                        class="block min-h-11 w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                        placeholder="Class 1 or Nursery"
+                        required
+                    >
+                </div>
+
+                <div>
+                    <label for="new_class_section" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Section</label>
+                    <input
+                        id="new_class_section"
+                        name="section"
+                        type="text"
+                        value="{{ old('section') }}"
+                        class="block min-h-11 w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                        placeholder="A"
+                    >
+                </div>
+
+                <div class="flex items-end">
+                    <button type="submit" class="inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-indigo-300 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100">
+                        Create Class
+                    </button>
+                </div>
+
+                <div class="flex items-end">
+                    <a
+                        href="{{ route('principal.classes.index') }}"
+                        class="inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                        Open Class Manager
+                    </a>
+                </div>
+            </form>
+        </section>
     </div>
 </x-app-layout>
-

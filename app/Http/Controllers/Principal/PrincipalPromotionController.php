@@ -14,12 +14,15 @@ use App\Models\SchoolClass;
 use App\Services\PromotionService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 use RuntimeException;
 use Throwable;
 
 class PrincipalPromotionController extends Controller
 {
+    private const REQUIRED_PROMOTION_SESSION = '2026-2027';
+
     public function __construct(private readonly PromotionService $promotionService)
     {
     }
@@ -95,13 +98,55 @@ class PrincipalPromotionController extends Controller
         $sessions = $this->sessionOptions();
         $defaultFromSession = $sessions[0] ?? now()->year.'-'.(now()->year + 1);
         $defaultToSession = $this->nextSession($defaultFromSession);
+        $selectedFromSession = trim((string) $request->query('from_session', $defaultFromSession));
+        $selectedToSession = trim((string) $request->query('to_session', $defaultToSession));
+
+        $sessions = $this->ensureSessionPresent($sessions, $selectedFromSession);
+        $sessions = $this->ensureSessionPresent($sessions, $selectedToSession);
 
         return view('modules.principal.promotions.create', [
             'sessionOptions' => $sessions,
             'classOptions' => $this->classOptions(),
-            'defaultFromSession' => (string) $request->query('from_session', $defaultFromSession),
-            'defaultToSession' => (string) $request->query('to_session', $defaultToSession),
+            'defaultFromSession' => $selectedFromSession,
+            'defaultToSession' => $selectedToSession,
         ]);
+    }
+
+    public function storeClass(Request $request): RedirectResponse
+    {
+        $normalizedSection = trim((string) $request->input('section'));
+        $normalizedSection = $normalizedSection !== '' ? $normalizedSection : null;
+
+        $validated = $request->validate([
+            'name' => [
+                'required',
+                'string',
+                'max:100',
+                Rule::unique('school_classes', 'name')
+                    ->where(fn ($query) => $query->where('section', $normalizedSection)),
+            ],
+            'section' => ['nullable', 'string', 'max:20'],
+            'from_session_context' => ['nullable', 'regex:/^\d{4}-\d{4}$/'],
+            'to_session_context' => ['nullable', 'regex:/^\d{4}-\d{4}$/'],
+        ]);
+
+        SchoolClass::query()->create([
+            'name' => trim((string) $validated['name']),
+            'section' => $normalizedSection,
+            'status' => 'active',
+        ]);
+
+        $query = [];
+        if (isset($validated['from_session_context']) && trim((string) $validated['from_session_context']) !== '') {
+            $query['from_session'] = trim((string) $validated['from_session_context']);
+        }
+        if (isset($validated['to_session_context']) && trim((string) $validated['to_session_context']) !== '') {
+            $query['to_session'] = trim((string) $validated['to_session_context']);
+        }
+
+        return redirect()
+            ->route('principal.promotions.create', $query)
+            ->with('status', 'Class created successfully. You can now select it for promotion campaign.');
     }
 
     public function storeCampaign(CreatePrincipalPromotionCampaignRequest $request): RedirectResponse
@@ -280,14 +325,22 @@ class PrincipalPromotionController extends Controller
         $sessions = PromotionCampaign::query()
             ->select('from_session')
             ->distinct()
-            ->orderByDesc('from_session')
             ->pluck('from_session')
+            ->merge(
+                PromotionCampaign::query()
+                    ->select('to_session')
+                    ->distinct()
+                    ->pluck('to_session')
+            )
+            ->map(fn ($value): string => trim((string) $value))
+            ->filter(fn (string $value): bool => preg_match('/^\d{4}-\d{4}$/', $value) === 1)
+            ->unique()
             ->filter(fn ($value): bool => trim((string) $value) !== '')
             ->values()
             ->all();
 
         if ($sessions !== []) {
-            return $sessions;
+            return $this->ensureSessionPresent($sessions, self::REQUIRED_PROMOTION_SESSION);
         }
 
         $now = now();
@@ -298,7 +351,7 @@ class PrincipalPromotionController extends Controller
             $fallback[] = $year.'-'.($year + 1);
         }
 
-        return array_reverse($fallback);
+        return $this->ensureSessionPresent($fallback, self::REQUIRED_PROMOTION_SESSION);
     }
 
     private function nextSession(string $fromSession): string
@@ -312,6 +365,26 @@ class PrincipalPromotionController extends Controller
         $year = (int) now()->year;
 
         return $year.'-'.($year + 1);
+    }
+
+    /**
+     * @param array<int, string> $sessions
+     * @return array<int, string>
+     */
+    private function ensureSessionPresent(array $sessions, string $session): array
+    {
+        $candidate = trim($session);
+        if ($candidate !== '' && preg_match('/^\d{4}-\d{4}$/', $candidate) === 1) {
+            $sessions[] = $candidate;
+        }
+
+        return collect($sessions)
+            ->map(fn ($value): string => trim((string) $value))
+            ->filter(fn (string $value): bool => preg_match('/^\d{4}-\d{4}$/', $value) === 1)
+            ->unique()
+            ->sortDesc()
+            ->values()
+            ->all();
     }
 
     /**

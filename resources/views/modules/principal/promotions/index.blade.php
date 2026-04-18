@@ -78,14 +78,16 @@
 
                 <div>
                     <label for="to_session" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">To Session</label>
-                    <input
+                    <select
                         id="to_session"
                         name="to_session"
-                        type="text"
-                        value="{{ $filters['to_session'] ?? '' }}"
                         class="block min-h-11 w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                        placeholder="2027-2028"
                     >
+                        <option value="">All</option>
+                        @foreach ($sessionOptions as $session)
+                            <option value="{{ $session }}" @selected(($filters['to_session'] ?? '') === $session)>{{ $session }}</option>
+                        @endforeach
+                    </select>
                 </div>
 
                 <div>
