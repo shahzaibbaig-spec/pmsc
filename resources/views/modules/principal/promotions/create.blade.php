@@ -41,7 +41,7 @@
             <h3 class="text-base font-semibold text-slate-900">Campaign Details</h3>
             <p class="mt-1 text-xs text-slate-500">Use explicit class promotion mapping. Terminal class without next mapping cannot be normally promoted.</p>
 
-            <form method="POST" action="{{ route('principal.promotions.store') }}" class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-4">
+            <form method="POST" action="{{ route('principal.promotions.store') }}" class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-5">
                 @csrf
 
                 <div>
@@ -88,6 +88,22 @@
                     </select>
                 </div>
 
+                <div>
+                    <label for="to_class_id" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">To Class</label>
+                    <select
+                        id="to_class_id"
+                        name="to_class_id"
+                        class="block min-h-11 w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                    >
+                        <option value="">Auto (current mapping)</option>
+                        @foreach ($classOptions as $class)
+                            <option value="{{ $class['id'] }}" @selected((int) old('to_class_id', $defaultToClassId ?? 0) === (int) $class['id'])>
+                                {{ $class['name'] }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+
                 <div class="flex items-end">
                     <button type="submit" class="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">
                         Create Campaign
@@ -104,6 +120,7 @@
                 @csrf
                 <input type="hidden" name="from_session_context" value="{{ old('from_session_context', old('from_session', $defaultFromSession)) }}">
                 <input type="hidden" name="to_session_context" value="{{ old('to_session_context', old('to_session', $defaultToSession)) }}">
+                <input type="hidden" name="to_class_context" value="{{ old('to_class_context', old('to_class_id', $defaultToClassId ?? '')) }}">
 
                 <div>
                     <label for="new_class_name" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Class Name</label>

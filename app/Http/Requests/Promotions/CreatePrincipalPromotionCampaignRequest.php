@@ -18,6 +18,7 @@ class CreatePrincipalPromotionCampaignRequest extends FormRequest
             'from_session' => ['required', 'string', 'max:20', 'regex:/^\d{4}-\d{4}$/'],
             'to_session' => ['required', 'string', 'max:20', 'regex:/^\d{4}-\d{4}$/', 'different:from_session'],
             'class_id' => ['required', 'integer', Rule::exists('school_classes', 'id')],
+            'to_class_id' => ['nullable', 'integer', Rule::exists('school_classes', 'id'), 'different:class_id'],
         ];
     }
 }

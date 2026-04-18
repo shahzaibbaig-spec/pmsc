@@ -88,23 +88,42 @@ class PromotionService
         });
     }
 
-    public function createCampaign(string $fromSession, string $toSession, int $classId, int $userId): PromotionCampaign
+    public function createCampaign(
+        string $fromSession,
+        string $toSession,
+        int $classId,
+        int $userId,
+        ?int $toClassId = null
+    ): PromotionCampaign
     {
-        return $this->createPrincipalGroupCampaign($fromSession, $toSession, $classId, $userId);
+        return $this->createPrincipalGroupCampaign($fromSession, $toSession, $classId, $userId, $toClassId);
     }
 
     public function createPrincipalGroupCampaign(
         string $fromSession,
         string $toSession,
         int $classId,
-        int $principalUserId
+        int $principalUserId,
+        ?int $toClassId = null
     ): PromotionCampaign {
         $normalizedFromSession = trim($fromSession);
         $normalizedToSession = trim($toSession);
         $normalizedClassId = (int) $classId;
+        $normalizedToClassId = $toClassId !== null ? (int) $toClassId : null;
+        if ($normalizedToClassId !== null && $normalizedToClassId <= 0) {
+            $normalizedToClassId = null;
+        }
 
         if ($normalizedClassId <= 0 || $normalizedFromSession === '' || $normalizedToSession === '') {
             throw new RuntimeException('Class and sessions are required to create promotion campaign.');
+        }
+
+        if ($normalizedToClassId !== null && $normalizedToClassId === $normalizedClassId) {
+            throw new RuntimeException('To class must be different from selected class.');
+        }
+
+        if ($normalizedToClassId !== null && ! SchoolClass::query()->whereKey($normalizedToClassId)->exists()) {
+            throw new RuntimeException('Selected to class was not found.');
         }
 
         $principal = $this->findUserOrFail($principalUserId);
@@ -115,6 +134,7 @@ class PromotionService
             $normalizedFromSession,
             $normalizedToSession,
             $normalizedClassId,
+            $normalizedToClassId,
             $principal
         ): PromotionCampaign {
             $campaign = PromotionCampaign::query()->firstOrCreate(
@@ -131,6 +151,10 @@ class PromotionService
 
             if ($campaign->status === PromotionCampaign::STATUS_EXECUTED) {
                 throw new RuntimeException('This campaign is already executed and cannot be modified.');
+            }
+
+            if ($normalizedToClassId !== null) {
+                $this->replacePromotionMappingForClass($normalizedClassId, $normalizedToClassId);
             }
 
             if ((int) $campaign->created_by !== (int) $principal->id) {
@@ -1216,6 +1240,23 @@ class PromotionService
         $campaign->executed_at = null;
         $campaign->principal_note = null;
         $campaign->save();
+    }
+
+    private function replacePromotionMappingForClass(int $fromClassId, int $toClassId): void
+    {
+        if ($fromClassId === $toClassId) {
+            throw new RuntimeException('To class must be different from selected class.');
+        }
+
+        ClassPromotionMapping::query()
+            ->where('from_class_id', $fromClassId)
+            ->where('to_class_id', '!=', $toClassId)
+            ->delete();
+
+        ClassPromotionMapping::query()->firstOrCreate([
+            'from_class_id' => $fromClassId,
+            'to_class_id' => $toClassId,
+        ]);
     }
 
     private function teacherIdForUser(int $userId): ?int

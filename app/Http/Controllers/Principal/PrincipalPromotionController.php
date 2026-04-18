@@ -96,19 +96,25 @@ class PrincipalPromotionController extends Controller
     public function create(Request $request): View
     {
         $sessions = $this->sessionOptions();
+        $classOptions = $this->classOptions();
         $defaultFromSession = $sessions[0] ?? now()->year.'-'.(now()->year + 1);
         $defaultToSession = $this->nextSession($defaultFromSession);
         $selectedFromSession = trim((string) $request->query('from_session', $defaultFromSession));
         $selectedToSession = trim((string) $request->query('to_session', $defaultToSession));
+        $selectedToClassId = $request->filled('to_class_id') ? (int) $request->query('to_class_id') : null;
+        $toClassExists = collect($classOptions)->contains(
+            fn (array $classOption): bool => (int) $classOption['id'] === $selectedToClassId
+        );
 
         $sessions = $this->ensureSessionPresent($sessions, $selectedFromSession);
         $sessions = $this->ensureSessionPresent($sessions, $selectedToSession);
 
         return view('modules.principal.promotions.create', [
             'sessionOptions' => $sessions,
-            'classOptions' => $this->classOptions(),
+            'classOptions' => $classOptions,
             'defaultFromSession' => $selectedFromSession,
             'defaultToSession' => $selectedToSession,
+            'defaultToClassId' => $toClassExists ? $selectedToClassId : null,
         ]);
     }
 
@@ -128,6 +134,7 @@ class PrincipalPromotionController extends Controller
             'section' => ['nullable', 'string', 'max:20'],
             'from_session_context' => ['nullable', 'regex:/^\d{4}-\d{4}$/'],
             'to_session_context' => ['nullable', 'regex:/^\d{4}-\d{4}$/'],
+            'to_class_context' => ['nullable', 'integer', Rule::exists('school_classes', 'id')],
         ]);
 
         SchoolClass::query()->create([
@@ -142,6 +149,9 @@ class PrincipalPromotionController extends Controller
         }
         if (isset($validated['to_session_context']) && trim((string) $validated['to_session_context']) !== '') {
             $query['to_session'] = trim((string) $validated['to_session_context']);
+        }
+        if (isset($validated['to_class_context']) && (int) $validated['to_class_context'] > 0) {
+            $query['to_class_id'] = (int) $validated['to_class_context'];
         }
 
         return redirect()
@@ -158,7 +168,8 @@ class PrincipalPromotionController extends Controller
                 (string) $validated['from_session'],
                 (string) $validated['to_session'],
                 (int) $validated['class_id'],
-                (int) $request->user()->id
+                (int) $request->user()->id,
+                isset($validated['to_class_id']) ? (int) $validated['to_class_id'] : null
             );
         } catch (RuntimeException $exception) {
             return back()->withInput()->with('error', $exception->getMessage());
