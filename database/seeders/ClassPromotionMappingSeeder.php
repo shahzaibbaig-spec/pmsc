@@ -33,15 +33,18 @@ class ClassPromotionMappingSeeder extends Seeder
         ];
 
         foreach ($mappings as $pair) {
-            $fromClasses = $this->classesByName($classRows, $pair['from']);
-            $toClasses = $this->classesByName($classRows, $pair['to']);
+            $fromClasses = $this->classesByStage($classRows, $pair['from']);
+            $toClasses = $this->classesByStage($classRows, $pair['to']);
 
             if ($fromClasses->isEmpty() || $toClasses->isEmpty()) {
                 continue;
             }
 
             foreach ($fromClasses as $fromClass) {
-                $target = $toClasses->firstWhere('section', $fromClass->section) ?? $toClasses->first();
+                $fromSection = $this->sectionKey($fromClass);
+                $target = $toClasses->first(
+                    fn (SchoolClass $toClass): bool => $this->sectionKey($toClass) === $fromSection
+                ) ?? $toClasses->first();
                 if (! $target) {
                     continue;
                 }
@@ -63,13 +66,81 @@ class ClassPromotionMappingSeeder extends Seeder
         }
     }
 
-    private function classesByName($classRows, string $name)
+    private function classesByStage($classRows, string $stage)
     {
-        $needle = strtolower(trim($name));
+        $expectedStage = $this->classStageKey($stage);
+        if ($expectedStage === null) {
+            return collect();
+        }
 
-        return $classRows->filter(function (SchoolClass $classRoom) use ($needle): bool {
-            return strtolower(trim((string) $classRoom->name)) === $needle;
+        return $classRows->filter(function (SchoolClass $classRoom) use ($expectedStage): bool {
+            return $this->classStageKey((string) $classRoom->name) === $expectedStage;
         })->values();
     }
-}
 
+    private function classStageKey(string $rawName): ?string
+    {
+        $normalized = strtolower(trim($rawName));
+        if ($normalized === '') {
+            return null;
+        }
+
+        if (preg_match('/\bpg\b|\bplay\s*group\b/i', $normalized) === 1) {
+            return 'pg';
+        }
+
+        if (preg_match('/\bprep\b|\bpreparatory\b/i', $normalized) === 1) {
+            return 'prep';
+        }
+
+        if (preg_match('/\bnursery\b/i', $normalized) === 1) {
+            return 'nursery';
+        }
+
+        if (preg_match('/\b(?:class|grade)\s*(\d{1,2})\b/i', $normalized, $matches) === 1) {
+            return $this->numericStageKey((int) $matches[1]);
+        }
+
+        if (preg_match('/^(\d{1,2})(?:\s*[- ]?\s*[a-z])?$/i', $normalized, $matches) === 1) {
+            return $this->numericStageKey((int) $matches[1]);
+        }
+
+        if (preg_match('/\b(\d{1,2})\b/', $normalized, $matches) === 1) {
+            return $this->numericStageKey((int) $matches[1]);
+        }
+
+        return null;
+    }
+
+    private function numericStageKey(int $value): ?string
+    {
+        if ($value < 1 || $value > 12) {
+            return null;
+        }
+
+        return (string) $value;
+    }
+
+    private function sectionKey(SchoolClass $classRoom): ?string
+    {
+        $explicit = trim((string) ($classRoom->section ?? ''));
+        if ($explicit !== '') {
+            return strtoupper($explicit);
+        }
+
+        $name = trim((string) $classRoom->name);
+        if ($name === '') {
+            return null;
+        }
+
+        if (preg_match('/(?:^|\b)(?:pg|prep|nursery|class\s*\d{1,2}|grade\s*\d{1,2}|\d{1,2})\s*[- ]\s*([a-z])$/i', $name, $matches) === 1) {
+            return strtoupper((string) $matches[1]);
+        }
+
+        if (preg_match('/^\s*\d{1,2}\s*([a-z])\s*$/i', $name, $matches) === 1) {
+            return strtoupper((string) $matches[1]);
+        }
+
+        return null;
+    }
+}
