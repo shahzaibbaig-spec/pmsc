@@ -24,7 +24,19 @@ class ClassAssessmentModeService
             ->trim()
             ->value();
 
-        return in_array($normalized, ['pg', 'prep', 'nursery', '1', 'class 1'], true);
+        if ($normalized === '') {
+            return false;
+        }
+
+        if (preg_match('/^(?:pg|play\s*group|playgroup|nursery|prep|preparatory)(?:\s*[- ]?\s*[a-z])?$/i', $normalized) === 1) {
+            return true;
+        }
+
+        if (preg_match('/^(?:(?:class|grade)\s*)?(?:1|one)(?:\s*[- ]?\s*[a-z])?$/i', $normalized) === 1) {
+            return true;
+        }
+
+        return false;
     }
 
     /**

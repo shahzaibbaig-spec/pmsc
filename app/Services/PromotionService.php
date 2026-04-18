@@ -40,7 +40,11 @@ class PromotionService
         '12' => null,
     ];
 
-    public function __construct(private readonly ResultService $resultService)
+    public function __construct(
+        private readonly ResultService $resultService,
+        private readonly ClassAssessmentModeService $classAssessmentModeService,
+        private readonly GradeScaleService $gradeScaleService
+    )
     {
     }
 
@@ -1008,26 +1012,22 @@ class PromotionService
             ->where('exam_type', ExamType::FinalTerm->value)
             ->pluck('id');
 
+        $usesGradeSystem = $this->classAssessmentModeService->classUsesGradeSystem($classId);
+
         $marks = $finalExamIds->isNotEmpty()
             ? DB::table('marks')
-                ->selectRaw('student_id, SUM(obtained_marks) as obtained_total, SUM(total_marks) as total_total')
+                ->select('student_id', 'obtained_marks', 'total_marks', 'grade')
                 ->whereIn('exam_id', $finalExamIds)
                 ->whereIn('student_id', $students->pluck('id'))
-                ->groupBy('student_id')
                 ->get()
-                ->keyBy(fn ($row): int => (int) $row->student_id)
+                ->groupBy(fn ($row): int => (int) $row->student_id)
             : collect();
 
-        return $students->map(function (Student $student) use ($marks): array {
-            $markRow = $marks->get((int) $student->id);
-            $obtainedTotal = (float) ($markRow->obtained_total ?? 0);
-            $totalTotal = (float) ($markRow->total_total ?? 0);
-            $percentage = $totalTotal > 0
-                ? round(($obtainedTotal / $totalTotal) * 100, 2)
-                : null;
-            $grade = $percentage !== null
-                ? $this->resultService->computeGrade($percentage)
-                : null;
+        return $students->map(function (Student $student) use ($marks, $usesGradeSystem): array {
+            $result = $this->resolveFinalResultForPromotionRow(
+                $marks->get((int) $student->id, collect()),
+                $usesGradeSystem
+            );
 
             return [
                 'student_id' => (int) $student->id,
@@ -1035,9 +1035,9 @@ class PromotionService
                 'student_code' => (string) $student->student_id,
                 'class_id' => (int) $student->class_id,
                 'class_name' => trim((string) ($student->classRoom?->name ?? '').' '.(string) ($student->classRoom?->section ?? '')),
-                'final_percentage' => $percentage,
-                'final_grade' => $grade,
-                'is_passed' => $percentage !== null && $percentage >= self::PASS_PERCENTAGE,
+                'final_percentage' => $result['percentage'],
+                'final_grade' => $result['grade'],
+                'is_passed' => $result['is_passed'],
             ];
         })->values();
     }
@@ -1067,30 +1067,27 @@ class PromotionService
         }
 
         $studentIds = $students->pluck('id')->map(fn ($id): int => (int) $id)->values();
+        $usesGradeSystem = $this->classAssessmentModeService->classUsesGradeSystem((int) $campaign->class_id);
+
         $marks = $finalExamIds->isNotEmpty()
             ? DB::table('marks')
-                ->selectRaw('student_id, SUM(obtained_marks) as obtained_total, SUM(total_marks) as total_total')
+                ->select('student_id', 'obtained_marks', 'total_marks', 'grade')
                 ->whereIn('exam_id', $finalExamIds)
                 ->whereIn('student_id', $studentIds)
-                ->groupBy('student_id')
                 ->get()
-                ->keyBy(fn ($row): int => (int) $row->student_id)
+                ->groupBy(fn ($row): int => (int) $row->student_id)
             : collect();
 
         $nextClassId = $this->resolveNextClassId((int) $campaign->class_id);
 
         foreach ($students as $student) {
-            $markRow = $marks->get((int) $student->id);
-            $obtainedTotal = (float) ($markRow->obtained_total ?? 0);
-            $totalTotal = (float) ($markRow->total_total ?? 0);
-
-            $percentage = $totalTotal > 0
-                ? round(($obtainedTotal / $totalTotal) * 100, 2)
-                : null;
-            $grade = $percentage !== null
-                ? $this->resultService->computeGrade($percentage)
-                : null;
-            $isPassed = $percentage !== null && $percentage >= self::PASS_PERCENTAGE;
+            $result = $this->resolveFinalResultForPromotionRow(
+                $marks->get((int) $student->id, collect()),
+                $usesGradeSystem
+            );
+            $percentage = $result['percentage'];
+            $grade = $result['grade'];
+            $isPassed = $result['is_passed'];
 
             $row = StudentPromotion::query()->firstOrNew([
                 'promotion_campaign_id' => (int) $campaign->id,
@@ -1121,6 +1118,80 @@ class PromotionService
             ->where('promotion_campaign_id', (int) $campaign->id)
             ->whereNotIn('student_id', $studentIds)
             ->delete();
+    }
+
+    /**
+     * @param Collection<int, object> $studentMarks
+     * @return array{percentage:?float,grade:?string,is_passed:bool}
+     */
+    private function resolveFinalResultForPromotionRow(Collection $studentMarks, bool $usesGradeSystem): array
+    {
+        if ($usesGradeSystem) {
+            $gradeResult = $this->resolveFinalGradeResult($studentMarks);
+            if ($gradeResult !== null) {
+                return $gradeResult;
+            }
+        }
+
+        $obtainedTotal = (float) $studentMarks->sum(
+            static fn ($row): float => (float) ($row->obtained_marks ?? 0)
+        );
+        $totalTotal = (float) $studentMarks->sum(
+            static fn ($row): float => (float) ($row->total_marks ?? 0)
+        );
+        $percentage = $totalTotal > 0
+            ? round(($obtainedTotal / $totalTotal) * 100, 2)
+            : null;
+        $grade = $percentage !== null
+            ? $this->resultService->computeGrade($percentage)
+            : null;
+
+        return [
+            'percentage' => $percentage,
+            'grade' => $grade,
+            'is_passed' => $percentage !== null && $percentage >= self::PASS_PERCENTAGE,
+        ];
+    }
+
+    /**
+     * @param Collection<int, object> $studentMarks
+     * @return array{percentage:float,grade:string,is_passed:bool}|null
+     */
+    private function resolveFinalGradeResult(Collection $studentMarks): ?array
+    {
+        $grades = $studentMarks
+            ->map(function ($row): ?string {
+                $normalized = $this->classAssessmentModeService->normalizeGrade(
+                    is_string($row->grade ?? null) ? (string) $row->grade : null
+                );
+
+                if ($normalized === null || ! $this->classAssessmentModeService->isValidGrade($normalized)) {
+                    return null;
+                }
+
+                return $normalized;
+            })
+            ->filter()
+            ->values();
+
+        if ($grades->isEmpty()) {
+            return null;
+        }
+
+        $percentageEquivalent = round((float) $grades->avg(
+            fn (string $grade): float => $this->gradeScaleService->getPercentageEquivalent($grade)
+        ), 2);
+
+        $dominantGrade = $this->classAssessmentModeService->dominantGrade($grades->all());
+        if ($dominantGrade === null) {
+            return null;
+        }
+
+        return [
+            'percentage' => $percentageEquivalent,
+            'grade' => $dominantGrade,
+            'is_passed' => $percentageEquivalent >= self::PASS_PERCENTAGE,
+        ];
     }
 
     private function ensureClassTeacherForClassAndSession(User $user, int $classId, string $session): void
