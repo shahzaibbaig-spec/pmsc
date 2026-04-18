@@ -245,6 +245,33 @@ class PrincipalPromotionController extends Controller
         return back()->with('status', 'Promotion campaign executed successfully. Student classes and history are updated.');
     }
 
+    public function undoApprovedAndExecuted(Request $request): RedirectResponse
+    {
+        $request->validate([
+            'confirm_undo' => ['required', 'accepted'],
+        ]);
+
+        try {
+            $summary = $this->promotionService->undoApprovedAndExecutedCampaigns((int) $request->user()->id);
+        } catch (RuntimeException $exception) {
+            return back()->with('error', $exception->getMessage());
+        } catch (Throwable) {
+            return back()->with('error', 'Unable to undo approved and executed promotion campaigns.');
+        }
+
+        return back()->with(
+            'status',
+            sprintf(
+                'Undo completed. Campaigns reverted: %d (approved: %d, executed: %d). Student rows reset: %d. Students reverted: %d.',
+                (int) ($summary['campaigns_undone'] ?? 0),
+                (int) ($summary['approved_campaigns_undone'] ?? 0),
+                (int) ($summary['executed_campaigns_undone'] ?? 0),
+                (int) ($summary['student_rows_reset'] ?? 0),
+                (int) ($summary['students_reverted'] ?? 0)
+            )
+        );
+    }
+
     /**
      * @return array<int, string>
      */
@@ -304,4 +331,3 @@ class PrincipalPromotionController extends Controller
             ->all();
     }
 }
-

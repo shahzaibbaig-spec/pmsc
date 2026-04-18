@@ -748,6 +748,69 @@ class PromotionService
         ]) ?? $campaign;
     }
 
+    /**
+     * @return array{
+     *   campaigns_undone:int,
+     *   approved_campaigns_undone:int,
+     *   executed_campaigns_undone:int,
+     *   student_rows_reset:int,
+     *   students_reverted:int
+     * }
+     */
+    public function undoApprovedAndExecutedCampaigns(int $principalUserId): array
+    {
+        $principal = $this->findUserOrFail($principalUserId);
+        $this->ensurePrincipalOrAdmin($principal);
+
+        $campaigns = PromotionCampaign::query()
+            ->whereIn('status', [PromotionCampaign::STATUS_APPROVED, PromotionCampaign::STATUS_EXECUTED])
+            ->orderByDesc('id')
+            ->get();
+
+        if ($campaigns->isEmpty()) {
+            throw new RuntimeException('No approved or executed promotion campaigns found to undo.');
+        }
+
+        $approvedUndone = 0;
+        $executedUndone = 0;
+        $studentsReverted = 0;
+        $studentRowsReset = 0;
+
+        DB::transaction(function () use (
+            $campaigns,
+            &$approvedUndone,
+            &$executedUndone,
+            &$studentsReverted,
+            &$studentRowsReset
+        ): void {
+            foreach ($campaigns as $campaign) {
+                if ($campaign->status === PromotionCampaign::STATUS_EXECUTED) {
+                    $studentsReverted += $this->rollbackExecutedCampaignState($campaign);
+                    $executedUndone++;
+                } else {
+                    $approvedUndone++;
+                }
+
+                $studentRowsReset += StudentPromotion::query()
+                    ->where('promotion_campaign_id', (int) $campaign->id)
+                    ->whereIn('final_status', [StudentPromotion::STATUS_APPROVED, StudentPromotion::STATUS_EXECUTED])
+                    ->update([
+                        'final_status' => StudentPromotion::STATUS_PENDING,
+                    ]);
+
+                $this->resetCampaignAfterUndo($campaign);
+            }
+        });
+
+        return [
+            'campaigns_undone' => $approvedUndone + $executedUndone,
+            'approved_campaigns_undone' => $approvedUndone,
+            'executed_campaigns_undone' => $executedUndone,
+            'student_rows_reset' => $studentRowsReset,
+            'students_reverted' => $studentsReverted,
+        ];
+    }
+
     public function resolveNextClassId(int $fromClassId): ?int
     {
         $mappings = ClassPromotionMapping::query()
@@ -775,6 +838,101 @@ class PromotionService
         }
 
         return $resolvedByFlow;
+    }
+
+    private function rollbackExecutedCampaignState(PromotionCampaign $campaign): int
+    {
+        $rows = StudentPromotion::query()
+            ->with('student:id,class_id,status,created_at')
+            ->where('promotion_campaign_id', (int) $campaign->id)
+            ->where('final_status', StudentPromotion::STATUS_EXECUTED)
+            ->orderBy('id')
+            ->get();
+
+        if ($rows->isEmpty()) {
+            return 0;
+        }
+
+        $nextClassId = $this->resolveNextClassId((int) $campaign->class_id);
+        $studentsReverted = 0;
+
+        foreach ($rows as $row) {
+            $student = $row->student;
+            if (! $student) {
+                continue;
+            }
+
+            $decision = $row->principal_decision ?? $row->teacher_decision;
+            if ($decision === null) {
+                throw new RuntimeException('Unable to undo executed campaign because one or more decisions are missing.');
+            }
+
+            $isPassedOut = $this->isTerminalPassedOutDecision(
+                $decision,
+                (bool) $row->is_passed,
+                $nextClassId
+            );
+
+            $targetClassId = $row->to_class_id ?: $this->targetClassIdForDecision(
+                $decision,
+                (int) $row->from_class_id,
+                $nextClassId
+            );
+
+            if (! $isPassedOut && $targetClassId === null) {
+                throw new RuntimeException('Unable to undo executed campaign because target class mapping is missing.');
+            }
+
+            $this->rollbackClassHistoryForUndo(
+                (int) $student->id,
+                (int) $row->from_class_id,
+                $targetClassId !== null ? (int) $targetClassId : null,
+                (string) $campaign->from_session,
+                (string) $campaign->to_session,
+                $isPassedOut
+            );
+
+            $student->class_id = (int) $row->from_class_id;
+            if ($isPassedOut) {
+                $student->status = 'active';
+            }
+            $student->save();
+
+            $studentsReverted++;
+        }
+
+        return $studentsReverted;
+    }
+
+    private function rollbackClassHistoryForUndo(
+        int $studentId,
+        int $fromClassId,
+        ?int $toClassId,
+        string $fromSession,
+        string $toSession,
+        bool $isPassedOut
+    ): void {
+        if (! $isPassedOut && $toClassId !== null) {
+            StudentClassHistory::query()
+                ->where('student_id', $studentId)
+                ->where('class_id', $toClassId)
+                ->where('session', $toSession)
+                ->delete();
+        }
+
+        $fromHistory = StudentClassHistory::query()
+            ->where('student_id', $studentId)
+            ->where('class_id', $fromClassId)
+            ->where('session', $fromSession)
+            ->first();
+
+        if (! $fromHistory) {
+            return;
+        }
+
+        $fromHistory->status = StudentClassHistory::STATUS_ACTIVE;
+        $fromHistory->left_on = null;
+        $fromHistory->save();
     }
 
     /**
@@ -1029,6 +1187,17 @@ class PromotionService
         $campaign->submitted_at = null;
         $campaign->approved_at = null;
         $campaign->approved_by = null;
+        $campaign->principal_note = null;
+        $campaign->save();
+    }
+
+    private function resetCampaignAfterUndo(PromotionCampaign $campaign): void
+    {
+        $campaign->status = PromotionCampaign::STATUS_DRAFT;
+        $campaign->submitted_at = null;
+        $campaign->approved_at = null;
+        $campaign->approved_by = null;
+        $campaign->executed_at = null;
         $campaign->principal_note = null;
         $campaign->save();
     }

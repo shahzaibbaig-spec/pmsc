@@ -768,6 +768,10 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
         ->middleware(['role:Admin|Principal', 'permission:generate_results'])
         ->name('principal.promotions.store');
 
+    Route::post('/principal/promotions/undo-approved-executed', [PrincipalPromotionController::class, 'undoApprovedAndExecuted'])
+        ->middleware(['role:Admin|Principal', 'permission:generate_results'])
+        ->name('principal.promotions.undo-approved-executed');
+
     Route::get('/principal/promotions/{promotionCampaign}', [PrincipalPromotionController::class, 'show'])
         ->middleware(['role:Admin|Principal', 'permission:generate_results'])
         ->name('principal.promotions.show');

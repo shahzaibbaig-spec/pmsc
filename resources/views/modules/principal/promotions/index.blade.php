@@ -5,12 +5,29 @@
                 <h2 class="text-xl font-semibold text-slate-900">Class Promotion Campaigns</h2>
                 <p class="mt-1 text-sm text-slate-500">Create principal-led campaigns, run group actions, approve, and execute promotions for new sessions.</p>
             </div>
-            <a
-                href="{{ route('principal.promotions.create') }}"
-                class="inline-flex min-h-11 items-center rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
-            >
-                New Promotion Campaign
-            </a>
+            <div class="flex flex-wrap items-center gap-2">
+                <form
+                    method="POST"
+                    action="{{ route('principal.promotions.undo-approved-executed') }}"
+                    onsubmit="return confirm('This will undo all approved and executed promotion campaigns and roll back promoted student data. Continue?');"
+                >
+                    @csrf
+                    <input type="hidden" name="confirm_undo" value="1">
+                    <button
+                        type="submit"
+                        class="inline-flex min-h-11 items-center rounded-xl border border-rose-300 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-100"
+                    >
+                        Undo Approved & Executed
+                    </button>
+                </form>
+
+                <a
+                    href="{{ route('principal.promotions.create') }}"
+                    class="inline-flex min-h-11 items-center rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
+                >
+                    New Promotion Campaign
+                </a>
+            </div>
         </div>
     </x-slot>
 
@@ -181,4 +198,3 @@
         </section>
     </div>
 </x-app-layout>
-
