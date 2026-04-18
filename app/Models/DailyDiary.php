@@ -17,6 +17,10 @@ class DailyDiary extends Model
         'title',
         'homework_text',
         'instructions',
+        'attachment_path',
+        'attachment_name',
+        'attachment_mime',
+        'attachment_size',
         'is_published',
         'created_by',
     ];
@@ -28,6 +32,7 @@ class DailyDiary extends Model
             'class_id' => 'integer',
             'subject_id' => 'integer',
             'diary_date' => 'date',
+            'attachment_size' => 'integer',
             'is_published' => 'boolean',
             'created_by' => 'integer',
         ];
@@ -57,5 +62,9 @@ class DailyDiary extends Model
     {
         return $this->hasMany(DailyDiaryAttachment::class);
     }
-}
 
+    public function hasAttachment(): bool
+    {
+        return trim((string) $this->attachment_path) !== '';
+    }
+}

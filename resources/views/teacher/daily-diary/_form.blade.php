@@ -3,6 +3,8 @@
     $selectedSessionValue = old('session', $selectedSession ?? ($options['selected_session'] ?? ''));
     $selectedClassValue = old('class_id', $dailyDiary?->class_id);
     $selectedSubjectValue = old('subject_id', $dailyDiary?->subject_id);
+    $currentAttachmentPath = $dailyDiary?->attachment_path;
+    $currentAttachmentName = $dailyDiary?->attachment_name ?: ($currentAttachmentPath ? basename((string) $currentAttachmentPath) : null);
 @endphp
 
 @if ($errors->any())
@@ -25,6 +27,7 @@
 <form
     method="POST"
     action="{{ $action }}"
+    enctype="multipart/form-data"
     class="space-y-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
     x-data="dailyDiaryForm({
         matrix: @js($options['assignment_matrix'] ?? []),
@@ -138,6 +141,45 @@
         >{{ old('instructions', $dailyDiary?->instructions) }}</textarea>
     </div>
 
+    <div class="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+        <div>
+            <label for="attachment" class="mb-1 block text-sm font-medium text-slate-700">Attachment</label>
+            <input
+                id="attachment"
+                type="file"
+                name="attachment"
+                accept=".jpg,.jpeg,.png,.webp,.pdf,.docx,.doc"
+                class="block min-h-11 w-full rounded-xl border-slate-300 bg-white text-sm shadow-sm file:me-3 file:rounded-lg file:border-0 file:bg-slate-900 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-white focus:border-slate-500 focus:ring-slate-500"
+            >
+            <p class="mt-1 text-xs text-slate-500">Allowed: image, PDF, DOCX (DOC optional). Max size: 10 MB.</p>
+        </div>
+
+        @if ($currentAttachmentPath)
+            <div class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+                <p class="font-semibold text-slate-900">Current Attachment</p>
+                <a
+                    href="{{ route('daily-diary.attachment', $dailyDiary) }}"
+                    class="mt-1 inline-flex items-center text-xs font-semibold text-indigo-700 hover:text-indigo-600"
+                >
+                    {{ $currentAttachmentName }}
+                </a>
+
+                @if ($dailyDiary)
+                    <label class="mt-3 inline-flex items-center gap-2 text-xs font-medium text-rose-700">
+                        <input
+                            type="checkbox"
+                            name="remove_attachment"
+                            value="1"
+                            @checked((int) old('remove_attachment', 0) === 1)
+                            class="rounded border-slate-300 text-rose-600 shadow-sm focus:ring-rose-500"
+                        >
+                        Remove current attachment
+                    </label>
+                @endif
+            </div>
+        @endif
+    </div>
+
     <div class="flex flex-wrap items-center gap-3">
         <label class="inline-flex items-center gap-2 text-sm font-medium text-slate-700">
             <input
@@ -220,4 +262,3 @@
         };
     }
 </script>
-

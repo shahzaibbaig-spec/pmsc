@@ -65,7 +65,8 @@ class DailyDiaryController extends Controller
         try {
             $this->dailyDiaryService->createOrUpdateDiary(
                 $request->validated(),
-                (int) $request->user()->id
+                (int) $request->user()->id,
+                $request->file('attachment')
             );
         } catch (RuntimeException $exception) {
             return back()
@@ -105,11 +106,10 @@ class DailyDiaryController extends Controller
 
         try {
             $this->dailyDiaryService->createOrUpdateDiary(
-                [
-                    ...$request->validated(),
-                    'diary_id' => (int) $dailyDiary->id,
-                ],
-                (int) $request->user()->id
+                $request->validated(),
+                (int) $request->user()->id,
+                $request->file('attachment'),
+                $dailyDiary
             );
         } catch (RuntimeException $exception) {
             return back()
@@ -137,4 +137,3 @@ class DailyDiaryController extends Controller
         abort_if((int) $dailyDiary->teacher_id !== (int) $teacher->id, 403, 'You can only manage your own diary entries.');
     }
 }
-

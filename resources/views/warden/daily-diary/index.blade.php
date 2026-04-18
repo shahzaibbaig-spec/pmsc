@@ -90,11 +90,18 @@
                                 <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Teacher</th>
                                 <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Title</th>
                                 <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Homework Preview</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Attachment</th>
                                 <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Action</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-100 bg-white">
                             @forelse ($entries as $entry)
+                                @php
+                                    $attachmentPath = $entry->attachment_path ?: data_get($entry->attachments->first(), 'file_path');
+                                    $attachmentName = $entry->attachment_name
+                                        ?: data_get($entry->attachments->first(), 'file_name')
+                                        ?: ($attachmentPath ? basename((string) $attachmentPath) : null);
+                                @endphp
                                 <tr>
                                     <td class="px-4 py-4 text-sm text-slate-700">{{ optional($entry->diary_date)->format('d M Y') }}</td>
                                     <td class="px-4 py-4 text-sm text-slate-700">{{ trim(($entry->classRoom?->name ?? '').' '.($entry->classRoom?->section ?? '')) }}</td>
@@ -102,6 +109,18 @@
                                     <td class="px-4 py-4 text-sm text-slate-700">{{ $entry->teacher?->user?->name ?? 'Teacher' }}</td>
                                     <td class="px-4 py-4 text-sm text-slate-900 font-semibold">{{ $entry->title ?: 'Untitled Diary Entry' }}</td>
                                     <td class="px-4 py-4 text-sm text-slate-700">{{ \Illuminate\Support\Str::limit((string) $entry->homework_text, 110) }}</td>
+                                    <td class="px-4 py-4 text-sm text-slate-700">
+                                        @if ($attachmentPath)
+                                            <a
+                                                href="{{ route('daily-diary.attachment', $entry) }}"
+                                                class="inline-flex items-center rounded-full bg-indigo-100 px-2.5 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-200"
+                                            >
+                                                {{ $attachmentName }}
+                                            </a>
+                                        @else
+                                            <span class="text-xs text-slate-500">-</span>
+                                        @endif
+                                    </td>
                                     <td class="px-4 py-4 text-sm">
                                         <a
                                             href="{{ route('warden.daily-diary.show', $entry) }}"
@@ -113,7 +132,7 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="7" class="px-4 py-10 text-center text-sm text-slate-500">No diary entries found for the selected filters.</td>
+                                    <td colspan="8" class="px-4 py-10 text-center text-sm text-slate-500">No diary entries found for the selected filters.</td>
                                 </tr>
                             @endforelse
                         </tbody>

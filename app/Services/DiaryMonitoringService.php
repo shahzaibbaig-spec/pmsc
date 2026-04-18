@@ -123,6 +123,7 @@ class DiaryMonitoringService
                 'teacher.user:id,name',
                 'classRoom:id,name,section',
                 'subject:id,name',
+                'attachments:id,daily_diary_id,file_path,file_name',
             ])
             ->where('session', $resolvedSession)
             ->whereDate('diary_date', $resolvedDate)
@@ -148,6 +149,14 @@ class DiaryMonitoringService
                 );
                 /** @var DailyDiary|null $postedDiary */
                 $postedDiary = $postedDiaryMap->get($scopeKey);
+                $attachmentPath = $postedDiary
+                    ? trim((string) ($postedDiary->attachment_path ?: data_get($postedDiary->attachments->first(), 'file_path')))
+                    : '';
+                $attachmentName = $postedDiary
+                    ? trim((string) ($postedDiary->attachment_name
+                        ?: data_get($postedDiary->attachments->first(), 'file_name')
+                        ?: ($attachmentPath !== '' ? basename($attachmentPath) : '')))
+                    : '';
 
                 return [
                     'teacher_id' => (int) $assignment->teacher_id,
@@ -168,6 +177,8 @@ class DiaryMonitoringService
                     'instructions_preview' => $postedDiary && $postedDiary->instructions
                         ? Str::limit(trim((string) $postedDiary->instructions), 90)
                         : null,
+                    'attachment_path' => $attachmentPath !== '' ? $attachmentPath : null,
+                    'attachment_name' => $attachmentName !== '' ? $attachmentName : null,
                     'is_published' => $postedDiary?->is_published,
                     'updated_at' => $postedDiary?->updated_at,
                 ];

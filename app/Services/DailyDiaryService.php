@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\DailyDiary;
 use App\Models\SchoolClass;
 use App\Models\Student;
+use App\Models\User;
 use App\Models\StudentSubject;
 use App\Models\StudentSubjectAssignment;
 use App\Models\Subject;
@@ -12,9 +13,11 @@ use App\Models\Teacher;
 use App\Models\TeacherAssignment;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use RuntimeException;
 
 class DailyDiaryService
@@ -24,7 +27,12 @@ class DailyDiaryService
     ) {
     }
 
-    public function createOrUpdateDiary(array $data, int $teacherUserId): object
+    public function createOrUpdateDiary(
+        array $data,
+        int $teacherUserId,
+        ?UploadedFile $attachment = null,
+        ?DailyDiary $dailyDiary = null
+    ): object
     {
         $teacher = Teacher::query()
             ->where('user_id', $teacherUserId)
@@ -39,6 +47,9 @@ class DailyDiaryService
         $session = $this->resolveSession(isset($data['session']) ? (string) $data['session'] : null);
         $diaryDate = Carbon::parse((string) ($data['diary_date'] ?? now()->toDateString()))->toDateString();
         $diaryId = isset($data['diary_id']) ? (int) $data['diary_id'] : null;
+        $removeAttachment = array_key_exists('remove_attachment', $data)
+            ? (bool) $data['remove_attachment']
+            : false;
 
         if (! $this->teacherCanPostDiary((int) $teacher->id, $classId, $subjectId, $session)) {
             throw new RuntimeException('You are not assigned to this class and subject for the selected session.');
@@ -62,7 +73,10 @@ class DailyDiaryService
             $session,
             $diaryDate,
             $diaryId,
-            $payload
+            $payload,
+            $attachment,
+            $removeAttachment,
+            $dailyDiary
         ): DailyDiary {
             $existingScopeEntry = DailyDiary::query()
                 ->where('class_id', $classId)
@@ -73,7 +87,15 @@ class DailyDiaryService
                 ->first();
 
             $editingDiary = null;
-            if ($diaryId !== null && $diaryId > 0) {
+            if ($dailyDiary instanceof DailyDiary) {
+                $editingDiary = DailyDiary::query()
+                    ->lockForUpdate()
+                    ->findOrFail((int) $dailyDiary->id);
+
+                if ((int) $editingDiary->teacher_id !== (int) $teacher->id) {
+                    throw new RuntimeException('You can only edit your own diary entries.');
+                }
+            } elseif ($diaryId !== null && $diaryId > 0) {
                 $editingDiary = DailyDiary::query()
                     ->lockForUpdate()
                     ->findOrFail($diaryId);
@@ -97,7 +119,9 @@ class DailyDiaryService
                         ...$payload,
                     ])->save();
 
+                    $this->deleteAttachmentFileIfExists($editingDiary);
                     $editingDiary->delete();
+                    $this->replaceAttachmentIfNeeded($existingScopeEntry, $attachment, $removeAttachment);
 
                     return $existingScopeEntry;
                 }
@@ -110,6 +134,8 @@ class DailyDiaryService
                     'diary_date' => $diaryDate,
                     ...$payload,
                 ])->save();
+
+                $this->replaceAttachmentIfNeeded($editingDiary, $attachment, $removeAttachment);
 
                 return $editingDiary;
             }
@@ -124,10 +150,12 @@ class DailyDiaryService
                     ...$payload,
                 ])->save();
 
+                $this->replaceAttachmentIfNeeded($existingScopeEntry, $attachment, $removeAttachment);
+
                 return $existingScopeEntry;
             }
 
-            return DailyDiary::query()->create([
+            $newDiary = DailyDiary::query()->create([
                 'teacher_id' => (int) $teacher->id,
                 'class_id' => $classId,
                 'subject_id' => $subjectId,
@@ -136,6 +164,10 @@ class DailyDiaryService
                 ...$payload,
                 'created_by' => $teacherUserId,
             ]);
+
+            $this->replaceAttachmentIfNeeded($newDiary, $attachment, $removeAttachment);
+
+            return $newDiary;
         });
 
         return $diary->fresh([
@@ -143,8 +175,147 @@ class DailyDiaryService
             'classRoom:id,name,section',
             'subject:id,name',
             'createdBy:id,name',
-            'attachments',
+            'attachments:id,daily_diary_id,file_path,file_name',
         ]);
+    }
+
+    /**
+     * @return array{path:string,name:string,mime:?string,size:?int}
+     */
+    public function storeAttachment(UploadedFile $file): array
+    {
+        $storedPath = $file->store('daily-diary', 'public');
+        if (! is_string($storedPath) || trim($storedPath) === '') {
+            throw new RuntimeException('Unable to store attachment file.');
+        }
+
+        return [
+            'path' => $storedPath,
+            'name' => trim((string) $file->getClientOriginalName()) !== ''
+                ? trim((string) $file->getClientOriginalName())
+                : basename($storedPath),
+            'mime' => $file->getClientMimeType() ?: $file->getMimeType(),
+            'size' => $file->getSize() !== false ? (int) $file->getSize() : null,
+        ];
+    }
+
+    public function replaceAttachmentIfNeeded(
+        DailyDiary $dailyDiary,
+        ?UploadedFile $file = null,
+        bool $remove = false
+    ): void {
+        if ($file instanceof UploadedFile) {
+            $this->deleteAttachmentFileIfExists($dailyDiary);
+            $stored = $this->storeAttachment($file);
+
+            $dailyDiary->forceFill([
+                'attachment_path' => $stored['path'],
+                'attachment_name' => $stored['name'],
+                'attachment_mime' => $stored['mime'],
+                'attachment_size' => $stored['size'],
+            ])->save();
+
+            return;
+        }
+
+        if (! $remove) {
+            return;
+        }
+
+        $this->deleteAttachmentFileIfExists($dailyDiary);
+        $dailyDiary->forceFill([
+            'attachment_path' => null,
+            'attachment_name' => null,
+            'attachment_mime' => null,
+            'attachment_size' => null,
+        ])->save();
+    }
+
+    public function deleteAttachmentFileIfExists(DailyDiary $dailyDiary): void
+    {
+        $path = trim((string) $dailyDiary->attachment_path);
+        if ($path === '') {
+            return;
+        }
+
+        if (Storage::disk('public')->exists($path)) {
+            Storage::disk('public')->delete($path);
+        }
+    }
+
+    /**
+     * @return array{path:string,name:string,mime:?string,size:?int}|null
+     */
+    public function resolveAttachmentMeta(DailyDiary $dailyDiary): ?array
+    {
+        $currentPath = trim((string) $dailyDiary->attachment_path);
+        if ($currentPath !== '') {
+            return [
+                'path' => $currentPath,
+                'name' => $this->attachmentDisplayName($dailyDiary->attachment_name, $currentPath),
+                'mime' => $this->normalizedNullableString($dailyDiary->attachment_mime),
+                'size' => $dailyDiary->attachment_size !== null ? (int) $dailyDiary->attachment_size : null,
+            ];
+        }
+
+        $legacyAttachment = $dailyDiary->relationLoaded('attachments')
+            ? $dailyDiary->attachments->sortBy('id')->first()
+            : $dailyDiary->attachments()->orderBy('id')->first();
+
+        if ($legacyAttachment === null || trim((string) $legacyAttachment->file_path) === '') {
+            return null;
+        }
+
+        return [
+            'path' => trim((string) $legacyAttachment->file_path),
+            'name' => $this->attachmentDisplayName($legacyAttachment->file_name, (string) $legacyAttachment->file_path),
+            'mime' => null,
+            'size' => null,
+        ];
+    }
+
+    public function userCanViewDiary(User $user, DailyDiary $dailyDiary): bool
+    {
+        if ($user->can('view_all_daily_diary') || $user->can('monitor_daily_diary')) {
+            return true;
+        }
+
+        if ($user->hasRole('Teacher')) {
+            $teacher = $user->teacher;
+
+            return $teacher !== null
+                && (int) $dailyDiary->teacher_id === (int) $teacher->id
+                && ($user->can('view_own_daily_diary_entries') || $user->can('edit_own_daily_diary'));
+        }
+
+        if (! $user->hasRole('Student') || ! $user->can('view_student_daily_diary')) {
+            return false;
+        }
+
+        if (! $dailyDiary->is_published) {
+            return false;
+        }
+
+        $student = $this->resolveStudentFromUser($user);
+        if (! $student) {
+            return false;
+        }
+
+        if ((int) $student->class_id !== (int) $dailyDiary->class_id) {
+            return false;
+        }
+
+        if ($this->visibilityService->classRequiresSubjectFiltering($student->classRoom)) {
+            $subjectIds = $this->subjectIdsForStudent(
+                (int) $student->id,
+                (int) $student->class_id,
+                (string) $dailyDiary->session
+            );
+
+            return in_array((int) $dailyDiary->subject_id, $subjectIds, true);
+        }
+
+        return true;
     }
 
     /**
@@ -169,6 +340,7 @@ class DailyDiaryService
                 'classRoom:id,name,section',
                 'subject:id,name',
                 'teacher.user:id,name',
+                'attachments:id,daily_diary_id,file_path,file_name',
             ])
             ->where('teacher_id', $teacherId)
             ->where('session', (string) $normalized['session'])
@@ -242,6 +414,7 @@ class DailyDiaryService
                 'teacher.user:id,name',
                 'classRoom:id,name,section',
                 'subject:id,name',
+                'attachments:id,daily_diary_id,file_path,file_name',
             ])
             ->where('class_id', (int) $student->class_id)
             ->where('session', (string) $normalized['session'])
@@ -305,6 +478,7 @@ class DailyDiaryService
                 'classRoom:id,name,section',
                 'subject:id,name',
                 'createdBy:id,name',
+                'attachments:id,daily_diary_id,file_path,file_name',
             ])
             ->where('session', (string) $normalized['session'])
             ->when(isset($normalized['teacher_id']) && $normalized['teacher_id'] !== null, function ($query) use ($normalized): void {
@@ -753,5 +927,39 @@ class DailyDiaryService
 
         return $stringValue !== '' ? $stringValue : null;
     }
-}
 
+    private function attachmentDisplayName(?string $fileName, string $path): string
+    {
+        $resolvedName = trim((string) $fileName);
+
+        return $resolvedName !== '' ? $resolvedName : basename($path);
+    }
+
+    private function resolveStudentFromUser(User $user): ?Student
+    {
+        $emailLocal = mb_strtolower(trim((string) str((string) $user->email)->before('@')));
+        if ($emailLocal !== '') {
+            $studentById = Student::query()
+                ->with('classRoom:id,name,section')
+                ->whereRaw('LOWER(student_id) = ?', [$emailLocal])
+                ->first();
+
+            if ($studentById) {
+                return $studentById;
+            }
+        }
+
+        $normalizedName = mb_strtolower(trim((string) $user->name));
+        if ($normalizedName === '') {
+            return null;
+        }
+
+        $matches = Student::query()
+            ->with('classRoom:id,name,section')
+            ->whereRaw('LOWER(name) = ?', [$normalizedName])
+            ->orderByDesc('id')
+            ->get();
+
+        return $matches->count() === 1 ? $matches->first() : null;
+    }
+}

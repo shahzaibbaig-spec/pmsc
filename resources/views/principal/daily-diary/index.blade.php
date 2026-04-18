@@ -158,6 +158,7 @@
                                 <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Date</th>
                                 <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Posted</th>
                                 <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Entry Preview</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Attachment</th>
                                 <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Last Updated</th>
                             </tr>
                         </thead>
@@ -187,12 +188,24 @@
                                         @endif
                                     </td>
                                     <td class="px-4 py-4 text-sm text-slate-700">
+                                        @if ($row['posted'] && ! empty($row['attachment_path']) && ! empty($row['daily_diary_id']))
+                                            <a
+                                                href="{{ route('daily-diary.attachment', ['dailyDiary' => (int) $row['daily_diary_id']]) }}"
+                                                class="inline-flex items-center rounded-full bg-indigo-100 px-2.5 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-200"
+                                            >
+                                                {{ $row['attachment_name'] ?: 'Attachment' }}
+                                            </a>
+                                        @else
+                                            <span class="text-xs text-slate-500">-</span>
+                                        @endif
+                                    </td>
+                                    <td class="px-4 py-4 text-sm text-slate-700">
                                         {{ $row['updated_at'] ? $row['updated_at']->format('d M Y, h:i A') : '-' }}
                                     </td>
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="7" class="px-4 py-10 text-center text-sm text-slate-500">
+                                    <td colspan="8" class="px-4 py-10 text-center text-sm text-slate-500">
                                         No diary posting expectations found for the selected date and session.
                                     </td>
                                 </tr>

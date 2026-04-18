@@ -25,6 +25,7 @@ class StoreDailyDiaryRequest extends FormRequest
             'title' => ['nullable', 'string', 'max:255'],
             'homework_text' => ['required', 'string'],
             'instructions' => ['nullable', 'string'],
+            'attachment' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,pdf,docx,doc', 'max:10240'],
             'is_published' => ['nullable', 'boolean'],
         ];
     }

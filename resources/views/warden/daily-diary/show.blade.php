@@ -42,16 +42,26 @@
 
             <section class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                 <h4 class="text-sm font-semibold uppercase tracking-wide text-slate-500">Attachments</h4>
-                <ul class="mt-3 space-y-2 text-sm text-slate-700">
-                    @forelse ($dailyDiary->attachments as $attachment)
-                        <li class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                            <p class="font-medium text-slate-900">{{ $attachment->file_name ?: 'Attachment #'.$attachment->id }}</p>
-                            <p class="text-xs text-slate-500 break-all">{{ $attachment->file_path }}</p>
-                        </li>
-                    @empty
-                        <li class="text-slate-500">No attachments available for this diary entry.</li>
-                    @endforelse
-                </ul>
+                @php
+                    $attachmentPath = $dailyDiary->attachment_path ?: data_get($dailyDiary->attachments->first(), 'file_path');
+                    $attachmentName = $dailyDiary->attachment_name
+                        ?: data_get($dailyDiary->attachments->first(), 'file_name')
+                        ?: ($attachmentPath ? basename((string) $attachmentPath) : null);
+                @endphp
+
+                @if ($attachmentPath)
+                    <div class="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
+                        <p class="font-medium text-slate-900">{{ $attachmentName }}</p>
+                        <a
+                            href="{{ route('daily-diary.attachment', $dailyDiary) }}"
+                            class="mt-1 inline-flex items-center text-xs font-semibold text-indigo-700 hover:text-indigo-600"
+                        >
+                            Open / Download
+                        </a>
+                    </div>
+                @else
+                    <p class="mt-3 text-sm text-slate-500">No attachments available for this diary entry.</p>
+                @endif
             </section>
         </div>
     </div>

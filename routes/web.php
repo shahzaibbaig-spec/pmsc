@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\DashboardRedirectController;
+use App\Http\Controllers\DailyDiaryAttachmentController;
 use App\Http\Controllers\Inventory\DeviceDeclarationReviewController;
 use App\Http\Controllers\Inventory\InventoryDemandReviewController;
 use App\Http\Controllers\NotificationController;
@@ -107,6 +108,10 @@ Route::get('/dashboard', DashboardRedirectController::class)
     ->name('dashboard');
 
 Route::middleware(['auth', 'force-password-change'])->group(function () {
+    Route::get('/daily-diary/{dailyDiary}/attachment', DailyDiaryAttachmentController::class)
+        ->whereNumber('dailyDiary')
+        ->name('daily-diary.attachment');
+
     Route::get('/notifications', [NotificationController::class, 'index'])
         ->name('notifications.index');
 

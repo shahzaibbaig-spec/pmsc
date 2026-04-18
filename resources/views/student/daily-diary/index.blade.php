@@ -122,6 +122,25 @@
                                         <p class="mt-2 whitespace-pre-line text-sm text-slate-700">{{ $entry->instructions }}</p>
                                     </div>
                                 @endif
+
+                                @php
+                                    $entryAttachmentPath = $entry->attachment_path ?: data_get($entry->attachments->first(), 'file_path');
+                                    $entryAttachmentName = $entry->attachment_name
+                                        ?: data_get($entry->attachments->first(), 'file_name')
+                                        ?: ($entryAttachmentPath ? basename((string) $entryAttachmentPath) : null);
+                                @endphp
+
+                                @if ($entryAttachmentPath)
+                                    <div class="mt-3 rounded-xl border border-indigo-200 bg-indigo-50 p-4">
+                                        <p class="text-xs font-semibold uppercase tracking-wide text-indigo-700">Attachment</p>
+                                        <a
+                                            href="{{ route('daily-diary.attachment', $entry) }}"
+                                            class="mt-2 inline-flex items-center text-sm font-semibold text-indigo-700 hover:text-indigo-600"
+                                        >
+                                            {{ $entryAttachmentName }}
+                                        </a>
+                                    </div>
+                                @endif
                             </article>
                         @empty
                             <div class="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
@@ -134,4 +153,3 @@
         </div>
     </div>
 </x-app-layout>
-
