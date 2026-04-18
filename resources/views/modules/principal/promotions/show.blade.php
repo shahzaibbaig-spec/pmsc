@@ -49,7 +49,7 @@
 
         @if ($isTerminalClass)
             <div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                No next class mapping configured for this class.
+                This is a terminal class. Promote will mark students as pass out, and conditional promotion is not allowed.
             </div>
         @endif
 
@@ -95,8 +95,8 @@
                         class="block min-h-11 w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                         @disabled(! $canReview)
                     >
+                        <option value="promote">Promote Selected Students</option>
                         @unless ($isTerminalClass)
-                            <option value="promote">Promote Selected Students</option>
                             <option value="conditional_promote">Conditionally Promote Selected Students</option>
                         @endunless
                         <option value="retain">Retain Selected Students</option>
@@ -111,7 +111,7 @@
                         type="text"
                         maxlength="1000"
                         class="block min-h-11 w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                        placeholder="Required for retain / conditional"
+                        placeholder="Required for retain / conditional (terminal class: retain only)"
                         @disabled(! $canReview)
                     >
                 </div>
@@ -316,8 +316,8 @@
                                             @disabled(! $canReview)
                                         >
                                             <option value="">Use Current Decision</option>
+                                            <option value="promote" @selected($principalDecision === 'promote')>Promote</option>
                                             @unless ($isTerminalClass)
-                                                <option value="promote" @selected($principalDecision === 'promote')>Promote</option>
                                                 <option value="conditional_promote" @selected($principalDecision === 'conditional_promote')>Conditional Promote</option>
                                             @endunless
                                             <option value="retain" @selected($principalDecision === 'retain')>Retain</option>
@@ -328,7 +328,7 @@
                                             name="rows[{{ $index }}][principal_note]"
                                             rows="2"
                                             class="block w-64 rounded-lg border-slate-300 text-xs shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                            placeholder="Required for conditional/retain"
+                                            placeholder="Required for conditional/retain (terminal class: retain only)"
                                             @disabled(! $canReview)
                                         >{{ $principalNote }}</textarea>
                                     </td>

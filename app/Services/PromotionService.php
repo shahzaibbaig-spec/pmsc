@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\ClassSection;
 use App\Models\ClassPromotionMapping;
 use App\Models\Exam;
 use App\Models\PromotionCampaign;
@@ -21,6 +22,23 @@ use RuntimeException;
 class PromotionService
 {
     private const PASS_PERCENTAGE = 60.0;
+    private const PROMOTION_STAGE_FLOW = [
+        'playgroup' => 'nursery',
+        'nursery' => 'prep',
+        'prep' => '1',
+        '1' => '2',
+        '2' => '3',
+        '3' => '4',
+        '4' => '5',
+        '5' => '6',
+        '6' => '7',
+        '7' => '8',
+        '8' => '9',
+        '9' => '10',
+        '10' => '11',
+        '11' => '12',
+        '12' => null,
+    ];
 
     public function __construct(private readonly ResultService $resultService)
     {
@@ -423,7 +441,11 @@ class PromotionService
                         $nextClassId
                     );
 
-                    $this->assertMappedDecisionForPrincipal($principalDecision, $nextClassId);
+                    $this->assertMappedDecisionForPrincipal(
+                        $principalDecision,
+                        $nextClassId,
+                        (bool) $record->is_passed
+                    );
                 }
 
                 $record->principal_decision = $principalDecision;
@@ -468,7 +490,6 @@ class PromotionService
         $this->assertDecisionNote($normalizedDecision, $normalizedNote, 'Principal note is required');
 
         $nextClassId = $this->resolveNextClassId((int) $campaign->class_id);
-        $this->assertMappedDecisionForPrincipal($normalizedDecision, $nextClassId);
 
         $studentIdList = collect($studentIds)
             ->map(fn ($id): int => (int) $id)
@@ -502,6 +523,12 @@ class PromotionService
             }
 
             foreach ($rows as $row) {
+                $this->assertMappedDecisionForPrincipal(
+                    $normalizedDecision,
+                    $nextClassId,
+                    (bool) $row->is_passed
+                );
+
                 $row->principal_decision = $normalizedDecision;
                 $row->principal_note = $normalizedNote;
                 $row->to_class_id = $this->targetClassIdForDecision(
@@ -555,7 +582,11 @@ class PromotionService
 
                 $effectiveNote = $this->normalizeNote($row->principal_note) ?? $this->normalizeNote($row->teacher_note);
                 $this->assertDecisionNote($decision, $effectiveNote, 'Decision note is required');
-                $this->assertMappedDecisionForPrincipal($decision, $nextClassId);
+                $this->assertMappedDecisionForPrincipal(
+                    $decision,
+                    $nextClassId,
+                    (bool) $row->is_passed
+                );
 
                 $row->principal_decision = $decision;
                 if ($this->normalizeNote($row->principal_note) === null) {
@@ -649,7 +680,16 @@ class PromotionService
                     throw new RuntimeException('Execution failed because some students do not have an approved decision.');
                 }
 
-                $this->assertMappedDecisionForPrincipal($decision, $nextClassId);
+                $isPassedOut = $this->isTerminalPassedOutDecision(
+                    $decision,
+                    (bool) $row->is_passed,
+                    $nextClassId
+                );
+                $this->assertMappedDecisionForPrincipal(
+                    $decision,
+                    $nextClassId,
+                    (bool) $row->is_passed
+                );
 
                 $targetClassId = $row->to_class_id ?: $this->targetClassIdForDecision(
                     $decision,
@@ -657,7 +697,7 @@ class PromotionService
                     $nextClassId
                 );
 
-                if ($targetClassId === null) {
+                if ($targetClassId === null && ! $isPassedOut) {
                     throw new RuntimeException('Class promotion mapping is missing. Add mapping before execution.');
                 }
 
@@ -666,22 +706,32 @@ class PromotionService
                     continue;
                 }
 
-                $this->assertNoTargetSessionHistory((int) $student->id, (string) $campaign->to_session, (string) $student->name);
+                if (! $isPassedOut) {
+                    $this->assertNoTargetSessionHistory((int) $student->id, (string) $campaign->to_session, (string) $student->name);
+                }
 
                 $this->syncClassHistoryForExecution(
                     student: $student,
                     fromClassId: (int) $row->from_class_id,
-                    toClassId: (int) $targetClassId,
+                    toClassId: $targetClassId !== null ? (int) $targetClassId : null,
                     fromSession: (string) $campaign->from_session,
                     toSession: (string) $campaign->to_session,
                     decision: (string) $decision,
-                    isPassedOut: false
+                    isPassedOut: $isPassedOut
                 );
 
-                $student->class_id = (int) $targetClassId;
+                if ($isPassedOut) {
+                    $student->status = 'inactive';
+                } else {
+                    $this->ensureTargetClassSectionForPromotion(
+                        (int) $row->from_class_id,
+                        (int) $targetClassId
+                    );
+                    $student->class_id = (int) $targetClassId;
+                }
                 $student->save();
 
-                $row->to_class_id = (int) $targetClassId;
+                $row->to_class_id = $isPassedOut ? null : (int) $targetClassId;
                 $row->final_status = StudentPromotion::STATUS_EXECUTED;
                 $row->save();
             }
@@ -711,7 +761,20 @@ class PromotionService
             throw new RuntimeException('Multiple promotion mappings found for one class. Keep one mapping per class.');
         }
 
-        return $mappings->first();
+        $mappedNextClassId = $mappings->first();
+        if ($mappedNextClassId !== null) {
+            return (int) $mappedNextClassId;
+        }
+
+        $resolvedByFlow = $this->resolveNextClassIdFromConfiguredFlow($fromClassId);
+        if ($resolvedByFlow !== null) {
+            ClassPromotionMapping::query()->updateOrCreate(
+                ['from_class_id' => $fromClassId],
+                ['to_class_id' => $resolvedByFlow]
+            );
+        }
+
+        return $resolvedByFlow;
     }
 
     /**
@@ -949,11 +1012,14 @@ class PromotionService
         }
     }
 
-    private function assertMappedDecisionForPrincipal(string $decision, ?int $nextClassId): void
+    private function assertMappedDecisionForPrincipal(string $decision, ?int $nextClassId, bool $isPassed): void
     {
-        if (in_array($decision, [StudentPromotion::DECISION_PROMOTE, StudentPromotion::DECISION_CONDITIONAL_PROMOTE], true)
-            && $nextClassId === null) {
-            throw new RuntimeException('No next class mapping configured for this class.');
+        if ($decision === StudentPromotion::DECISION_CONDITIONAL_PROMOTE && $nextClassId === null) {
+            throw new RuntimeException('Terminal classes cannot use conditional promotion.');
+        }
+
+        if ($decision === StudentPromotion::DECISION_PROMOTE && $nextClassId === null && ! $isPassed) {
+            throw new RuntimeException('Terminal class students can only be promoted when marked passed. Use retain for failed students.');
         }
     }
 
@@ -1000,6 +1066,128 @@ class PromotionService
         $label = trim((string) $classRoom->name.' '.(string) ($classRoom->section ?? ''));
 
         return $label !== '' ? $label : ('Class '.$classRoom->id);
+    }
+
+    private function resolveNextClassIdFromConfiguredFlow(int $fromClassId): ?int
+    {
+        $fromClass = SchoolClass::query()->find($fromClassId, ['id', 'name', 'section']);
+        if (! $fromClass) {
+            return null;
+        }
+
+        $fromStage = $this->classStageKey((string) $fromClass->name);
+        if ($fromStage === null) {
+            return null;
+        }
+
+        $nextStage = self::PROMOTION_STAGE_FLOW[$fromStage] ?? null;
+        if ($nextStage === null) {
+            return null;
+        }
+
+        $nextClasses = SchoolClass::query()
+            ->orderBy('name')
+            ->orderBy('section')
+            ->get(['id', 'name', 'section'])
+            ->filter(fn (SchoolClass $classRoom): bool => $this->classStageKey((string) $classRoom->name) === $nextStage)
+            ->values();
+
+        if ($nextClasses->isEmpty()) {
+            return null;
+        }
+
+        $sourceSection = $this->sectionKey($fromClass);
+        if ($sourceSection !== null) {
+            $sectionMatchedClass = $nextClasses->first(
+                fn (SchoolClass $classRoom): bool => $this->sectionKey($classRoom) === $sourceSection
+            );
+            if ($sectionMatchedClass) {
+                return (int) $sectionMatchedClass->id;
+            }
+        }
+
+        return (int) $nextClasses->first()->id;
+    }
+
+    private function classStageKey(string $rawName): ?string
+    {
+        $normalized = strtolower(trim($rawName));
+        if ($normalized === '') {
+            return null;
+        }
+
+        if (preg_match('/\b(?:pg|play\s*group|playgroup)\b/i', $normalized) === 1) {
+            return 'playgroup';
+        }
+
+        if (preg_match('/\bnursery\b/i', $normalized) === 1) {
+            return 'nursery';
+        }
+
+        if (preg_match('/\bprep\b|\bpreparatory\b/i', $normalized) === 1) {
+            return 'prep';
+        }
+
+        if (preg_match('/\b(?:class|grade)\s*(\d{1,2})\b/i', $normalized, $matches) === 1) {
+            return $this->numericStageKey((int) $matches[1]);
+        }
+
+        if (preg_match('/^(\d{1,2})(?:\s*[- ]?\s*[a-z])?$/i', $normalized, $matches) === 1) {
+            return $this->numericStageKey((int) $matches[1]);
+        }
+
+        if (preg_match('/\b(\d{1,2})\b/', $normalized, $matches) === 1) {
+            return $this->numericStageKey((int) $matches[1]);
+        }
+
+        return null;
+    }
+
+    private function numericStageKey(int $value): ?string
+    {
+        if ($value < 1 || $value > 12) {
+            return null;
+        }
+
+        return (string) $value;
+    }
+
+    private function sectionKey(SchoolClass $classRoom): ?string
+    {
+        $explicitSection = strtoupper(trim((string) ($classRoom->section ?? '')));
+        if ($explicitSection !== '') {
+            return $explicitSection;
+        }
+
+        $name = trim((string) $classRoom->name);
+        if ($name === '') {
+            return null;
+        }
+
+        if (preg_match('/(?:^|\b)(?:pg|play\s*group|playgroup|prep|nursery|class\s*\d{1,2}|grade\s*\d{1,2}|\d{1,2})\s*[- ]\s*([a-z])$/i', $name, $matches) === 1) {
+            return strtoupper((string) $matches[1]);
+        }
+
+        if (preg_match('/^\s*\d{1,2}\s*([a-z])\s*$/i', $name, $matches) === 1) {
+            return strtoupper((string) $matches[1]);
+        }
+
+        return null;
+    }
+
+    private function ensureTargetClassSectionForPromotion(int $fromClassId, int $toClassId): void
+    {
+        $fromClass = SchoolClass::query()->find($fromClassId, ['id', 'name', 'section']);
+
+        $section = $fromClass ? $this->sectionKey($fromClass) : null;
+        if ($section === null) {
+            $section = 'A';
+        }
+
+        ClassSection::query()->firstOrCreate([
+            'class_id' => $toClassId,
+            'section_name' => $section,
+        ]);
     }
 
     private function assertNoTargetSessionHistory(int $studentId, string $toSession, string $studentName): void

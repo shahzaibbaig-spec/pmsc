@@ -16,9 +16,9 @@ class ClassPromotionMappingSeeder extends Seeder
             ->get(['id', 'name', 'section']);
 
         $mappings = [
-            ['from' => 'PG', 'to' => 'Prep'],
-            ['from' => 'Prep', 'to' => 'Nursery'],
-            ['from' => 'Nursery', 'to' => '1'],
+            ['from' => 'Playgroup', 'to' => 'Nursery'],
+            ['from' => 'Nursery', 'to' => 'Prep'],
+            ['from' => 'Prep', 'to' => '1'],
             ['from' => '1', 'to' => '2'],
             ['from' => '2', 'to' => '3'],
             ['from' => '3', 'to' => '4'],
@@ -85,8 +85,8 @@ class ClassPromotionMappingSeeder extends Seeder
             return null;
         }
 
-        if (preg_match('/\bpg\b|\bplay\s*group\b/i', $normalized) === 1) {
-            return 'pg';
+        if (preg_match('/\b(?:pg|play\s*group|playgroup)\b/i', $normalized) === 1) {
+            return 'playgroup';
         }
 
         if (preg_match('/\bprep\b|\bpreparatory\b/i', $normalized) === 1) {
@@ -133,7 +133,7 @@ class ClassPromotionMappingSeeder extends Seeder
             return null;
         }
 
-        if (preg_match('/(?:^|\b)(?:pg|prep|nursery|class\s*\d{1,2}|grade\s*\d{1,2}|\d{1,2})\s*[- ]\s*([a-z])$/i', $name, $matches) === 1) {
+        if (preg_match('/(?:^|\b)(?:pg|play\s*group|playgroup|prep|nursery|class\s*\d{1,2}|grade\s*\d{1,2}|\d{1,2})\s*[- ]\s*([a-z])$/i', $name, $matches) === 1) {
             return strtoupper((string) $matches[1]);
         }
 
