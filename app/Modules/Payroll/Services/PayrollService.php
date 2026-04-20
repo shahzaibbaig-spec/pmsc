@@ -339,17 +339,41 @@ class PayrollService
     {
         $setting = SchoolSetting::cached();
         $logoAbsolutePath = null;
+        $logoUrl = null;
+        $logoDataUri = null;
 
-        if ($setting?->logo_path) {
-            $absolute = public_path('storage/'.$setting->logo_path);
-            if (is_file($absolute)) {
-                $logoAbsolutePath = $absolute;
+        $logoPath = trim((string) ($setting?->logo_path ?? ''));
+        if ($logoPath !== '') {
+            if (str_starts_with($logoPath, 'http://') || str_starts_with($logoPath, 'https://')) {
+                $logoUrl = $logoPath;
+            } else {
+                $logoUrl = asset('storage/'.$logoPath);
+
+                $publicStoragePath = public_path('storage/'.$logoPath);
+                $appStoragePath = storage_path('app/public/'.$logoPath);
+                $resolvedFilePath = is_file($publicStoragePath)
+                    ? $publicStoragePath
+                    : (is_file($appStoragePath) ? $appStoragePath : null);
+
+                if ($resolvedFilePath !== null) {
+                    $logoAbsolutePath = $resolvedFilePath;
+
+                    $binary = @file_get_contents($resolvedFilePath);
+                    if ($binary !== false && $binary !== '') {
+                        $mimeType = @mime_content_type($resolvedFilePath);
+                        $resolvedMimeType = is_string($mimeType) && trim($mimeType) !== ''
+                            ? $mimeType
+                            : 'image/jpeg';
+                        $logoDataUri = 'data:'.$resolvedMimeType.';base64,'.base64_encode($binary);
+                    }
+                }
             }
         }
 
         return [
             'name' => $setting?->school_name ?? 'School Management System',
-            'logo_absolute_path' => $logoAbsolutePath,
+            'logo_url' => $logoUrl,
+            'logo_absolute_path' => $logoDataUri ?? $logoUrl ?? $logoAbsolutePath,
         ];
     }
 
