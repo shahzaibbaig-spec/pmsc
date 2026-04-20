@@ -33,7 +33,7 @@ class TeacherDashboardController extends Controller
 
         $classTeacherClassIds = TeacherAssignment::query()
             ->where('teacher_id', $teacher->id)
-            ->where('session', $currentSession)
+            ->where('session', $assignmentSession)
             ->where('is_class_teacher', true)
             ->pluck('class_id');
 

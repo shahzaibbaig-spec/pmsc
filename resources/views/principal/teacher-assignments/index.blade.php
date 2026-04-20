@@ -354,6 +354,13 @@
             const classTeacherMatrixUrl = @json(route('principal.teacher-assignments.class-teachers'));
             const focusTeacherId = Number(@json((int) request()->query('focus_teacher', 0)));
             let selectedTeacherId = null;
+            let activeTeacherPanelSession = '';
+
+            if (sessionSelect && sessionSelect.value) {
+                activeTeacherPanelSession = sessionSelect.value;
+            } else if (classTeacherSessionSelect && classTeacherSessionSelect.value) {
+                activeTeacherPanelSession = classTeacherSessionSelect.value;
+            }
 
             function showTeacherUrl(teacherId) {
                 return showUrlTemplate.replace('__TEACHER__', String(teacherId));
@@ -403,8 +410,9 @@
 
                 try {
                     const url = new URL(showTeacherUrl(teacherId), window.location.origin);
-                    if (sessionSelect && sessionSelect.value) {
-                        url.searchParams.set('session', sessionSelect.value);
+                    const resolvedPanelSession = String(activeTeacherPanelSession || '').trim();
+                    if (resolvedPanelSession !== '') {
+                        url.searchParams.set('session', resolvedPanelSession);
                     }
 
                     const response = await fetch(url.toString(), {
@@ -503,13 +511,18 @@
             });
 
             sessionSelect?.addEventListener('change', () => {
+                activeTeacherPanelSession = sessionSelect.value;
                 if (selectedTeacherId) {
                     loadTeacherPanel(selectedTeacherId);
                 }
             });
 
             classTeacherSessionSelect?.addEventListener('change', () => {
+                activeTeacherPanelSession = classTeacherSessionSelect.value;
                 loadClassTeacherMatrix(classTeacherSessionSelect.value);
+                if (selectedTeacherId) {
+                    loadTeacherPanel(selectedTeacherId);
+                }
             });
 
             if (focusTeacherId > 0) {
