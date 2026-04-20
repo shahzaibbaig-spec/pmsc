@@ -23,6 +23,9 @@
         $absentStudents = ($overview['absent_students'] ?? collect()) instanceof \Illuminate\Support\Collection
             ? $overview['absent_students']
             : collect($overview['absent_students'] ?? []);
+        $presentStudents = ($overview['present_students'] ?? collect()) instanceof \Illuminate\Support\Collection
+            ? $overview['present_students']
+            : collect($overview['present_students'] ?? []);
 
         $markedByTeachers = $teacherMarking
             ->filter(fn (array $row): bool => (bool) ($row['is_marked'] ?? false) && ($row['teacher_id'] ?? null) !== null)
@@ -167,34 +170,66 @@
             </article>
         </section>
 
-        <section class="rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div class="border-b border-slate-200 px-5 py-4">
-                <h3 class="text-sm font-semibold text-slate-900">Absent Students Today</h3>
-            </div>
-            <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-slate-200">
-                    <thead class="bg-slate-50">
-                        <tr>
-                            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Student ID</th>
-                            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Student Name</th>
-                            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Class</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-slate-100 bg-white">
-                        @forelse ($absentStudents as $row)
+        <section class="grid grid-cols-1 gap-6 xl:grid-cols-2">
+            <article class="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <div class="border-b border-slate-200 px-5 py-4">
+                    <h3 class="text-sm font-semibold text-slate-900">Present Students Today</h3>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-slate-200">
+                        <thead class="bg-emerald-50">
                             <tr>
-                                <td class="px-4 py-3 text-sm text-slate-700">{{ $row['student_id_value'] }}</td>
-                                <td class="px-4 py-3 text-sm text-slate-700">{{ $row['student_name'] }}</td>
-                                <td class="px-4 py-3 text-sm text-slate-700">{{ $row['class_name'] }}</td>
+                                <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-emerald-700">Student ID</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-emerald-700">Student Name</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-emerald-700">Class</th>
                             </tr>
-                        @empty
+                        </thead>
+                        <tbody class="divide-y divide-slate-100 bg-white">
+                            @forelse ($presentStudents as $row)
+                                <tr>
+                                    <td class="px-4 py-3 text-sm text-slate-700">{{ $row['student_id_value'] }}</td>
+                                    <td class="px-4 py-3 text-sm text-slate-700">{{ $row['student_name'] }}</td>
+                                    <td class="px-4 py-3 text-sm text-slate-700">{{ $row['class_name'] }}</td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="3" class="px-4 py-8 text-center text-sm text-slate-500">No present students found for selected filters.</td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+            </article>
+
+            <article class="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <div class="border-b border-slate-200 px-5 py-4">
+                    <h3 class="text-sm font-semibold text-slate-900">Absent Students Today</h3>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-slate-200">
+                        <thead class="bg-rose-50">
                             <tr>
-                                <td colspan="3" class="px-4 py-8 text-center text-sm text-slate-500">No absent students found for selected filters.</td>
+                                <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-rose-700">Student ID</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-rose-700">Student Name</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-rose-700">Class</th>
                             </tr>
-                        @endforelse
-                    </tbody>
-                </table>
-            </div>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100 bg-white">
+                            @forelse ($absentStudents as $row)
+                                <tr>
+                                    <td class="px-4 py-3 text-sm text-slate-700">{{ $row['student_id_value'] }}</td>
+                                    <td class="px-4 py-3 text-sm text-slate-700">{{ $row['student_name'] }}</td>
+                                    <td class="px-4 py-3 text-sm text-slate-700">{{ $row['class_name'] }}</td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="3" class="px-4 py-8 text-center text-sm text-slate-500">No absent students found for selected filters.</td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+            </article>
         </section>
 
         <section class="rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -252,4 +287,3 @@
         </section>
     </div>
 </x-app-layout>
-

@@ -275,6 +275,11 @@ class AttendanceService
      *     student_id_value:string,
      *     student_name:string,
      *     class_name:string
+     *   }>,
+     *   present_students:Collection<int, array{
+     *     student_id_value:string,
+     *     student_name:string,
+     *     class_name:string
      *   }>
      * }
      */
@@ -390,6 +395,17 @@ class AttendanceService
             })
             ->values();
 
+        $presentStudents = $attendanceRows
+            ->where('status', 'present')
+            ->map(function (Attendance $attendance): array {
+                return [
+                    'student_id_value' => (string) ($attendance->student?->student_id ?? '-'),
+                    'student_name' => (string) ($attendance->student?->name ?? 'Student'),
+                    'class_name' => trim((string) ($attendance->classRoom?->name ?? '').' '.(string) ($attendance->classRoom?->section ?? '')),
+                ];
+            })
+            ->values();
+
         $assignedClassTeachers = $teacherMarking->whereNotNull('teacher_id')->count();
         $classesMarked = $teacherMarking
             ->filter(fn (array $row): bool => $row['teacher_id'] !== null && (bool) $row['is_marked'])
@@ -416,6 +432,7 @@ class AttendanceService
             ],
             'teacher_marking' => $teacherMarking,
             'absent_students' => $absentStudents,
+            'present_students' => $presentStudents,
         ];
     }
 
