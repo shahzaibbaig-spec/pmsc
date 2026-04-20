@@ -530,6 +530,10 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
         ->middleware(['role:Principal'])
         ->name('principal.teachers.data');
 
+    Route::get('/principal/teachers/export/active-docx', [PrincipalTeacherListController::class, 'exportActiveDocx'])
+        ->middleware(['role:Principal'])
+        ->name('principal.teachers.export-active-docx');
+
     Route::post('/principal/teacher-assignments/bulk-store', [PrincipalTeacherAssignmentController::class, 'storeBulk'])
         ->middleware(['role:Principal|Admin', 'permission:assign_teachers'])
         ->name('principal.teacher-assignments.bulk-store');

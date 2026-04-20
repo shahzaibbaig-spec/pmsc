@@ -14,7 +14,8 @@
                     <option value="50">50</option>
                 </select>
             </div>
-            <div class="flex items-end justify-end">
+            <div class="flex flex-wrap items-end justify-end gap-2">
+                <x-ui.button href="{{ route('principal.teachers.export-active-docx') }}" variant="outline">Download Active Teachers (DOCX)</x-ui.button>
                 <x-ui.button href="{{ route('principal.teacher-assignments.index') }}" variant="outline">Manage Assignments</x-ui.button>
             </div>
         </div>
