@@ -39,6 +39,7 @@ use App\Modules\Admin\Controllers\UserManagementController;
 use App\Modules\Analytics\Controllers\PerformanceInsightsController;
 use App\Modules\Analytics\Controllers\PrincipalAnalyticsDashboardController;
 use App\Modules\Analytics\Controllers\TeacherAnalyticsController;
+use App\Modules\Attendance\Controllers\PrincipalAttendanceController;
 use App\Modules\Attendance\Controllers\TeacherAttendanceController;
 use App\Modules\Classes\Controllers\ClassManagementController;
 use App\Modules\Classes\Controllers\PrincipalDashboardController;
@@ -697,6 +698,10 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
     Route::get('/principal/teacher-attendance', [PrincipalTeacherAttendanceController::class, 'index'])
         ->middleware(['role:Admin|Principal', 'permission:manage_teacher_attendance'])
         ->name('principal.teacher-attendance.index');
+
+    Route::get('/principal/attendance', [PrincipalAttendanceController::class, 'index'])
+        ->middleware(['role:Principal', 'permission:view_attendance'])
+        ->name('principal.attendance.index');
 
     Route::get('/principal/teacher-attendance/create', [PrincipalTeacherAttendanceController::class, 'create'])
         ->middleware(['role:Admin|Principal', 'permission:manage_teacher_attendance'])

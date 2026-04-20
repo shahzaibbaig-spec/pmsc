@@ -33,6 +33,9 @@
             <x-ui.button href="{{ route('principal.teacher-assignments.index') }}" variant="outline">Teacher Assignments</x-ui.button>
             <x-ui.button href="{{ route('principal.results.generator') }}" variant="outline">Results Module</x-ui.button>
             <x-ui.button href="{{ route('principal.analytics.teachers.index') }}" variant="outline">Teacher Analytics</x-ui.button>
+            @can('view_attendance')
+                <x-ui.button href="{{ route('principal.attendance.index') }}" variant="outline">Class Attendance</x-ui.button>
+            @endcan
         </div>
     </x-ui.card>
 </x-app-layout>
