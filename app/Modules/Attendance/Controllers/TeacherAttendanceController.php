@@ -20,11 +20,20 @@ class TeacherAttendanceController extends Controller
     public function index(): View
     {
         $date = now()->toDateString();
-        $classes = $this->service->classTeacherClassesForUser((int) auth()->id(), $date);
+        $userId = (int) auth()->id();
+        $sessions = $this->service->classTeacherSessionsForUser($userId, $date);
+        $selectedSession = trim((string) request()->query('session', ''));
+        if ($selectedSession === '') {
+            $selectedSession = (string) ($sessions[0] ?? '');
+        }
+        $classes = $this->service->classTeacherClassesForUser($userId, $date, $selectedSession);
+        $selectedSession = (string) ($classes->first()['session'] ?? $selectedSession);
 
         return view('modules.teacher.attendance.index', [
             'defaultDate' => $date,
             'classes' => $classes,
+            'sessions' => $sessions,
+            'selectedSession' => $selectedSession,
         ]);
     }
 
@@ -32,12 +41,20 @@ class TeacherAttendanceController extends Controller
     {
         $request->validate([
             'date' => ['required', 'date_format:Y-m-d'],
+            'session' => ['nullable', 'string', 'max:20'],
         ]);
 
-        $classes = $this->service->classTeacherClassesForUser((int) auth()->id(), (string) $request->input('date'));
+        $userId = (int) auth()->id();
+        $date = (string) $request->input('date');
+        $requestedSession = trim((string) $request->input('session', ''));
+        $classes = $this->service->classTeacherClassesForUser($userId, $date, $requestedSession);
+        $sessions = $this->service->classTeacherSessionsForUser($userId, $date);
+        $selectedSession = (string) ($classes->first()['session'] ?? ($requestedSession !== '' ? $requestedSession : ($sessions[0] ?? '')));
 
         return response()->json([
             'classes' => $classes,
+            'sessions' => $sessions,
+            'selected_session' => $selectedSession,
         ]);
     }
 
@@ -45,8 +62,9 @@ class TeacherAttendanceController extends Controller
     {
         $classId = (int) $request->input('class_id');
         $date = $request->string('date')->toString();
+        $session = trim($request->string('session')->toString());
 
-        $classes = $this->service->classTeacherClassesForUser((int) auth()->id(), $date);
+        $classes = $this->service->classTeacherClassesForUser((int) auth()->id(), $date, $session);
         $isAllowed = $classes->contains(fn (array $row): bool => (int) $row['class_id'] === $classId);
 
         if (! $isAllowed) {
@@ -65,7 +83,8 @@ class TeacherAttendanceController extends Controller
                 (int) auth()->id(),
                 (int) $request->input('class_id'),
                 $request->string('date')->toString(),
-                $request->input('records', [])
+                $request->input('records', []),
+                trim($request->string('session')->toString())
             );
         } catch (RuntimeException $exception) {
             return response()->json(['message' => $exception->getMessage()], 422);
@@ -74,4 +93,3 @@ class TeacherAttendanceController extends Controller
         return response()->json(['message' => 'Attendance saved successfully.']);
     }
 }
-

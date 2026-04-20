@@ -17,7 +17,7 @@ use RuntimeException;
 
 class AttendanceService
 {
-    public function classTeacherClassesForUser(int $userId, string $date): Collection
+    public function classTeacherClassesForUser(int $userId, string $date, ?string $session = null): Collection
     {
         $teacher = Teacher::query()->where('user_id', $userId)->first();
         if (! $teacher) {
@@ -25,7 +25,11 @@ class AttendanceService
         }
 
         $currentSession = $this->sessionFromDate($date);
-        $assignmentSession = $this->classTeacherAssignmentSessionForTeacher($teacher->id, $currentSession);
+        $assignmentSession = $this->resolveRequestedOrDefaultClassTeacherSession(
+            (int) $teacher->id,
+            $currentSession,
+            $session
+        );
 
         $assignments = TeacherAssignment::query()
             ->with('classRoom:id,name,section')
@@ -52,6 +56,36 @@ class AttendanceService
                 'active_students' => (int) ($activeStudentCountByClass->get($assignment->class_id) ?? 0),
             ];
         })->values();
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function classTeacherSessionsForUser(int $userId, string $date): array
+    {
+        $teacher = Teacher::query()->where('user_id', $userId)->first();
+        $currentSession = $this->sessionFromDate($date);
+
+        if (! $teacher) {
+            return [$currentSession];
+        }
+
+        $storedSessions = TeacherAssignment::query()
+            ->where('teacher_id', (int) $teacher->id)
+            ->where('is_class_teacher', true)
+            ->select('session')
+            ->distinct()
+            ->orderByDesc('session')
+            ->pluck('session')
+            ->filter(static fn ($value): bool => is_string($value) && trim($value) !== '')
+            ->values()
+            ->all();
+
+        return collect(array_merge([$currentSession], $storedSessions))
+            ->filter(static fn ($value): bool => is_string($value) && trim($value) !== '')
+            ->unique()
+            ->values()
+            ->all();
     }
 
     public function classAttendanceSheet(int $classId, string $date): array
@@ -91,9 +125,9 @@ class AttendanceService
         ];
     }
 
-    public function markAttendance(int $userId, int $classId, string $date, array $records): void
+    public function markAttendance(int $userId, int $classId, string $date, array $records, ?string $session = null): void
     {
-        if (! $this->teacherCanMarkClass($userId, $classId, $date)) {
+        if (! $this->teacherCanMarkClass($userId, $classId, $date, $session)) {
             throw new RuntimeException('You are not assigned as class teacher for this class/session.');
         }
 
@@ -176,7 +210,7 @@ class AttendanceService
         ];
     }
 
-    private function teacherCanMarkClass(int $userId, int $classId, string $date): bool
+    private function teacherCanMarkClass(int $userId, int $classId, string $date, ?string $session = null): bool
     {
         $teacher = Teacher::query()->where('user_id', $userId)->first();
         if (! $teacher) {
@@ -184,7 +218,11 @@ class AttendanceService
         }
 
         $currentSession = $this->sessionFromDate($date);
-        $assignmentSession = $this->classTeacherAssignmentSessionForTeacher($teacher->id, $currentSession);
+        $assignmentSession = $this->resolveRequestedOrDefaultClassTeacherSession(
+            (int) $teacher->id,
+            $currentSession,
+            $session
+        );
 
         return TeacherAssignment::query()
             ->where('teacher_id', $teacher->id)
@@ -192,6 +230,28 @@ class AttendanceService
             ->where('is_class_teacher', true)
             ->where('session', $assignmentSession)
             ->exists();
+    }
+
+    private function resolveRequestedOrDefaultClassTeacherSession(
+        int $teacherId,
+        string $currentSession,
+        ?string $requestedSession = null
+    ): string {
+        $resolvedRequested = trim((string) $requestedSession);
+
+        if ($resolvedRequested !== '') {
+            $requestedExists = TeacherAssignment::query()
+                ->where('teacher_id', $teacherId)
+                ->where('is_class_teacher', true)
+                ->where('session', $resolvedRequested)
+                ->exists();
+
+            if ($requestedExists) {
+                return $resolvedRequested;
+            }
+        }
+
+        return $this->classTeacherAssignmentSessionForTeacher($teacherId, $currentSession);
     }
 
     private function classTeacherAssignmentSessionForTeacher(int $teacherId, string $currentSession): string

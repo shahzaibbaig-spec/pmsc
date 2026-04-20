@@ -12,10 +12,20 @@
                     <h3 class="text-lg font-medium text-gray-900">Attendance Filters</h3>
                     <p class="mt-1 text-sm text-gray-600">Default date is today. One tap can mark all present, then adjust exceptions.</p>
 
-                    <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-4">
+                    <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-5">
                         <div>
                             <x-input-label for="attendanceDate" value="Date" />
                             <x-text-input id="attendanceDate" type="date" class="mt-1 block w-full min-h-11" value="{{ $defaultDate }}" />
+                        </div>
+                        <div>
+                            <x-input-label for="attendanceSession" value="Session" />
+                            <select id="attendanceSession" class="mt-1 block min-h-11 w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                @forelse($sessions as $session)
+                                    <option value="{{ $session }}" @selected($selectedSession === $session)>{{ $session }}</option>
+                                @empty
+                                    <option value="">No session found</option>
+                                @endforelse
+                            </select>
                         </div>
                         <div class="md:col-span-2">
                             <x-input-label for="classId" value="Class" />
@@ -98,6 +108,7 @@
         const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
 
         const dateInput = document.getElementById('attendanceDate');
+        const sessionInput = document.getElementById('attendanceSession');
         const classInput = document.getElementById('classId');
         const loadSheetBtn = document.getElementById('loadSheetBtn');
         const presentAllBtn = document.getElementById('presentAllBtn');
@@ -132,6 +143,21 @@
             messageBox.textContent = '';
         }
 
+        function renderSessionOptions(sessions, selectedSession = '') {
+            if (!sessionInput || !Array.isArray(sessions) || sessions.length === 0) {
+                return;
+            }
+
+            const desired = String(selectedSession || sessionInput.value || '').trim();
+            sessionInput.innerHTML = sessions
+                .map((session) => {
+                    const value = String(session || '').trim();
+                    const selected = desired !== '' ? value === desired : value === String(sessionInput.value || '').trim();
+                    return `<option value="${window.NSMS.escapeHtml(value)}"${selected ? ' selected' : ''}>${window.NSMS.escapeHtml(value)}</option>`;
+                })
+                .join('');
+        }
+
         async function reloadClassOptions() {
             const date = dateInput.value;
             if (!date) {
@@ -139,6 +165,10 @@
             }
 
             const params = new URLSearchParams({ date });
+            const session = sessionInput ? String(sessionInput.value || '').trim() : '';
+            if (session !== '') {
+                params.set('session', session);
+            }
             const response = await fetch(`{{ route('teacher.attendance.options') }}?${params.toString()}`, {
                 headers: { 'Accept': 'application/json' }
             });
@@ -149,6 +179,10 @@
 
             const result = await response.json();
             const classes = result.classes || [];
+            const sessions = Array.isArray(result.sessions) ? result.sessions : [];
+            const selectedSession = String(result.selected_session || session || '').trim();
+
+            renderSessionOptions(sessions, selectedSession);
 
             classInput.innerHTML = '';
 
@@ -227,6 +261,7 @@
 
             const classId = Number(classInput.value);
             const date = dateInput.value;
+            const session = sessionInput ? String(sessionInput.value || '').trim() : '';
 
             if (!classId || !date) {
                 showMessage('Date and class are required.', 'error');
@@ -241,6 +276,9 @@
                 class_id: classId,
                 date: date,
             });
+            if (session !== '') {
+                params.set('session', session);
+            }
 
             try {
                 const response = await fetch(`{{ route('teacher.attendance.sheet') }}?${params.toString()}`, {
@@ -286,6 +324,7 @@
 
             const classId = Number(classInput.value);
             const date = dateInput.value;
+            const session = sessionInput ? String(sessionInput.value || '').trim() : '';
 
             if (!classId || !date) {
                 showMessage('Date and class are required.', 'error');
@@ -308,6 +347,7 @@
             const payload = {
                 class_id: classId,
                 date: date,
+                session: session,
                 records: state.students.map((student) => ({
                     student_id: student.id,
                     status: student.status
@@ -358,6 +398,13 @@
         });
 
         dateInput.addEventListener('change', async () => {
+            await reloadClassOptions();
+            state.students = [];
+            state.page = 1;
+            renderRows();
+        });
+
+        sessionInput?.addEventListener('change', async () => {
             await reloadClassOptions();
             state.students = [];
             state.page = 1;
