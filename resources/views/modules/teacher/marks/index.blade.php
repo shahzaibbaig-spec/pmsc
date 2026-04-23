@@ -125,6 +125,9 @@
                                     $examLabel = $examTypeLabels[$examTypeValue] ?? str_replace('_', ' ', ucfirst($examTypeValue));
                                     $classLabel = trim(($mark->exam?->classRoom?->name ?? 'Class').' '.($mark->exam?->classRoom?->section ?? ''));
                                     $canEdit = (bool) $mark->getAttribute('can_edit');
+                                    $resultLocked = (bool) $mark->getAttribute('result_locked');
+                                    $resultLockType = $mark->getAttribute('result_lock_type');
+                                    $resultLockMessage = $mark->getAttribute('result_lock_message');
                                     $usesGradeSystem = (bool) $mark->getAttribute('uses_grade_system');
                                     $gradeLabel = $mark->getAttribute('grade_label');
                                 @endphp
@@ -138,6 +141,13 @@
                                     <td class="px-4 py-3 text-sm text-gray-700">
                                         <div class="font-medium">{{ $examLabel }}</div>
                                         <div class="text-xs text-gray-500">{{ $mark->session }}</div>
+                                        @if ($resultLocked)
+                                            <div class="mt-2">
+                                                <span class="inline-flex rounded-full px-2 py-1 text-xs font-semibold {{ $resultLockType === 'final' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700' }}">
+                                                    {{ $resultLockType === 'final' ? 'Final Locked' : 'Soft Locked' }}
+                                                </span>
+                                            </div>
+                                        @endif
                                     </td>
                                     <td class="px-4 py-3 text-sm text-gray-700">
                                         @if ($usesGradeSystem)
@@ -172,11 +182,14 @@
                                                 @csrf
                                                 @method('DELETE')
                                                 <input type="hidden" name="edit_reason" value="">
-                                                <button type="submit" class="inline-flex min-h-10 items-center rounded-md border border-red-300 px-3 text-xs font-medium text-red-700 hover:bg-red-50">
+                                                <button type="submit" class="inline-flex min-h-10 items-center rounded-md border border-red-300 px-3 text-xs font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50" @disabled(! $canEdit)>
                                                     Delete
                                                 </button>
                                             </form>
                                         </div>
+                                        @if ($resultLockMessage)
+                                            <p class="mt-2 max-w-xs text-xs text-amber-700">{{ $resultLockMessage }}</p>
+                                        @endif
                                     </td>
                                 </tr>
                             @empty

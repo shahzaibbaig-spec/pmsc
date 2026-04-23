@@ -71,6 +71,7 @@
                     </div>
 
                     <div id="messageBox" class="mt-4 hidden rounded-md p-3 text-sm"></div>
+                    <div id="lockBanner" class="mt-4 hidden rounded-md border px-4 py-3 text-sm"></div>
                 </div>
             </div>
 
@@ -139,10 +140,12 @@
         const paginationInfo = document.getElementById('paginationInfo');
         const prevPageBtn = document.getElementById('prevPageBtn');
         const nextPageBtn = document.getElementById('nextPageBtn');
+        const lockBanner = document.getElementById('lockBanner');
 
         let state = {
             students: [],
             locked: false,
+            lock_type: null,
             page: 1,
             per_page: 10,
             emptyMessage: 'No students found for selected exam setup.',
@@ -166,6 +169,21 @@
         function clearMessage() {
             messageBox.classList.add('hidden');
             messageBox.textContent = '';
+        }
+
+        function updateLockBanner(message = '', lockType = null) {
+            if (!message) {
+                lockBanner.classList.add('hidden');
+                lockBanner.textContent = '';
+                lockBanner.className = 'mt-4 hidden rounded-md border px-4 py-3 text-sm';
+                return;
+            }
+
+            lockBanner.classList.remove('hidden');
+            lockBanner.textContent = message;
+            lockBanner.className = lockType === 'final'
+                ? 'mt-4 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700'
+                : 'mt-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800';
         }
 
         function totalPages() {
@@ -471,6 +489,7 @@
                     ? result.message
                     : 'No students found for selected exam setup.';
                 state.locked = Boolean(result.exam?.locked);
+                state.lock_type = result.exam?.lock_type || null;
                 state.page = 1;
                 state.markingMode = result.marking_mode === 'grade' ? 'grade' : 'numeric';
                 state.usesGradeSystem = state.markingMode === 'grade';
@@ -500,11 +519,15 @@
                 }
 
                 if (state.locked && result.exam?.locked_message) {
+                    updateLockBanner(result.exam.locked_message, state.lock_type);
                     showMessage(result.exam.locked_message, 'error');
+                } else {
+                    updateLockBanner();
                 }
             } catch (error) {
                 showMessage('Unexpected error while loading assessment sheet.', 'error');
                 marksBody.innerHTML = '<tr><td colspan="3" class="px-4 py-8 text-center text-sm text-red-600">Failed to load students.</td></tr>';
+                updateLockBanner();
             } finally {
                 loadSheetBtn.disabled = false;
                 loadSheetBtn.textContent = 'Load Students';
@@ -515,7 +538,7 @@
             clearMessage();
 
             if (state.locked) {
-                showMessage('Exam is locked after 7 days. You cannot edit these entries.', 'error');
+                showMessage('Results are locked and cannot be modified.', 'error');
                 return;
             }
 
@@ -648,6 +671,8 @@
             state.emptyMessage = 'No students found for selected exam setup.';
             state.page = 1;
             state.locked = false;
+            state.lock_type = null;
+            updateLockBanner();
             renderStudents();
         }
 

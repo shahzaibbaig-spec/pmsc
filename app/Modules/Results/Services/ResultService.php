@@ -6,6 +6,7 @@ use App\Models\Mark;
 use App\Models\SchoolClass;
 use App\Models\SchoolSetting;
 use App\Models\Student;
+use App\Models\StudentClassHistory;
 use App\Models\TeacherAssignment;
 use App\Models\User;
 use App\Services\AssessmentMarkingModeService;
@@ -37,6 +38,7 @@ class ResultService
         $marks = Mark::query()
             ->with([
                 'exam:id,class_id,subject_id,exam_type,session,marking_mode',
+                'exam.classRoom:id,name,section',
                 'exam.subject:id,name',
             ])
             ->where('student_id', $studentId)
@@ -51,8 +53,11 @@ class ResultService
             throw new RuntimeException('No marks found for selected student, session, and exam type.');
         }
 
+        $resultClass = $this->resolveResultClass($student, $session, $marks);
+        $resultClassId = (int) ($resultClass?->id ?? $student->class_id);
+
         $markingMode = $this->markingModeService->resolveMarkingModeForExamContext(
-            (int) $student->class_id,
+            $resultClassId,
             $session,
             $examType
         );
@@ -87,7 +92,7 @@ class ResultService
 
         $classTeacher = TeacherAssignment::query()
             ->with('teacher.user:id,name')
-            ->where('class_id', $student->class_id)
+            ->where('class_id', $resultClassId)
             ->where('session', $session)
             ->where('is_class_teacher', true)
             ->first();
@@ -104,7 +109,7 @@ class ResultService
                 'id' => $student->id,
                 'student_id' => $student->student_id,
                 'name' => $student->name,
-                'class' => trim(($student->classRoom?->name ?? '').' '.($student->classRoom?->section ?? '')),
+                'class' => trim((string) ($resultClass?->name ?? '').' '.(string) ($resultClass?->section ?? '')),
                 'age' => $this->resolveAge($student->age, $student->date_of_birth),
             ],
             'exam' => [
@@ -133,12 +138,7 @@ class ResultService
             throw new RuntimeException('Class not found.');
         }
 
-        $students = Student::query()
-            ->where('class_id', $classId)
-            ->where('status', 'active')
-            ->orderBy('name')
-            ->orderBy('student_id')
-            ->get(['id', 'student_id', 'name']);
+        $students = $this->studentRosterForClassSession($classId, $session);
 
         if ($students->isEmpty()) {
             throw new RuntimeException('No active students found for selected class.');
@@ -295,6 +295,58 @@ class ResultService
     private function schoolSetting(): ?SchoolSetting
     {
         return SchoolSetting::cached();
+    }
+
+    private function resolveResultClass(Student $student, string $session, Collection $marks): ?SchoolClass
+    {
+        $examClassId = $marks
+            ->pluck('exam.class_id')
+            ->filter()
+            ->map(fn ($id): int => (int) $id)
+            ->first();
+
+        if ($examClassId !== null) {
+            return SchoolClass::query()->find($examClassId, ['id', 'name', 'section']);
+        }
+
+        $history = StudentClassHistory::query()
+            ->where('student_id', (int) $student->id)
+            ->where('session', $session)
+            ->with('classRoom:id,name,section')
+            ->latest('joined_on')
+            ->first();
+
+        if ($history?->classRoom !== null) {
+            return $history->classRoom;
+        }
+
+        return $student->classRoom;
+    }
+
+    private function studentRosterForClassSession(int $classId, string $session): Collection
+    {
+        $studentIds = StudentClassHistory::query()
+            ->where('class_id', $classId)
+            ->where('session', $session)
+            ->pluck('student_id')
+            ->map(fn ($id): int => (int) $id)
+            ->unique()
+            ->values();
+
+        if ($studentIds->isNotEmpty()) {
+            return Student::query()
+                ->whereIn('id', $studentIds)
+                ->orderBy('name')
+                ->orderBy('student_id')
+                ->get(['id', 'student_id', 'name']);
+        }
+
+        return Student::query()
+            ->where('class_id', $classId)
+            ->where('status', 'active')
+            ->orderBy('name')
+            ->orderBy('student_id')
+            ->get(['id', 'student_id', 'name']);
     }
 
     private function examTypeLabel(string $examType): string

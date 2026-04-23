@@ -8,14 +8,17 @@ use App\Models\Student;
 use App\Models\Teacher;
 use App\Models\TeacherAssignment;
 use App\Models\TeacherResultEntryLog;
+use App\Models\User;
 use App\Services\AssessmentMarkingModeService;
 use App\Services\ClassAssessmentModeService;
+use App\Services\ResultLockService;
 use App\Services\TeacherPerformanceSyncService;
 use App\Services\TeacherStudentVisibilityService;
 use App\Modules\Exams\Enums\ExamType;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use RuntimeException;
 
 class ExamService
@@ -25,6 +28,7 @@ class ExamService
         private readonly ClassAssessmentModeService $assessmentModeService,
         private readonly AssessmentMarkingModeService $markingModeService,
         private readonly TeacherPerformanceSyncService $teacherPerformanceSyncService,
+        private readonly ResultLockService $resultLockService,
     ) {
     }
 
@@ -119,13 +123,21 @@ class ExamService
                 ->keyBy('student_id');
         }
 
+        $lockStatus = $this->resultLockService->statusForScope($session, $classId, $exam?->id ? (int) $exam->id : null);
+        $lockedByResultLock = (bool) $lockStatus['is_locked'];
+        $lockedByEditWindow = $exam ? $this->isExamLocked($exam) : false;
+        $lockedMessage = $lockedByResultLock
+            ? $lockStatus['message']
+            : (($exam && $lockedByEditWindow) ? 'This exam is locked. Edit window (7 days) has expired.' : null);
+
         return [
             'exam' => [
                 'id' => $exam?->id,
                 'total_marks' => $usesGradeSystem ? null : $exam?->total_marks,
                 'marking_mode' => $markingMode,
-                'locked' => $exam ? $this->isExamLocked($exam) : false,
-                'locked_message' => ($exam && $this->isExamLocked($exam)) ? 'This exam is locked. Edit window (7 days) has expired.' : null,
+                'locked' => $lockedByResultLock || $lockedByEditWindow,
+                'locked_message' => $lockedMessage,
+                'lock_type' => $lockStatus['lock_type'],
             ],
             'marking_mode' => $markingMode,
             'uses_grade_system' => $usesGradeSystem,
@@ -189,6 +201,14 @@ class ExamService
             throw new RuntimeException('Total marks are required and must be greater than 0.');
         }
 
+        $user = User::query()->findOrFail($userId);
+        $existingExamId = $existingExam?->id ? (int) $existingExam->id : null;
+        if (! $this->resultLockService->canEditResult($user, $session, $classId, $existingExamId)) {
+            throw ValidationException::withMessages([
+                'error' => 'Results are locked and cannot be modified.',
+            ]);
+        }
+
         DB::transaction(function () use ($teacher, $classId, $subjectId, $session, $examType, $totalMarks, $records, $userId): void {
             $exam = Exam::query()
                 ->where('class_id', $classId)
@@ -197,6 +217,14 @@ class ExamService
                 ->where('exam_type', $examType)
                 ->lockForUpdate()
                 ->first();
+
+            $user = User::query()->findOrFail($userId);
+            $lockedExamId = $exam?->id ? (int) $exam->id : null;
+            if (! $this->resultLockService->canEditResult($user, $session, $classId, $lockedExamId)) {
+                throw ValidationException::withMessages([
+                    'error' => 'Results are locked and cannot be modified.',
+                ]);
+            }
 
             $markingMode = $this->markingModeService->resolveMarkingMode($exam, $classId);
             $usesGradeSystem = $markingMode === AssessmentMarkingModeService::MODE_GRADE;

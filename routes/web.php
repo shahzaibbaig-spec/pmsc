@@ -11,6 +11,7 @@ use App\Http\Controllers\Principal\TeacherResultEntryController;
 use App\Http\Controllers\Principal\TeacherRankingController;
 use App\Http\Controllers\Principal\TeacherAssignmentController as PrincipalTeacherAssignmentController;
 use App\Http\Controllers\Principal\TeacherAssignmentRolloverController;
+use App\Http\Controllers\Principal\ResultLockController;
 use App\Http\Controllers\Principal\AnalyticsExportController;
 use App\Http\Controllers\Principal\DailyDiaryMonitoringController;
 use App\Http\Controllers\Principal\PrincipalPromotionController;
@@ -605,6 +606,18 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
         ->middleware(['role:Admin|Principal', 'permission:view_result_entry_logs'])
         ->whereNumber('teacher')
         ->name('principal.results.teacher-entries.logs');
+
+    Route::get('/principal/result-locks', [ResultLockController::class, 'index'])
+        ->middleware(['role:Admin|Principal', 'permission:generate_results'])
+        ->name('principal.result-locks.index');
+
+    Route::post('/principal/result-locks/lock', [ResultLockController::class, 'lock'])
+        ->middleware(['role:Admin|Principal', 'permission:generate_results'])
+        ->name('principal.result-locks.lock');
+
+    Route::post('/principal/result-locks/unlock', [ResultLockController::class, 'unlock'])
+        ->middleware(['role:Admin|Principal', 'permission:generate_results'])
+        ->name('principal.result-locks.unlock');
 
     Route::get('/principal/analytics', [PrincipalAnalyticsDashboardController::class, 'index'])
         ->middleware(['role:Admin,Principal'])

@@ -9,6 +9,7 @@ use App\Models\TeacherResultEntryLog;
 use App\Models\User;
 use App\Services\AssessmentMarkingModeService;
 use App\Services\ClassAssessmentModeService;
+use App\Services\ResultLockService;
 use App\Services\TeacherPerformanceSyncService;
 use App\Modules\Exams\Enums\ExamType;
 use App\Notifications\MarkEntryModifiedNotification;
@@ -17,13 +18,15 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use RuntimeException;
+use Illuminate\Validation\ValidationException;
 
 class TeacherMarkAuditService
 {
     public function __construct(
         private readonly AssessmentMarkingModeService $markingModeService,
         private readonly ClassAssessmentModeService $assessmentModeService,
-        private readonly TeacherPerformanceSyncService $teacherPerformanceSyncService
+        private readonly TeacherPerformanceSyncService $teacherPerformanceSyncService,
+        private readonly ResultLockService $resultLockService
     ) {
     }
 
@@ -51,13 +54,56 @@ class TeacherMarkAuditService
         return $mark->created_at->gte(now()->subDays(7));
     }
 
+    /**
+     * @return array{can_edit:bool,is_locked:bool,lock_type:?string,message:?string}
+     */
+    public function lockStateForMark(Mark $mark, ?User $user = null): array
+    {
+        $mark->loadMissing('exam:id,class_id');
+
+        $examId = $mark->exam_id ? (int) $mark->exam_id : null;
+        $classId = (int) ($mark->exam?->class_id ?? 0);
+        $session = (string) $mark->session;
+        $status = $classId > 0 && $session !== ''
+            ? $this->resultLockService->statusForScope($session, $classId, $examId)
+            : [
+                'is_locked' => false,
+                'lock_type' => null,
+                'message' => null,
+            ];
+
+        $canEditByWindow = $this->canEdit($mark);
+        $canEditByLock = true;
+        if ($user instanceof User && $classId > 0 && $session !== '') {
+            $canEditByLock = $this->resultLockService->canEditResult($user, $session, $classId, $examId);
+        } elseif (($status['is_locked'] ?? false) === true) {
+            $canEditByLock = false;
+        }
+
+        $message = $status['message'] ?? null;
+        if (! $message && ! $canEditByWindow) {
+            $message = 'Editing window has expired. You can edit entries only within 7 days of entry.';
+        }
+
+        return [
+            'can_edit' => $canEditByWindow && $canEditByLock,
+            'is_locked' => (bool) ($status['is_locked'] ?? false),
+            'lock_type' => $status['lock_type'] ?? null,
+            'message' => $message,
+        ];
+    }
+
     public function updateMarkEntry(int $userId, Mark $mark, ?int $newMarks, ?string $newGrade, string $reason): void
     {
         $teacher = $this->resolveTeacherOrFail($userId);
         $this->assertOwnership($teacher, $mark);
+        $actor = User::query()->findOrFail($userId);
 
-        if (! $this->canEdit($mark)) {
-            throw new RuntimeException('Editing window has expired. You can edit entries only within 7 days of entry.');
+        $lockState = $this->lockStateForMark($mark, $actor);
+        if (! $lockState['can_edit']) {
+            throw ValidationException::withMessages([
+                'error' => $lockState['message'] ?? 'Results are locked and cannot be modified.',
+            ]);
         }
 
         $mark->loadMissing([
@@ -185,6 +231,13 @@ class TeacherMarkAuditService
     {
         $teacher = $this->resolveTeacherOrFail($userId);
         $this->assertOwnership($teacher, $mark);
+        $actor = User::query()->findOrFail($userId);
+        $lockState = $this->lockStateForMark($mark, $actor);
+        if (! $lockState['can_edit']) {
+            throw ValidationException::withMessages([
+                'error' => $lockState['message'] ?? 'Results are locked and cannot be modified.',
+            ]);
+        }
 
         $mark->loadMissing([
             'teacher.user:id,name',

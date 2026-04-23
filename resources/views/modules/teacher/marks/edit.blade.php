@@ -23,6 +23,12 @@
                 </div>
             @endif
 
+            @if (($lockState['is_locked'] ?? false) === true)
+                <div class="rounded-md border {{ ($lockState['lock_type'] ?? null) === 'final' ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-amber-200 bg-amber-50 text-amber-800' }} px-4 py-3 text-sm">
+                    {{ $lockState['message'] ?? 'Results are locked and cannot be modified.' }}
+                </div>
+            @endif
+
             <div class="overflow-hidden rounded-lg bg-white shadow-sm">
                 <div class="p-5 sm:p-6">
                     <dl class="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
@@ -65,6 +71,7 @@
                                         name="grade"
                                         required
                                         class="mt-1 block min-h-11 w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                        @disabled(! ($lockState['can_edit'] ?? true))
                                     >
                                         <option value="">Select Grade</option>
                                         @foreach ($gradeOptions as $option)
@@ -89,9 +96,10 @@
                                         type="number"
                                         min="0"
                                         max="{{ $mark->total_marks }}"
-                                        class="mt-1 block min-h-11 w-full"
+                                        class="mt-1 block min-h-11 w-full disabled:bg-gray-100"
                                         :value="old('obtained_marks', $mark->obtained_marks)"
                                         required
+                                        :disabled="! ($lockState['can_edit'] ?? true)"
                                     />
                                 </div>
 
@@ -115,13 +123,14 @@
                                 name="edit_reason"
                                 rows="3"
                                 required
-                                class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500 disabled:bg-gray-100"
                                 placeholder="Reason for modifying this assessment entry"
+                                @disabled(! ($lockState['can_edit'] ?? true))
                             >{{ old('edit_reason') }}</textarea>
                         </div>
 
                         <div class="flex flex-wrap gap-2">
-                            <button type="submit" class="inline-flex min-h-11 items-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">
+                            <button type="submit" class="inline-flex min-h-11 items-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50" @disabled(! ($lockState['can_edit'] ?? true))>
                                 Update Entry
                             </button>
                             <a href="{{ route('teacher.marks.entries.index') }}" class="inline-flex min-h-11 items-center rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">

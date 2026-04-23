@@ -7,6 +7,7 @@ use App\Modules\Exams\Requests\ExamSheetRequest;
 use App\Modules\Exams\Requests\SaveMarksRequest;
 use App\Modules\Exams\Services\ExamService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use RuntimeException;
 use Throwable;
@@ -73,6 +74,11 @@ class TeacherExamController extends Controller
                 $request->filled('total_marks') ? (int) $request->input('total_marks') : null,
                 $request->input('records', [])
             );
+        } catch (ValidationException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+                'errors' => $exception->errors(),
+            ], 422);
         } catch (RuntimeException $exception) {
             return response()->json(['message' => $exception->getMessage()], 422);
         } catch (Throwable $exception) {

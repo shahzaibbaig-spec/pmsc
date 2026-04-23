@@ -45,6 +45,8 @@
             tabs: @js($tabs),
             defaultTab: 'overview',
             endpointTemplate: @js($tabEndpointTemplate),
+            resultSessions: @js($resultSessions),
+            selectedResultSession: @js($selectedResultSession),
         })"
         x-init="init()"
     >
@@ -283,17 +285,33 @@
 
             <div class="rounded-xl border border-slate-200 bg-white shadow-sm">
                 <div class="border-b border-slate-200 px-5 py-4">
-                    <div class="flex flex-wrap gap-2">
-                        @foreach($tabs as $tabKey => $tabLabel)
-                            <button
-                                type="button"
-                                @click="loadTab('{{ $tabKey }}')"
-                                class="inline-flex min-h-10 items-center rounded-md px-4 py-2 text-sm font-medium transition"
-                                :class="tabButtonClass('{{ $tabKey }}')"
+                    <div class="flex flex-wrap items-center justify-between gap-3">
+                        <div class="flex flex-wrap gap-2">
+                            @foreach($tabs as $tabKey => $tabLabel)
+                                <button
+                                    type="button"
+                                    @click="loadTab('{{ $tabKey }}')"
+                                    class="inline-flex min-h-10 items-center rounded-md px-4 py-2 text-sm font-medium transition"
+                                    :class="tabButtonClass('{{ $tabKey }}')"
+                                >
+                                    {{ $tabLabel }}
+                                </button>
+                            @endforeach
+                        </div>
+
+                        <div class="flex items-center gap-2">
+                            <label for="student_profile_result_session" class="text-xs font-semibold uppercase tracking-wide text-slate-500">Result Session</label>
+                            <select
+                                id="student_profile_result_session"
+                                x-model="selectedResultSession"
+                                @change="onResultSessionChanged()"
+                                class="min-h-10 rounded-md border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                             >
-                                {{ $tabLabel }}
-                            </button>
-                        @endforeach
+                                <template x-for="sessionOption in resultSessions" :key="`result-session-${sessionOption}`">
+                                    <option :value="sessionOption" x-text="sessionOption"></option>
+                                </template>
+                            </select>
+                        </div>
                     </div>
                 </div>
 
@@ -323,12 +341,17 @@
                 tabs: config.tabs || {},
                 endpointTemplate: config.endpointTemplate || '',
                 activeTab: config.defaultTab || 'overview',
+                resultSessions: config.resultSessions || [],
+                selectedResultSession: config.selectedResultSession || '',
                 tabHtml: '',
                 loading: false,
                 errorMessage: '',
                 cache: {},
 
                 init() {
+                    if (!this.selectedResultSession && this.resultSessions.length > 0) {
+                        this.selectedResultSession = this.resultSessions[0];
+                    }
                     this.loadTab(this.activeTab);
                 },
 
@@ -338,6 +361,31 @@
                     }
 
                     return 'bg-slate-100 text-slate-700 hover:bg-slate-200';
+                },
+
+                buildEndpoint(tab) {
+                    const endpoint = this.endpointTemplate.replace('__TAB__', tab);
+                    const url = new URL(endpoint, window.location.origin);
+
+                    if (this.selectedResultSession) {
+                        url.searchParams.set('session', this.selectedResultSession);
+                    }
+
+                    return url.toString();
+                },
+
+                onResultSessionChanged() {
+                    this.cache = {};
+
+                    const currentUrl = new URL(window.location.href);
+                    if (this.selectedResultSession) {
+                        currentUrl.searchParams.set('session', this.selectedResultSession);
+                    } else {
+                        currentUrl.searchParams.delete('session');
+                    }
+
+                    window.history.replaceState({}, '', currentUrl.toString());
+                    this.loadTab(this.activeTab, true);
                 },
 
                 async loadTab(tab, force = false) {
@@ -355,7 +403,7 @@
 
                     this.loading = true;
                     try {
-                        const endpoint = this.endpointTemplate.replace('__TAB__', tab);
+                        const endpoint = this.buildEndpoint(tab);
                         const response = await fetch(endpoint, {
                             headers: {
                                 Accept: 'application/json',
@@ -371,6 +419,18 @@
 
                         this.cache[tab] = result.html || '';
                         this.tabHtml = this.cache[tab];
+                        this.$nextTick(() => {
+                            const selector = document.querySelector('[data-result-session-select]');
+                            if (!selector) {
+                                return;
+                            }
+
+                            selector.value = this.selectedResultSession;
+                            selector.onchange = (event) => {
+                                this.selectedResultSession = event.target.value || '';
+                                this.onResultSessionChanged();
+                            };
+                        });
                     } catch (error) {
                         this.errorMessage = 'Unexpected error while loading tab content.';
                     } finally {

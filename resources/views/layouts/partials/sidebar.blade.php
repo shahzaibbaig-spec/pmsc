@@ -102,6 +102,9 @@
         if ($sidebarUser?->can('view_teacher_result_entries')) {
             $menuItems[] = ['route' => 'principal.results.teacher-entries.index', 'label' => 'Teacher Result Entries'];
         }
+        if ($sidebarUser?->can('generate_results')) {
+            $menuItems[] = ['route' => 'principal.result-locks.index', 'label' => 'Result Locks'];
+        }
         if ($sidebarUser?->can('manage_teacher_attendance')) {
             $menuItems[] = ['route' => 'principal.teacher-attendance.index', 'label' => 'Teacher Attendance'];
         }
@@ -158,6 +161,9 @@
         }
         if ($sidebarUser?->can('view_teacher_result_entries')) {
             $menuItems[] = ['route' => 'principal.results.teacher-entries.index', 'label' => 'Teacher Result Entries'];
+        }
+        if ($sidebarUser?->can('generate_results')) {
+            $menuItems[] = ['route' => 'principal.result-locks.index', 'label' => 'Result Locks'];
         }
         if ($sidebarUser?->can('manage_teacher_attendance')) {
             $menuItems[] = ['route' => 'principal.teacher-attendance.index', 'label' => 'Teacher Attendance'];

@@ -7,6 +7,7 @@ use App\Models\Exam;
 use App\Models\Mark;
 use App\Models\SchoolClass;
 use App\Models\Student;
+use App\Models\StudentClassHistory;
 use App\Services\AssessmentMarkingModeService;
 use App\Services\ClassAssessmentModeService;
 use App\Modules\Exams\Enums\ExamType;
@@ -77,9 +78,17 @@ class ResultSheetService
         $examsBySubjectId = $exams
             ->keyBy(fn (Exam $exam): int => (int) $exam->subject_id);
 
-        $students = Student::query()
+        $historyStudentIds = StudentClassHistory::query()
             ->where('class_id', $classId)
-            ->where('status', 'active')
+            ->where('session', $session)
+            ->pluck('student_id')
+            ->map(fn ($id): int => (int) $id)
+            ->unique()
+            ->values();
+
+        $students = ($historyStudentIds->isNotEmpty()
+            ? Student::query()->whereIn('id', $historyStudentIds)
+            : Student::query()->where('class_id', $classId)->where('status', 'active'))
             ->orderBy('name')
             ->orderBy('student_id')
             ->get(['id', 'student_id', 'name']);

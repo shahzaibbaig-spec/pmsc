@@ -15,7 +15,8 @@ use Illuminate\Support\Carbon;
 class WardenStudentRecordService
 {
     public function __construct(
-        private readonly DailyDiaryService $dailyDiaryService
+        private readonly DailyDiaryService $dailyDiaryService,
+        private readonly StudentResultService $studentResultService
     ) {
     }
 
@@ -55,11 +56,7 @@ class WardenStudentRecordService
                         ->orWhereHas('subjectMatrixAssignments', fn ($assignmentQuery) => $assignmentQuery->where('session', $session))
                         ->orWhereHas('subjectAssignments', fn ($assignmentQuery) => $assignmentQuery->where('session', $session));
 
-                    if ($fromDate !== null && $toDate !== null) {
-                        $inner->orWhereHas('results', function ($resultQuery) use ($fromDate, $toDate): void {
-                            $resultQuery->whereBetween('result_date', [$fromDate, $toDate]);
-                        });
-                    }
+                    $inner->orWhereHas('results', fn ($resultQuery) => $resultQuery->where('session', $session));
                 });
             })
             ->orderBy('name')
@@ -96,22 +93,10 @@ class WardenStudentRecordService
         $selectedSession = $this->resolveRequestedSession($session, $sessions);
         [$fromDate, $toDate] = $this->sessionDateRange($selectedSession);
 
-        $recentResultsQuery = StudentResult::query()
-            ->with('subject:id,name')
-            ->where('student_id', (int) $student->id)
-            ->orderByDesc('result_date')
-            ->orderByDesc('id');
+        $recentResults = $this->studentResultService->getRecentStudentResults((int) $student->id, $selectedSession, 30);
 
-        if ($fromDate !== null && $toDate !== null) {
-            $recentResultsQuery->whereBetween('result_date', [$fromDate, $toDate]);
-        }
-
-        $recentResults = $recentResultsQuery
-            ->limit(30)
-            ->get();
-
-        $academicSummary = $this->buildAcademicSummary((int) $student->id, $fromDate, $toDate);
-        $subjectResults = $this->buildSubjectResultSummary((int) $student->id, $fromDate, $toDate);
+        $academicSummary = $this->buildAcademicSummary((int) $student->id, $selectedSession);
+        $subjectResults = $this->buildSubjectResultSummary((int) $student->id, $selectedSession);
         $attendanceSummary = $this->buildAttendanceSummary((int) $student->id, $fromDate, $toDate);
         $disciplineSummary = $this->buildDisciplineSummary((int) $student->id, $fromDate, $toDate);
 
@@ -272,43 +257,26 @@ class WardenStudentRecordService
     /**
      * @return array{results_count:int,average_percentage:float,current_grade:string}
      */
-    private function buildAcademicSummary(int $studentId, ?string $fromDate, ?string $toDate): array
+    private function buildAcademicSummary(int $studentId, string $session): array
     {
-        $query = StudentResult::query()
-            ->where('student_id', $studentId);
-
-        if ($fromDate !== null && $toDate !== null) {
-            $query->whereBetween('result_date', [$fromDate, $toDate]);
-        }
-
-        $aggregate = $query
-            ->selectRaw('COUNT(*) as total_rows, SUM(obtained_marks) as obtained_sum, SUM(total_marks) as total_sum')
-            ->first();
-
-        $rows = (int) ($aggregate?->total_rows ?? 0);
-        $obtained = (float) ($aggregate?->obtained_sum ?? 0);
-        $total = (float) ($aggregate?->total_sum ?? 0);
-        $average = $total > 0 ? round(($obtained / $total) * 100, 2) : 0.0;
+        $stats = $this->studentResultService->getStudentResultStats($studentId, $session);
 
         return [
-            'results_count' => $rows,
-            'average_percentage' => $average,
-            'current_grade' => $rows > 0 ? $this->gradeFromPercentage($average) : 'N/A',
+            'results_count' => (int) $stats['results_count'],
+            'average_percentage' => (float) $stats['average_percentage'],
+            'current_grade' => (string) $stats['grade'],
         ];
     }
 
     /**
      * @return array<int, array{subject_name:string,total_marks:float,obtained_marks:float,percentage:float,grade:string}>
      */
-    private function buildSubjectResultSummary(int $studentId, ?string $fromDate, ?string $toDate): array
+    private function buildSubjectResultSummary(int $studentId, string $session): array
     {
         $query = StudentResult::query()
             ->with('subject:id,name')
-            ->where('student_id', $studentId);
-
-        if ($fromDate !== null && $toDate !== null) {
-            $query->whereBetween('result_date', [$fromDate, $toDate]);
-        }
+            ->where('student_id', $studentId)
+            ->where('session', $session);
 
         return $query
             ->get()

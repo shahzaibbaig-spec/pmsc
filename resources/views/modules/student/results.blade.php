@@ -18,6 +18,22 @@
                             No student profile found.
                         </div>
                     @else
+                        <form method="GET" action="{{ route('student.results.index') }}" class="mb-4 grid grid-cols-1 gap-3 md:grid-cols-4">
+                            <div>
+                                <label for="session" class="text-xs font-semibold uppercase tracking-wide text-gray-500">Session</label>
+                                <select
+                                    id="session"
+                                    name="session"
+                                    onchange="this.form.submit()"
+                                    class="mt-1 block min-h-11 w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                >
+                                    @foreach($sessions as $session)
+                                        <option value="{{ $session }}" @selected($selectedSession === $session)>{{ $session }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        </form>
+
                         <div class="grid grid-cols-1 gap-3 md:grid-cols-4">
                             <div class="rounded-md border border-gray-200 bg-gray-50 p-3">
                                 <p class="text-xs uppercase tracking-wide text-gray-500">Student ID</p>
@@ -28,8 +44,12 @@
                                 <p class="mt-1 text-sm font-semibold text-gray-900">{{ $student->name }}</p>
                             </div>
                             <div class="rounded-md border border-gray-200 bg-gray-50 p-3">
-                                <p class="text-xs uppercase tracking-wide text-gray-500">Class</p>
-                                <p class="mt-1 text-sm font-semibold text-gray-900">{{ trim(($student->classRoom?->name ?? '').' '.($student->classRoom?->section ?? '')) ?: '-' }}</p>
+                                <p class="text-xs uppercase tracking-wide text-gray-500">Session Class</p>
+                                <p class="mt-1 text-sm font-semibold text-gray-900">{{ $sessionClassName ?: '-' }}</p>
+                            </div>
+                            <div class="rounded-md border border-gray-200 bg-gray-50 p-3">
+                                <p class="text-xs uppercase tracking-wide text-gray-500">Selected Session</p>
+                                <p class="mt-1 text-sm font-semibold text-gray-900">{{ $selectedSession ?: '-' }}</p>
                             </div>
                             <div class="rounded-md border border-gray-200 bg-gray-50 p-3">
                                 <p class="text-xs uppercase tracking-wide text-gray-500">Total Exam Groups</p>
@@ -50,6 +70,7 @@
                             <div class="flex flex-wrap items-center justify-between gap-3">
                                 <div>
                                     <h3 class="text-lg font-semibold text-gray-900">{{ $examName }}</h3>
+                                    <p class="mt-1 text-xs text-gray-500">Class snapshot: {{ $examResult['class_name'] ?? $sessionClassName ?? '-' }}</p>
                                     @if ($usesGradeSystem)
                                         <p class="mt-1 text-sm text-gray-500">Grade-based report for early years.</p>
                                     @endif
@@ -130,7 +151,7 @@
             @elseif ($student)
                 <div class="overflow-hidden bg-white shadow-sm sm:rounded-lg">
                     <div class="p-6 text-sm text-gray-600">
-                        No results are available yet for your profile.
+                        No results are available for {{ $selectedSession }}.
                     </div>
                 </div>
             @endif

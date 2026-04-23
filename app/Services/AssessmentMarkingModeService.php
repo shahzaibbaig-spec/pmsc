@@ -6,8 +6,10 @@ use App\Models\Exam;
 use App\Models\Mark;
 use App\Models\SchoolClass;
 use App\Models\TeacherAssignment;
+use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
+use Illuminate\Validation\ValidationException;
 
 class AssessmentMarkingModeService
 {
@@ -17,8 +19,10 @@ class AssessmentMarkingModeService
 
     public const MODE_MIXED = 'mixed';
 
-    public function __construct(private readonly ClassAssessmentModeService $classAssessmentModeService)
-    {
+    public function __construct(
+        private readonly ClassAssessmentModeService $classAssessmentModeService,
+        private readonly ResultLockService $resultLockService
+    ) {
     }
 
     public function classUsesEarlyYearsScheme(SchoolClass|int|string|null $class): bool
@@ -206,6 +210,13 @@ class AssessmentMarkingModeService
         }
 
         return DB::transaction(function () use ($classId, $session, $examType, $resolvedMode): array {
+            $user = auth()->user();
+            if ($user instanceof User && ! $this->resultLockService->canEditResult($user, $session, $classId, null)) {
+                throw ValidationException::withMessages([
+                    'error' => 'Results are locked and cannot be modified.',
+                ]);
+            }
+
             $assignments = TeacherAssignment::query()
                 ->where('class_id', $classId)
                 ->where('session', $session)
@@ -261,6 +272,12 @@ class AssessmentMarkingModeService
 
                 $currentMode = $this->resolveMarkingMode($exam, $classId);
                 $modeWillChange = $currentMode !== $resolvedMode;
+
+                if ($user instanceof User && ! $this->resultLockService->canEditResult($user, $session, $classId, (int) $exam->id)) {
+                    throw ValidationException::withMessages([
+                        'error' => 'Results are locked and cannot be modified.',
+                    ]);
+                }
 
                 if ($modeWillChange && Mark::query()->where('exam_id', (int) $exam->id)->exists()) {
                     throw new RuntimeException('Marking mode cannot be changed because result entries already exist for one or more subjects.');
@@ -318,6 +335,8 @@ class AssessmentMarkingModeService
             $examType,
             $resolvedMode
         ): array {
+            $user = auth()->user();
+
             $exam = Exam::query()
                 ->where('class_id', $classId)
                 ->where('subject_id', $subjectId)
@@ -327,6 +346,12 @@ class AssessmentMarkingModeService
                 ->first();
 
             if ($exam) {
+                if ($user instanceof User && ! $this->resultLockService->canEditResult($user, $session, $classId, (int) $exam->id)) {
+                    throw ValidationException::withMessages([
+                        'error' => 'Results are locked and cannot be modified.',
+                    ]);
+                }
+
                 $currentMode = $this->resolveMarkingMode($exam, $classId);
                 if ($currentMode !== $resolvedMode) {
                     $hasEntries = Mark::query()

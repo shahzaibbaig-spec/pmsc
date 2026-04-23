@@ -7,6 +7,7 @@ use App\Models\FeeBlockOverride;
 use App\Models\Mark;
 use App\Models\SchoolClass;
 use App\Models\Student;
+use App\Models\StudentClassHistory;
 use App\Services\AssessmentMarkingModeService;
 use App\Modules\Exams\Enums\ExamType;
 use App\Modules\Results\Requests\ConfigureAssessmentMarkingModeRequest;
@@ -17,6 +18,7 @@ use App\Modules\Results\Services\ResultService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Response;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use RuntimeException;
 
@@ -90,11 +92,20 @@ class PrincipalResultController extends Controller
     {
         $request->validate([
             'class_id' => ['required', 'integer', 'exists:school_classes,id'],
+            'session' => ['required', 'string', 'max:20'],
         ]);
 
-        $students = Student::query()
+        $studentIds = StudentClassHistory::query()
             ->where('class_id', (int) $request->input('class_id'))
-            ->where('status', 'active')
+            ->where('session', (string) $request->input('session'))
+            ->pluck('student_id')
+            ->map(fn ($id): int => (int) $id)
+            ->unique()
+            ->values();
+
+        $students = ($studentIds->isNotEmpty()
+            ? Student::query()->whereIn('id', $studentIds)
+            : Student::query()->where('class_id', (int) $request->input('class_id'))->where('status', 'active'))
             ->orderBy('name')
             ->orderBy('student_id')
             ->get(['id', 'student_id', 'name']);
@@ -112,6 +123,11 @@ class PrincipalResultController extends Controller
                 $request->string('session')->toString(),
                 $request->string('exam_type')->toString(),
             );
+        } catch (ValidationException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+                'errors' => $exception->errors(),
+            ], 422);
         } catch (RuntimeException $exception) {
             return response()->json(['message' => $exception->getMessage()], 422);
         }

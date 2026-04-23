@@ -11,8 +11,8 @@ use App\Models\MedicalReferral;
 use App\Models\SchoolClass;
 use App\Models\Student;
 use App\Models\StudentAttendance;
-use App\Models\StudentResult;
 use App\Services\StudentPhotoService;
+use App\Services\StudentResultService;
 use App\Modules\Fees\Services\FeeManagementService;
 use App\Modules\Students\Requests\BulkAddStudentsRequest;
 use App\Modules\Students\Requests\BulkDeleteStudentsRequest;
@@ -31,7 +31,10 @@ use Throwable;
 
 class StudentManagementController extends Controller
 {
-    public function __construct(private readonly StudentPhotoService $studentPhotoService)
+    public function __construct(
+        private readonly StudentPhotoService $studentPhotoService,
+        private readonly StudentResultService $studentResultService
+    )
     {
     }
 
@@ -258,12 +261,18 @@ class StudentManagementController extends Controller
         return response()->json(['message' => 'Student deleted successfully.']);
     }
 
-    public function show(Student $student): View
+    public function show(Request $request, Student $student): View
     {
         $student->load(['classRoom']);
 
+        $resultSessions = $this->studentResultService->availableSessionsForStudent((int) $student->id);
+        $selectedResultSession = $this->studentResultService->resolveRequestedSession(
+            is_string($request->query('session')) ? (string) $request->query('session') : null,
+            $resultSessions
+        );
+
         $attendanceStats = $this->attendanceStats((int) $student->id);
-        $resultStats = $this->resultStats((int) $student->id);
+        $resultStats = $this->resultStats((int) $student->id, $selectedResultSession);
         $feeStats = $this->feeStats((int) $student->id);
 
         $medicalVisits = MedicalHistory::query()
@@ -289,6 +298,8 @@ class StudentManagementController extends Controller
             'student' => $student,
             'tabs' => $tabs,
             'tabEndpointTemplate' => $tabEndpointTemplate,
+            'resultSessions' => $resultSessions,
+            'selectedResultSession' => $selectedResultSession,
             'summaryStats' => [
                 'attendance_percentage' => $attendanceStats['attendance_percentage'],
                 'current_grade' => $resultStats['grade'],
@@ -299,7 +310,7 @@ class StudentManagementController extends Controller
         ]);
     }
 
-    public function tabContent(Student $student, string $tab): JsonResponse
+    public function tabContent(Request $request, Student $student, string $tab): JsonResponse
     {
         $allowedTabs = [
             'overview',
@@ -315,13 +326,19 @@ class StudentManagementController extends Controller
             return response()->json(['message' => 'Invalid tab selection.'], 404);
         }
 
+        $resultSessions = $this->studentResultService->availableSessionsForStudent((int) $student->id);
+        $selectedResultSession = $this->studentResultService->resolveRequestedSession(
+            is_string($request->query('session')) ? (string) $request->query('session') : null,
+            $resultSessions
+        );
+
         $student->load(['classRoom']);
 
         $viewData = match ($tab) {
-            'overview' => $this->overviewTabData($student),
+            'overview' => $this->overviewTabData($student, $selectedResultSession, $resultSessions),
             'subjects' => $this->subjectsTabData($student),
             'attendance' => $this->attendanceTabData($student),
-            'results' => $this->resultsTabData($student),
+            'results' => $this->resultsTabData($student, $selectedResultSession, $resultSessions),
             'fee' => $this->feeTabData($student),
             'medical' => $this->medicalTabData($student),
             'discipline' => $this->disciplineTabData($student),
@@ -430,27 +447,9 @@ class StudentManagementController extends Controller
         ];
     }
 
-    private function resultStats(int $studentId): array
+    private function resultStats(int $studentId, string $session): array
     {
-        $aggregate = StudentResult::query()
-            ->where('student_id', $studentId)
-            ->selectRaw('COUNT(*) as results_count, SUM(obtained_marks) as obtained_sum, SUM(total_marks) as total_sum')
-            ->first();
-
-        $resultsCount = (int) ($aggregate?->results_count ?? 0);
-        $obtainedSum = (float) ($aggregate?->obtained_sum ?? 0);
-        $totalSum = (float) ($aggregate?->total_sum ?? 0);
-        $averagePercentage = $totalSum > 0
-            ? round(($obtainedSum / $totalSum) * 100, 2)
-            : 0.0;
-
-        return [
-            'results_count' => $resultsCount,
-            'average_percentage' => $averagePercentage,
-            'grade' => $resultsCount > 0
-                ? $this->gradeFromPercentage($averagePercentage)
-                : 'N/A',
-        ];
+        return $this->studentResultService->getStudentResultStats($studentId, $session);
     }
 
     private function feeStats(int $studentId): array
@@ -509,20 +508,15 @@ class StudentManagementController extends Controller
         ]);
     }
 
-    private function overviewTabData(Student $student): array
+    private function overviewTabData(Student $student, string $session, array $resultSessions): array
     {
         $subjects = $this->subjectsForStudent($student);
         $attendanceStats = $this->attendanceStats((int) $student->id);
-        $resultStats = $this->resultStats((int) $student->id);
+        $resultStats = $this->resultStats((int) $student->id, $session);
         $feeStats = $this->feeStats((int) $student->id);
         $attendanceData = $this->attendanceRecords((int) $student->id, 8);
 
-        $recentResults = StudentResult::query()
-            ->with('subject:id,name')
-            ->where('student_id', (int) $student->id)
-            ->orderByDesc('result_date')
-            ->limit(6)
-            ->get();
+        $recentResults = $this->studentResultService->getRecentStudentResults((int) $student->id, $session, 6);
 
         $recentMedical = MedicalHistory::query()
             ->where('student_id', (int) $student->id)
@@ -539,6 +533,8 @@ class StudentManagementController extends Controller
             'subjectsCount' => $subjects->count(),
             'attendanceStats' => $attendanceStats,
             'resultStats' => $resultStats,
+            'resultSession' => $session,
+            'resultSessions' => $resultSessions,
             'feeStats' => $feeStats,
             'recentAttendance' => $attendanceData['records'],
             'recentResults' => $recentResults,
@@ -615,20 +611,17 @@ class StudentManagementController extends Controller
         ];
     }
 
-    private function resultsTabData(Student $student): array
+    private function resultsTabData(Student $student, string $session, array $resultSessions): array
     {
-        $results = StudentResult::query()
-            ->with('subject:id,name')
-            ->where('student_id', (int) $student->id)
-            ->orderByDesc('result_date')
-            ->limit(80)
-            ->get();
+        $results = $this->studentResultService->getRecentStudentResults((int) $student->id, $session, 80);
 
-        $resultStats = $this->resultStats((int) $student->id);
+        $resultStats = $this->resultStats((int) $student->id, $session);
 
         return [
             'results' => $results,
             'resultStats' => $resultStats,
+            'resultSession' => $session,
+            'resultSessions' => $resultSessions,
         ];
     }
 
@@ -745,18 +738,6 @@ class StudentManagementController extends Controller
             'disciplineComplaints' => $disciplineComplaints,
             'openCount' => $openCount,
         ];
-    }
-
-    private function gradeFromPercentage(float $percentage): string
-    {
-        return match (true) {
-            $percentage >= 90 => 'A+',
-            $percentage >= 80 => 'A',
-            $percentage >= 70 => 'B',
-            $percentage >= 60 => 'C',
-            $percentage >= 50 => 'D',
-            default => 'F',
-        };
     }
 
 }

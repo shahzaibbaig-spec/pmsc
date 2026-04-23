@@ -48,4 +48,9 @@ class Exam extends Model
     {
         return $this->hasMany(Mark::class);
     }
+
+    public function resultLocks(): HasMany
+    {
+        return $this->hasMany(ResultLock::class);
+    }
 }

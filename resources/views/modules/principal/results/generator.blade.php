@@ -586,7 +586,7 @@
 
                 async loadStudents() {
                     this.clearStatus();
-                    if (!this.classId) {
+                    if (!this.classId || !this.session) {
                         this.students = [];
                         return;
                     }
@@ -595,6 +595,7 @@
                     try {
                         const params = new URLSearchParams({
                             class_id: String(this.classId),
+                            session: String(this.session),
                         });
                         const response = await fetch(`${config.studentsUrl}?${params.toString()}`, {
                             headers: { Accept: 'application/json' },

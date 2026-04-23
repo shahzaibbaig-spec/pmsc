@@ -15,6 +15,7 @@ use App\Modules\Exams\Services\TeacherMarkAuditService;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use RuntimeException;
 
@@ -97,7 +98,11 @@ class TeacherMarkEntryController extends Controller
             );
             $usesGradeSystem = $markingMode === AssessmentMarkingModeService::MODE_GRADE;
 
-            $mark->setAttribute('can_edit', $this->auditService->canEdit($mark));
+            $lockState = $this->auditService->lockStateForMark($mark, auth()->user());
+            $mark->setAttribute('can_edit', $lockState['can_edit']);
+            $mark->setAttribute('result_locked', $lockState['is_locked']);
+            $mark->setAttribute('result_lock_type', $lockState['lock_type']);
+            $mark->setAttribute('result_lock_message', $lockState['message']);
             $mark->setAttribute('uses_grade_system', $usesGradeSystem);
             $mark->setAttribute('grade_label', $usesGradeSystem ? $this->assessmentModeService->gradeLabel($mark->grade) : null);
 
@@ -165,12 +170,7 @@ class TeacherMarkEntryController extends Controller
                 ->with('error', $exception->getMessage());
         }
 
-        if (! $this->auditService->canEdit($mark)) {
-            return redirect()
-                ->route('teacher.marks.entries.index')
-                ->with('error', 'Editing window has expired. You can edit entries only within 7 days of entry.');
-        }
-
+        $lockState = $this->auditService->lockStateForMark($mark, auth()->user());
         $mark->load([
             'student:id,student_id,name',
             'exam:id,class_id,subject_id,exam_type,total_marks,marking_mode',
@@ -190,6 +190,7 @@ class TeacherMarkEntryController extends Controller
             'usesGradeSystem' => $usesGradeSystem,
             'gradeOptions' => $this->assessmentModeService->gradeScale(),
             'gradeLabel' => $usesGradeSystem ? $this->assessmentModeService->gradeLabel($mark->grade) : null,
+            'lockState' => $lockState,
         ]);
     }
 
@@ -210,6 +211,10 @@ class TeacherMarkEntryController extends Controller
                 $validated['grade'] ?? null,
                 trim((string) $validated['edit_reason'])
             );
+        } catch (ValidationException $exception) {
+            return back()
+                ->withInput()
+                ->withErrors($exception->errors());
         } catch (AuthorizationException $exception) {
             abort(403, $exception->getMessage());
         } catch (RuntimeException $exception) {
@@ -238,6 +243,8 @@ class TeacherMarkEntryController extends Controller
                 $mark,
                 trim((string) $validated['edit_reason'])
             );
+        } catch (ValidationException $exception) {
+            return back()->withErrors($exception->errors());
         } catch (AuthorizationException $exception) {
             abort(403, $exception->getMessage());
         } catch (RuntimeException $exception) {

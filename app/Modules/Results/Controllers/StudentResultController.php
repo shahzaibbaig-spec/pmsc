@@ -8,7 +8,9 @@ use App\Models\Student;
 use App\Models\StudentResult;
 use App\Services\AssessmentMarkingModeService;
 use App\Services\ClassAssessmentModeService;
+use App\Services\StudentResultService;
 use App\Modules\Exams\Enums\ExamType;
+use App\Modules\Results\Requests\StudentResultIndexRequest;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
@@ -16,11 +18,12 @@ use Illuminate\View\View;
 class StudentResultController extends Controller
 {
     public function __construct(
+        private readonly StudentResultService $studentResultService,
         private readonly ClassAssessmentModeService $assessmentModeService,
         private readonly AssessmentMarkingModeService $markingModeService
     ) {}
 
-    public function index(): View
+    public function index(StudentResultIndexRequest $request): View
     {
         $user = auth()->user();
         $student = $user ? $this->resolveStudentForUser((string) $user->name, (string) $user->email) : null;
@@ -28,39 +31,49 @@ class StudentResultController extends Controller
         if (! $student) {
             return view('modules.student.results', [
                 'student' => null,
+                'sessions' => $this->studentResultService->sessionOptions(),
+                'selectedSession' => null,
+                'sessionClassName' => null,
                 'groupedResults' => collect(),
                 'message' => 'Student profile is not linked to this login yet. Please ask Admin to align student name or email with a student record.',
             ]);
         }
 
-        $legacyResults = StudentResult::query()
-            ->with('subject:id,name')
-            ->where('student_id', (int) $student->id)
-            ->orderByDesc('result_date')
-            ->orderByDesc('id')
-            ->get();
+        $sessions = $this->studentResultService->availableSessionsForStudent((int) $student->id);
+        $selectedSession = $this->studentResultService->resolveRequestedSession(
+            $request->validated('session'),
+            $sessions
+        );
+
+        $legacyResults = $this->studentResultService->getStudentResults((int) $student->id, $selectedSession);
 
         if ($legacyResults->isNotEmpty()) {
             $groupedResults = $this->groupLegacyResults(
                 $legacyResults,
-                $this->assessmentModeService->classUsesGradeSystem($student->classRoom)
+                $this->assessmentModeService->classUsesGradeSystem($legacyResults->first()?->classRoom)
             );
         } else {
             $marks = Mark::query()
                 ->with([
                     'exam:id,class_id,subject_id,exam_type,session,total_marks,marking_mode,created_at',
+                    'exam.classRoom:id,name,section',
                     'exam.subject:id,name',
                 ])
                 ->where('student_id', (int) $student->id)
+                ->where('session', $selectedSession)
+                ->whereHas('exam', fn ($query) => $query->where('session', $selectedSession))
                 ->orderByDesc('created_at')
                 ->orderByDesc('id')
                 ->get();
 
-            $groupedResults = $this->groupMarksResults($marks, (int) $student->class_id);
+            $groupedResults = $this->groupMarksResults($marks);
         }
 
         return view('modules.student.results', [
             'student' => $student,
+            'sessions' => $sessions,
+            'selectedSession' => $selectedSession,
+            'sessionClassName' => $this->studentResultService->sessionClassNameForStudent((int) $student->id, $selectedSession),
             'groupedResults' => $groupedResults,
             'message' => null,
         ]);
@@ -114,6 +127,7 @@ class StudentResultController extends Controller
 
                     return [
                         'subject' => (string) ($result->subject?->name ?? 'Subject'),
+                        'class_name' => trim((string) ($result->classRoom?->name ?? '').' '.(string) ($result->classRoom?->section ?? '')) ?: null,
                         'total_marks' => $total,
                         'obtained_marks' => $obtained,
                         'percentage' => $percentage,
@@ -125,13 +139,14 @@ class StudentResultController extends Controller
 
                 return [
                     'uses_grade_system' => $usesGradeSystem,
+                    'class_name' => $rows->pluck('class_name')->filter()->first(),
                     'rows' => $rows,
                     'summary' => $this->summaryFromRows($rows, $usesGradeSystem),
                 ];
             });
     }
 
-    private function groupMarksResults(Collection $marks, int $classId): Collection
+    private function groupMarksResults(Collection $marks): Collection
     {
         return $marks
             ->groupBy(function (Mark $mark): string {
@@ -144,11 +159,12 @@ class StudentResultController extends Controller
 
                 return implode(' | ', $parts);
             })
-            ->map(function (Collection $items) use ($classId): array {
+            ->map(function (Collection $items): array {
                 $first = $items->first();
                 $examType = $first?->exam?->exam_type;
                 $examTypeValue = $examType instanceof ExamType ? $examType->value : (string) $examType;
                 $session = (string) ($first?->session ?: $first?->exam?->session ?: '');
+                $classId = (int) ($first?->exam?->class_id ?? 0);
                 $usesGradeSystem = $session !== '' && $examTypeValue !== ''
                     ? $this->markingModeService->resolveMarkingModeForExamContext($classId, $session, $examTypeValue) === AssessmentMarkingModeService::MODE_GRADE
                     : false;
@@ -165,6 +181,7 @@ class StudentResultController extends Controller
 
                     return [
                         'subject' => (string) ($mark->exam?->subject?->name ?? 'Subject'),
+                        'class_name' => trim((string) ($mark->exam?->classRoom?->name ?? '').' '.(string) ($mark->exam?->classRoom?->section ?? '')) ?: null,
                         'total_marks' => $total,
                         'obtained_marks' => $obtained,
                         'percentage' => $percentage,
@@ -176,6 +193,7 @@ class StudentResultController extends Controller
 
                 return [
                     'uses_grade_system' => $usesGradeSystem,
+                    'class_name' => $rows->pluck('class_name')->filter()->first(),
                     'rows' => $rows,
                     'summary' => $this->summaryFromRows($rows, $usesGradeSystem),
                 ];

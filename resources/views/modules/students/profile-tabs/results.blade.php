@@ -1,4 +1,24 @@
 <div class="space-y-5">
+    <div class="rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-sm">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+            <div>
+                <p class="text-xs font-medium uppercase tracking-wide text-slate-500">Academic Session</p>
+                <p class="mt-1 text-sm font-semibold text-slate-900">{{ $resultSession }}</p>
+            </div>
+            <label class="text-sm text-slate-700">
+                <span class="sr-only">Select result session</span>
+                <select
+                    data-result-session-select
+                    class="min-h-10 rounded-lg border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                >
+                    @foreach(($resultSessions ?? []) as $session)
+                        <option value="{{ $session }}" @selected($resultSession === $session)>{{ $session }}</option>
+                    @endforeach
+                </select>
+            </label>
+        </div>
+    </div>
+
     <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <div class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <p class="text-xs font-medium uppercase tracking-wide text-slate-500">Result Entries</p>
@@ -22,6 +42,7 @@
                     <tr>
                         <th class="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">Result Date</th>
                         <th class="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">Exam</th>
+                        <th class="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">Class</th>
                         <th class="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">Subject</th>
                         <th class="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-600">Marks</th>
                         <th class="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-600">%</th>
@@ -50,6 +71,7 @@
                         <tr>
                             <td class="px-3 py-2 text-sm text-slate-700">{{ optional($result->result_date)->format('d M Y') ?: '-' }}</td>
                             <td class="px-3 py-2 text-sm text-slate-700">{{ $result->exam_name ?: '-' }}</td>
+                            <td class="px-3 py-2 text-sm text-slate-700">{{ trim((string) ($result->classRoom?->name ?? '').' '.(string) ($result->classRoom?->section ?? '')) ?: '-' }}</td>
                             <td class="px-3 py-2 text-sm text-slate-700">{{ $result->subject?->name ?: '-' }}</td>
                             <td class="px-3 py-2 text-right text-sm text-slate-700">{{ (float) $result->obtained_marks }}/{{ (float) $result->total_marks }}</td>
                             <td class="px-3 py-2 text-right text-sm font-medium text-slate-900">{{ number_format($percentage, 2) }}%</td>
@@ -59,7 +81,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="6" class="px-3 py-6 text-center text-sm text-slate-500">No result entries found.</td>
+                            <td colspan="7" class="px-3 py-6 text-center text-sm text-slate-500">No result entries found for {{ $resultSession }}.</td>
                         </tr>
                     @endforelse
                 </tbody>
@@ -67,4 +89,3 @@
         </div>
     </div>
 </div>
-
