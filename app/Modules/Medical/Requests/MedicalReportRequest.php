@@ -9,7 +9,7 @@ class MedicalReportRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->hasAnyRole(['Principal', 'Doctor']) ?? false;
+        return $this->user()?->hasAnyRole(['Admin', 'Principal', 'Doctor']) ?? false;
     }
 
     public function rules(): array

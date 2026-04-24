@@ -77,8 +77,10 @@
                             <thead class="bg-gray-50">
                                 <tr>
                                     <th class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-600">Date</th>
+                                    <th class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-600">Source</th>
                                     <th class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-600">Student</th>
                                     <th class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-600">Class</th>
+                                    <th class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-600">Doctor</th>
                                     <th class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-600">Illness</th>
                                     <th class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-600">Diagnosis</th>
                                     <th class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-600">Status</th>
@@ -86,7 +88,7 @@
                             </thead>
                             <tbody id="reportBody" class="divide-y divide-gray-200 bg-white">
                                 <tr>
-                                    <td colspan="6" class="px-4 py-8 text-center text-sm text-gray-500">Generate a report to view records.</td>
+                                    <td colspan="8" class="px-4 py-8 text-center text-sm text-gray-500">Generate a report to view records.</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -178,7 +180,7 @@
 
             generateBtn.disabled = true;
             generateBtn.textContent = 'Generating...';
-            reportBody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-sm text-gray-500">Generating report...</td></tr>';
+            reportBody.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-sm text-gray-500">Generating report...</td></tr>';
 
             try {
                 const params = new URLSearchParams();
@@ -199,7 +201,7 @@
                 const result = await response.json();
                 if (!response.ok) {
                     showMessage(result.message || 'Failed to generate report.', 'error');
-                    reportBody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-sm text-red-600">Failed to generate report.</td></tr>';
+                    reportBody.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-sm text-red-600">Failed to generate report.</td></tr>';
                     return;
                 }
 
@@ -207,13 +209,15 @@
                 updateSummary(result.summary || {});
 
                 if (!rows.length) {
-                    reportBody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-sm text-gray-500">No records found for selected filters.</td></tr>';
+                    reportBody.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-sm text-gray-500">No records found for selected filters.</td></tr>';
                 } else {
                     reportBody.innerHTML = rows.map(row => `
                         <tr>
-                            <td class="px-4 py-2 text-sm text-gray-800">${escapeHtml(row.created_at)}</td>
+                            <td class="px-4 py-2 text-sm text-gray-800">${escapeHtml(row.visit_date || row.created_at)}</td>
+                            <td class="px-4 py-2 text-sm text-gray-800">${escapeHtml(row.source_label || '-')}</td>
                             <td class="px-4 py-2 text-sm text-gray-800">${escapeHtml(row.student_name)} (${escapeHtml(row.student_id)})</td>
                             <td class="px-4 py-2 text-sm text-gray-800">${escapeHtml(row.class_name)}</td>
+                            <td class="px-4 py-2 text-sm text-gray-800">${escapeHtml(row.doctor_name || '-')}</td>
                             <td class="px-4 py-2 text-sm text-gray-800">${escapeHtml(row.illness_label)}${row.illness_other_text ? ' - ' + escapeHtml(row.illness_other_text) : ''}</td>
                             <td class="px-4 py-2 text-sm text-gray-800">${escapeHtml(row.diagnosis ?? '-')}</td>
                             <td class="px-4 py-2 text-sm text-gray-800">${escapeHtml(row.status)}</td>
@@ -242,7 +246,7 @@
                 downloadPdfBtn.classList.remove('opacity-50', 'pointer-events-none');
             } catch (error) {
                 showMessage('Unexpected error while generating report.', 'error');
-                reportBody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-sm text-red-600">Failed to generate report.</td></tr>';
+                reportBody.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-sm text-red-600">Failed to generate report.</td></tr>';
             } finally {
                 generateBtn.disabled = false;
                 generateBtn.textContent = 'Generate Report';

@@ -32,6 +32,8 @@ class RolePermissionSeeder extends Seeder
             'generate_results',
             'view_medical_requests',
             'create_medical_requests',
+            'create_direct_medical_visit',
+            'view_all_medical_records',
             'view_teacher_performance',
             'manage_teacher_acr',
             'view_teacher_acr',
@@ -109,6 +111,7 @@ class RolePermissionSeeder extends Seeder
             'generate_results',
             'view_medical_requests',
             'create_medical_requests',
+            'view_all_medical_records',
             'view_teacher_performance',
             'manage_teacher_acr',
             'view_teacher_acr',
@@ -143,7 +146,10 @@ class RolePermissionSeeder extends Seeder
             'view_own_inventory_demands',
             'submit_device_declaration',
         ]);
-        $doctor->syncPermissions(['view_medical_requests']);
+        $doctor->syncPermissions([
+            'view_medical_requests',
+            'create_direct_medical_visit',
+        ]);
         $student->syncPermissions([
             'view_student_daily_diary',
             'take_cognitive_assessment',

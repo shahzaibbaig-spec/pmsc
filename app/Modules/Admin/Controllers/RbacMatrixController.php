@@ -42,6 +42,8 @@ class RbacMatrixController extends Controller
         'generate_results',
         'view_medical_requests',
         'create_medical_requests',
+        'create_direct_medical_visit',
+        'view_all_medical_records',
         'view_teacher_performance',
         'manage_teacher_acr',
         'view_teacher_acr',

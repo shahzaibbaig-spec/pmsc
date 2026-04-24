@@ -16,6 +16,7 @@
         <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <x-ui.button href="{{ route('doctor.medical.requests-list') }}">Medical Requests List</x-ui.button>
             <x-ui.button href="{{ route('doctor.medical.referrals.index') }}" variant="success">Open Referral Panel</x-ui.button>
+            <x-ui.button href="{{ route('doctor.medical.referrals.index') }}#direct-visit" variant="success">Add Walk-in Student</x-ui.button>
             <x-ui.button href="{{ route('medical.reports.index') }}" variant="outline">Medical Reports</x-ui.button>
         </div>
     </x-ui.card>

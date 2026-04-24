@@ -4,8 +4,10 @@ namespace App\Modules\Medical\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Models\MedicalReferral;
+use App\Models\User;
 use App\Modules\Medical\Requests\MedicalReferralListRequest;
 use App\Modules\Medical\Requests\MedicalReportRequest;
+use App\Modules\Medical\Requests\StoreDirectMedicalVisitRequest;
 use App\Modules\Medical\Requests\StoreMedicalReferralRequest;
 use App\Modules\Medical\Requests\UpdateMedicalReferralRequest;
 use App\Modules\Medical\Services\MedicalService;
@@ -24,6 +26,9 @@ class MedicalReferralController extends Controller
     {
         return view('modules.principal.medical.referrals', [
             'availableDoctors' => $this->service->listAvailableDoctors(),
+            'classOptions' => $this->service->listClassOptions(),
+            'sessionOptions' => $this->service->sessionOptions(),
+            'defaultSession' => $this->service->resolveSession(null),
         ]);
     }
 
@@ -33,6 +38,8 @@ class MedicalReferralController extends Controller
 
         return view('modules.doctor.medical.referrals', [
             'unreadNotifications' => $user?->unreadNotifications()->latest()->limit(10)->get() ?? collect(),
+            'sessionOptions' => $this->service->sessionOptions(),
+            'defaultSession' => $this->service->resolveSession(null),
         ]);
     }
 
@@ -67,14 +74,14 @@ class MedicalReferralController extends Controller
 
     public function principalData(MedicalReferralListRequest $request): JsonResponse
     {
-        $paginator = $this->service->referralsForPrincipal($request->validated());
+        $paginator = $this->service->getPrincipalMedicalCases($request->validated());
 
         return response()->json($this->service->mapPaginator($paginator));
     }
 
     public function doctorData(MedicalReferralListRequest $request): JsonResponse
     {
-        $paginator = $this->service->referralsForDoctor((int) auth()->id(), $request->validated());
+        $paginator = $this->service->getDoctorCases((int) auth()->id(), $request->validated());
 
         return response()->json($this->service->mapPaginator($paginator));
     }
@@ -93,10 +100,28 @@ class MedicalReferralController extends Controller
         ], 201);
     }
 
+    public function storeDirectVisit(StoreDirectMedicalVisitRequest $request): JsonResponse
+    {
+        try {
+            $doctor = $request->user();
+            if (! $doctor instanceof User) {
+                return response()->json(['message' => 'Authenticated doctor user not found.'], 422);
+            }
+            $referral = $this->service->createDirectVisit($request->validated(), $doctor);
+        } catch (RuntimeException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 422);
+        }
+
+        return response()->json([
+            'message' => 'Direct medical visit recorded and Principal/Admin notified.',
+            'referral_id' => $referral->id,
+        ], 201);
+    }
+
     public function update(UpdateMedicalReferralRequest $request, MedicalReferral $medicalReferral): JsonResponse
     {
         try {
-            $this->service->updateByDoctor((int) auth()->id(), $medicalReferral, $request->validated());
+            $this->service->completeReferralDiagnosis((int) auth()->id(), $medicalReferral, $request->validated());
         } catch (RuntimeException $exception) {
             return response()->json(['message' => $exception->getMessage()], 422);
         }

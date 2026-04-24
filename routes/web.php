@@ -1159,11 +1159,11 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
         ->name('reports.pdf.attendance-report');
 
     Route::get('/principal/medical/referrals', [MedicalReferralController::class, 'principalIndex'])
-        ->middleware(['role:Principal', 'permission:create_medical_requests'])
+        ->middleware(['role:Principal,Admin', 'permission:view_all_medical_records|view_medical_requests'])
         ->name('principal.medical.referrals.index');
 
     Route::get('/principal/medical/referrals/data', [MedicalReferralController::class, 'principalData'])
-        ->middleware(['role:Principal', 'permission:view_medical_requests'])
+        ->middleware(['role:Principal,Admin', 'permission:view_all_medical_records|view_medical_requests'])
         ->name('principal.medical.referrals.data');
 
     Route::post('/principal/medical/referrals', [MedicalReferralController::class, 'store'])
@@ -1175,15 +1175,15 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
         ->name('medical.students.search');
 
     Route::get('/medical/reports', [MedicalReferralController::class, 'reportsIndex'])
-        ->middleware(['role:Principal,Doctor', 'permission:view_medical_requests'])
+        ->middleware(['role:Principal,Doctor,Admin', 'permission:view_medical_requests'])
         ->name('medical.reports.index');
 
     Route::get('/medical/reports/data', [MedicalReferralController::class, 'reportsData'])
-        ->middleware(['role:Principal,Doctor', 'permission:view_medical_requests'])
+        ->middleware(['role:Principal,Doctor,Admin', 'permission:view_medical_requests'])
         ->name('medical.reports.data');
 
     Route::get('/reports/medical/pdf', [ReportPdfController::class, 'medicalReportPdf'])
-        ->middleware(['role:Principal,Doctor', 'permission:view_medical_requests'])
+        ->middleware(['role:Principal,Doctor,Admin', 'permission:view_medical_requests'])
         ->name('reports.pdf.medical-report');
 
     Route::get('/api/search/students', [StudentSearchController::class, 'students'])
@@ -1368,6 +1368,10 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
     Route::get('/doctor/medical/referrals/notifications', [MedicalReferralController::class, 'doctorNotifications'])
         ->middleware(['role:Doctor', 'permission:view_medical_requests'])
         ->name('doctor.medical.referrals.notifications');
+
+    Route::post('/doctor/medical/direct-visits', [MedicalReferralController::class, 'storeDirectVisit'])
+        ->middleware(['role:Doctor', 'permission:create_direct_medical_visit'])
+        ->name('doctor.medical.direct-visits.store');
 
     Route::put('/doctor/medical/referrals/{medicalReferral}', [MedicalReferralController::class, 'update'])
         ->middleware(['role:Doctor', 'permission:view_medical_requests'])

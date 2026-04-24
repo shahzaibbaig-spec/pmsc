@@ -47,9 +47,11 @@
         <thead>
             <tr>
                 <th>Date</th>
+                <th>Source</th>
                 <th>Student</th>
                 <th>Class</th>
-                <th>Illness</th>
+                <th>Doctor</th>
+                <th>Problem</th>
                 <th>Diagnosis</th>
                 <th>Prescription</th>
                 <th>Status</th>
@@ -58,21 +60,22 @@
         <tbody>
             @forelse($report['data'] as $row)
                 <tr>
-                    <td>{{ $row['created_at'] }}</td>
+                    <td>{{ $row['visit_date'] ?? $row['created_at'] }}</td>
+                    <td>{{ $row['source_label'] ?? '-' }}</td>
                     <td>{{ $row['student_name'] }} ({{ $row['student_id'] }})</td>
                     <td>{{ $row['class_name'] }}</td>
-                    <td>{{ $row['illness_label'] }}{{ $row['illness_other_text'] ? ' - '.$row['illness_other_text'] : '' }}</td>
+                    <td>{{ $row['doctor_name'] ?? '-' }}</td>
+                    <td>{{ $row['problem'] ?? ($row['illness_label'] ?? '-') }}</td>
                     <td>{{ $row['diagnosis'] ?? '-' }}</td>
                     <td>{{ $row['prescription'] ?? '-' }}</td>
                     <td>{{ ucfirst($row['status']) }}</td>
                 </tr>
             @empty
                 <tr>
-                    <td colspan="7" style="text-align:center;">No medical records found.</td>
+                    <td colspan="9" style="text-align:center;">No medical records found.</td>
                 </tr>
             @endforelse
         </tbody>
     </table>
 </body>
 </html>
-

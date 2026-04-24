@@ -40,6 +40,7 @@ class StoreMedicalReferralRequest extends FormRequest
             ],
             'illness_type' => ['required', Rule::in(['fever', 'headache', 'stomach_ache', 'other'])],
             'illness_other_text' => ['nullable', 'string', 'max:255', 'required_if:illness_type,other'],
+            'session' => ['required', 'regex:/^\d{4}-\d{4}$/'],
         ];
     }
 }
