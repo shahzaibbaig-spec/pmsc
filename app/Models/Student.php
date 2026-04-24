@@ -81,6 +81,11 @@ class Student extends Model
         return $this->hasMany(MedicalReferral::class);
     }
 
+    public function cbcReports(): HasMany
+    {
+        return $this->hasMany(StudentCbcReport::class);
+    }
+
     public function disciplineComplaints(): HasMany
     {
         return $this->hasMany(DisciplineComplaint::class);

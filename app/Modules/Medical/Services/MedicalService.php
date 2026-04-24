@@ -372,6 +372,8 @@ class MedicalService
             'doctor:id,name',
             'referredBy:id,name',
             'addedBy:id,name',
+            'cbcReports:id,student_medical_record_id,report_date,machine_report_no,doctor_id,created_at',
+            'cbcReports.doctor:id,name',
         ];
     }
 
@@ -384,6 +386,7 @@ class MedicalService
         $studentId = isset($filters['student_id']) ? (int) $filters['student_id'] : 0;
         $classId = isset($filters['class_id']) ? (int) $filters['class_id'] : 0;
         $session = trim((string) ($filters['session'] ?? ''));
+        $hasCbcReport = isset($filters['has_cbc_report']) ? (int) $filters['has_cbc_report'] : null;
         $dateFrom = (string) ($filters['date_from'] ?? '');
         $dateTo = (string) ($filters['date_to'] ?? '');
         $month = $filters['month'] ?? null;
@@ -429,6 +432,14 @@ class MedicalService
             $query->where('session', $session);
         }
 
+        if ($hasCbcReport === 1) {
+            $query->whereHas('cbcReports');
+        }
+
+        if ($hasCbcReport === 0) {
+            $query->whereDoesntHave('cbcReports');
+        }
+
         if ($dateFrom !== '') {
             $query->whereDate(DB::raw('COALESCE(visit_date, DATE(created_at))'), '>=', $dateFrom);
         }
@@ -459,6 +470,7 @@ class MedicalService
         return [
             'id' => $referral->id,
             'student_name' => $referral->student?->name,
+            'student_db_id' => (int) $referral->student_id,
             'student_id' => $referral->student?->student_id,
             'class_name' => trim(($referral->student?->classRoom?->name ?? '').' '.($referral->student?->classRoom?->section ?? '')),
             'principal_name' => $referral->principal?->name,
@@ -477,6 +489,16 @@ class MedicalService
             'status' => $referral->status,
             'visit_date' => optional($referral->visit_date)->format('Y-m-d'),
             'session' => $referral->session,
+            'cbc_reports_count' => $referral->cbcReports->count(),
+            'cbc_reports' => $referral->cbcReports
+                ->map(static fn ($report): array => [
+                    'id' => (int) $report->id,
+                    'report_date' => optional($report->report_date)->format('Y-m-d'),
+                    'machine_report_no' => (string) ($report->machine_report_no ?? ''),
+                    'doctor_name' => (string) ($report->doctor?->name ?? ''),
+                ])
+                ->values()
+                ->all(),
             'referred_at' => optional($referral->referred_at ?? $referral->created_at)->format('Y-m-d H:i'),
             'created_at' => optional($referral->created_at)->format('Y-m-d H:i'),
         ];

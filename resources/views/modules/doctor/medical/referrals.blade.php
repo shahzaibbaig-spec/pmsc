@@ -134,6 +134,14 @@
                             </select>
                         </div>
                         <div>
+                            <x-input-label for="has_cbc_report" value="CBC Report" />
+                            <select id="has_cbc_report" class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                <option value="">All</option>
+                                <option value="1">Has CBC</option>
+                                <option value="0">No CBC</option>
+                            </select>
+                        </div>
+                        <div>
                             <x-input-label for="month" value="Month" />
                             <select id="month" class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                                 <option value="">All</option>
@@ -172,13 +180,14 @@
                                     <th class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-600">Source</th>
                                     <th class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-600">Student</th>
                                     <th class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-600">Problem</th>
+                                    <th class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-600">CBC</th>
                                     <th class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-600">Status</th>
                                     <th class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-600">Action</th>
                                 </tr>
                             </thead>
                             <tbody id="referralBody" class="divide-y divide-gray-200 bg-white">
                                 <tr>
-                                    <td colspan="6" class="px-4 py-8 text-center text-sm text-gray-500">Loading cases...</td>
+                                    <td colspan="7" class="px-4 py-8 text-center text-sm text-gray-500">Loading cases...</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -225,6 +234,70 @@
                             <x-primary-button id="saveRecordBtn">Save Medical Record</x-primary-button>
                         </div>
                     </form>
+
+                    <div class="mt-8 border-t pt-6">
+                        <h4 class="text-md font-medium text-gray-900">CBC Blood Report</h4>
+                        <p class="text-sm text-gray-600 mt-1">Attach CBC report to selected medical visit and keep historical entries.</p>
+                        <div id="cbcMessageBox" class="mt-4 hidden rounded-md p-3 text-sm"></div>
+
+                        <form id="cbcForm" class="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                                <x-input-label for="cbc_report_date" value="Report Date" />
+                                <x-text-input id="cbc_report_date" type="date" class="mt-1 block w-full" value="{{ now()->toDateString() }}" />
+                            </div>
+                            <div>
+                                <x-input-label for="cbc_session" value="Session" />
+                                <select id="cbc_session" class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                    @foreach($sessionOptions as $session)
+                                        <option value="{{ $session }}" @selected($session === $defaultSession)>{{ $session }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div>
+                                <x-input-label for="cbc_machine_report_no" value="Machine Report No" />
+                                <x-text-input id="cbc_machine_report_no" type="text" class="mt-1 block w-full" />
+                            </div>
+                            <div><x-input-label for="cbc_hemoglobin" value="Hemoglobin" /><x-text-input id="cbc_hemoglobin" type="number" step="0.01" class="mt-1 block w-full" /></div>
+                            <div><x-input-label for="cbc_rbc_count" value="RBC Count" /><x-text-input id="cbc_rbc_count" type="number" step="0.01" class="mt-1 block w-full" /></div>
+                            <div><x-input-label for="cbc_wbc_count" value="WBC Count" /><x-text-input id="cbc_wbc_count" type="number" step="0.01" class="mt-1 block w-full" /></div>
+                            <div><x-input-label for="cbc_platelet_count" value="Platelet Count" /><x-text-input id="cbc_platelet_count" type="number" step="0.01" class="mt-1 block w-full" /></div>
+                            <div><x-input-label for="cbc_hematocrit_pcv" value="Hematocrit PCV" /><x-text-input id="cbc_hematocrit_pcv" type="number" step="0.01" class="mt-1 block w-full" /></div>
+                            <div><x-input-label for="cbc_mcv" value="MCV" /><x-text-input id="cbc_mcv" type="number" step="0.01" class="mt-1 block w-full" /></div>
+                            <div><x-input-label for="cbc_mch" value="MCH" /><x-text-input id="cbc_mch" type="number" step="0.01" class="mt-1 block w-full" /></div>
+                            <div><x-input-label for="cbc_mchc" value="MCHC" /><x-text-input id="cbc_mchc" type="number" step="0.01" class="mt-1 block w-full" /></div>
+                            <div><x-input-label for="cbc_neutrophils" value="Neutrophils" /><x-text-input id="cbc_neutrophils" type="number" step="0.01" class="mt-1 block w-full" /></div>
+                            <div><x-input-label for="cbc_lymphocytes" value="Lymphocytes" /><x-text-input id="cbc_lymphocytes" type="number" step="0.01" class="mt-1 block w-full" /></div>
+                            <div><x-input-label for="cbc_monocytes" value="Monocytes" /><x-text-input id="cbc_monocytes" type="number" step="0.01" class="mt-1 block w-full" /></div>
+                            <div><x-input-label for="cbc_eosinophils" value="Eosinophils" /><x-text-input id="cbc_eosinophils" type="number" step="0.01" class="mt-1 block w-full" /></div>
+                            <div><x-input-label for="cbc_basophils" value="Basophils" /><x-text-input id="cbc_basophils" type="number" step="0.01" class="mt-1 block w-full" /></div>
+                            <div><x-input-label for="cbc_esr" value="ESR" /><x-text-input id="cbc_esr" type="number" step="0.01" class="mt-1 block w-full" /></div>
+                            <div class="md:col-span-3">
+                                <x-input-label for="cbc_remarks" value="Remarks" />
+                                <textarea id="cbc_remarks" rows="3" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"></textarea>
+                            </div>
+                            <div class="md:col-span-3">
+                                <x-primary-button id="saveCbcBtn">Add CBC Report</x-primary-button>
+                            </div>
+                        </form>
+
+                        <div class="mt-6 overflow-x-auto">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-600">Report Date</th>
+                                        <th class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-600">Machine #</th>
+                                        <th class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-600">Doctor</th>
+                                        <th class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-600">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="cbcReportsBody" class="divide-y divide-gray-200 bg-white">
+                                    <tr>
+                                        <td colspan="4" class="px-4 py-6 text-center text-sm text-gray-500">Select a case to view attached CBC reports.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -255,6 +328,7 @@
         const statusFilter = document.getElementById('status');
         const sourceTypeFilter = document.getElementById('source_type');
         const sessionFilter = document.getElementById('session_filter');
+        const hasCbcReportFilter = document.getElementById('has_cbc_report');
         const monthFilter = document.getElementById('month');
         const yearFilter = document.getElementById('year');
         const dateFromFilter = document.getElementById('date_from');
@@ -271,6 +345,29 @@
         const selectedReferralText = document.getElementById('selectedReferralText');
         const doctorNotificationList = document.getElementById('doctorNotificationList');
         const updateRouteTemplate = `{{ route('doctor.medical.referrals.update', ['medicalReferral' => '__REFERRAL__']) }}`;
+        const cbcMessageBox = document.getElementById('cbcMessageBox');
+        const cbcForm = document.getElementById('cbcForm');
+        const cbcReportsBody = document.getElementById('cbcReportsBody');
+        const saveCbcBtn = document.getElementById('saveCbcBtn');
+        const cbcReportDateInput = document.getElementById('cbc_report_date');
+        const cbcSessionInput = document.getElementById('cbc_session');
+        const cbcMachineReportNoInput = document.getElementById('cbc_machine_report_no');
+        const cbcHemoglobinInput = document.getElementById('cbc_hemoglobin');
+        const cbcRbcCountInput = document.getElementById('cbc_rbc_count');
+        const cbcWbcCountInput = document.getElementById('cbc_wbc_count');
+        const cbcPlateletCountInput = document.getElementById('cbc_platelet_count');
+        const cbcHematocritPcvInput = document.getElementById('cbc_hematocrit_pcv');
+        const cbcMcvInput = document.getElementById('cbc_mcv');
+        const cbcMchInput = document.getElementById('cbc_mch');
+        const cbcMchcInput = document.getElementById('cbc_mchc');
+        const cbcNeutrophilsInput = document.getElementById('cbc_neutrophils');
+        const cbcLymphocytesInput = document.getElementById('cbc_lymphocytes');
+        const cbcMonocytesInput = document.getElementById('cbc_monocytes');
+        const cbcEosinophilsInput = document.getElementById('cbc_eosinophils');
+        const cbcBasophilsInput = document.getElementById('cbc_basophils');
+        const cbcEsrInput = document.getElementById('cbc_esr');
+        const cbcRemarksInput = document.getElementById('cbc_remarks');
+        const cbcAttachRouteTemplate = `{{ route('doctor.cbc-reports.attach', ['medicalReferral' => '__REFERRAL__']) }}`;
 
         let state = {
             page: 1,
@@ -279,6 +376,7 @@
             status: '',
             source_type: 'principal_referral',
             session: '',
+            has_cbc_report: '',
             month: '',
             year: new Date().getFullYear(),
             date_from: '',
@@ -447,7 +545,7 @@
         }
 
         async function loadReferrals() {
-            referralBody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-sm text-gray-500">Loading cases...</td></tr>';
+            referralBody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-sm text-gray-500">Loading cases...</td></tr>';
 
             const params = new URLSearchParams({
                 page: state.page,
@@ -456,6 +554,7 @@
                 status: state.status,
                 source_type: state.source_type,
                 session: state.session,
+                has_cbc_report: state.has_cbc_report,
                 month: state.month,
                 year: state.year,
                 date_from: state.date_from,
@@ -467,7 +566,7 @@
             });
 
             if (!response.ok) {
-                referralBody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-sm text-red-600">Failed to load cases.</td></tr>';
+                referralBody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-sm text-red-600">Failed to load cases.</td></tr>';
                 return;
             }
 
@@ -475,7 +574,7 @@
             referralsCache = result.data || [];
 
             if (!referralsCache.length) {
-                referralBody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-sm text-gray-500">No cases found.</td></tr>';
+                referralBody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-sm text-gray-500">No cases found.</td></tr>';
             } else {
                 referralBody.innerHTML = referralsCache.map(row => `
                     <tr>
@@ -483,6 +582,7 @@
                         <td class="px-4 py-2 text-sm text-gray-800">${sourceBadge(row.source_type)}</td>
                         <td class="px-4 py-2 text-sm text-gray-800">${escapeHtml(row.student_name)} (${escapeHtml(row.student_id)})</td>
                         <td class="px-4 py-2 text-sm text-gray-800">${escapeHtml(row.problem || row.illness_label || '-')}</td>
+                        <td class="px-4 py-2 text-sm text-gray-800">${Number(row.cbc_reports_count || 0)}</td>
                         <td class="px-4 py-2 text-sm text-gray-800">${statusBadge(row.status)}</td>
                         <td class="px-4 py-2 text-sm">
                             <button type="button" class="edit-btn rounded-md bg-indigo-600 px-3 py-1 text-white hover:bg-indigo-700" data-id="${row.id}">Update</button>
@@ -525,6 +625,119 @@
             notesInput.value = row.notes ?? '';
             updateStatusInput.value = row.status ?? 'pending';
             selectedReferralText.textContent = `Selected: ${row.student_name} | Source: ${row.source_label} | Problem: ${row.problem || row.illness_label}`;
+            renderAttachedCbcReports(row);
+        });
+
+        function renderAttachedCbcReports(row) {
+            const reports = row?.cbc_reports || [];
+            if (!reports.length) {
+                cbcReportsBody.innerHTML = '<tr><td colspan="4" class="px-4 py-6 text-center text-sm text-gray-500">No CBC reports attached to this visit.</td></tr>';
+                return;
+            }
+
+            cbcReportsBody.innerHTML = reports.map((cbc) => `
+                <tr>
+                    <td class="px-4 py-2 text-sm text-gray-800">${escapeHtml(cbc.report_date || '-')}</td>
+                    <td class="px-4 py-2 text-sm text-gray-800">${escapeHtml(cbc.machine_report_no || '-')}</td>
+                    <td class="px-4 py-2 text-sm text-gray-800">${escapeHtml(cbc.doctor_name || '-')}</td>
+                    <td class="px-4 py-2 text-sm text-gray-800">
+                        <a href="/doctor/cbc-reports/${encodeURIComponent(cbc.id)}" class="text-blue-700 hover:underline">View</a>
+                        <span class="mx-1">|</span>
+                        <a href="/doctor/cbc-reports/${encodeURIComponent(cbc.id)}/print" target="_blank" class="text-emerald-700 hover:underline">Print</a>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function toNullableNumber(value) {
+            const text = String(value ?? '').trim();
+            if (text === '') {
+                return null;
+            }
+            const numberValue = Number(text);
+            return Number.isFinite(numberValue) ? numberValue : null;
+        }
+
+        cbcForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+
+            const referralId = Number(referralIdInput.value);
+            if (!referralId) {
+                showMessage(cbcMessageBox, 'Select a medical case before adding CBC report.', 'error');
+                return;
+            }
+
+            const selectedCase = referralsCache.find((item) => Number(item.id) === referralId);
+            if (!selectedCase) {
+                showMessage(cbcMessageBox, 'Selected case not found in the current list.', 'error');
+                return;
+            }
+
+            const payload = {
+                student_medical_record_id: referralId,
+                student_id: Number(selectedCase.student_db_id || 0),
+                report_date: cbcReportDateInput.value,
+                session: cbcSessionInput.value,
+                machine_report_no: cbcMachineReportNoInput.value.trim() || null,
+                hemoglobin: toNullableNumber(cbcHemoglobinInput.value),
+                rbc_count: toNullableNumber(cbcRbcCountInput.value),
+                wbc_count: toNullableNumber(cbcWbcCountInput.value),
+                platelet_count: toNullableNumber(cbcPlateletCountInput.value),
+                hematocrit_pcv: toNullableNumber(cbcHematocritPcvInput.value),
+                mcv: toNullableNumber(cbcMcvInput.value),
+                mch: toNullableNumber(cbcMchInput.value),
+                mchc: toNullableNumber(cbcMchcInput.value),
+                neutrophils: toNullableNumber(cbcNeutrophilsInput.value),
+                lymphocytes: toNullableNumber(cbcLymphocytesInput.value),
+                monocytes: toNullableNumber(cbcMonocytesInput.value),
+                eosinophils: toNullableNumber(cbcEosinophilsInput.value),
+                basophils: toNullableNumber(cbcBasophilsInput.value),
+                esr: toNullableNumber(cbcEsrInput.value),
+                remarks: cbcRemarksInput.value.trim() || null,
+            };
+
+            if (!payload.student_id || Number.isNaN(payload.student_id)) {
+                showMessage(cbcMessageBox, 'Unable to resolve student for this case. Reload and try again.', 'error');
+                return;
+            }
+
+            saveCbcBtn.disabled = true;
+            saveCbcBtn.textContent = 'Saving CBC...';
+
+            try {
+                const response = await fetch(cbcAttachRouteTemplate.replace('__REFERRAL__', String(referralId)), {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': csrfToken
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+                if (!response.ok) {
+                    if (result.errors) {
+                        const msg = Object.values(result.errors).flat().join(' ');
+                        showMessage(cbcMessageBox, msg || 'Failed to save CBC report.', 'error');
+                    } else {
+                        showMessage(cbcMessageBox, result.message || 'Failed to save CBC report.', 'error');
+                    }
+                    return;
+                }
+
+                showMessage(cbcMessageBox, 'CBC report attached successfully.');
+                await loadReferrals();
+                const refreshedRow = referralsCache.find((item) => Number(item.id) === referralId);
+                if (refreshedRow) {
+                    renderAttachedCbcReports(refreshedRow);
+                }
+            } catch (error) {
+                showMessage(cbcMessageBox, 'Unexpected error while saving CBC report.', 'error');
+            } finally {
+                saveCbcBtn.disabled = false;
+                saveCbcBtn.textContent = 'Add CBC Report';
+            }
         });
 
         document.getElementById('updateForm').addEventListener('submit', async (event) => {
@@ -600,6 +813,7 @@
         statusFilter.addEventListener('change', async () => { state.status = statusFilter.value; state.page = 1; await loadReferrals(); });
         sourceTypeFilter.addEventListener('change', async () => { state.source_type = sourceTypeFilter.value; state.page = 1; await loadReferrals(); });
         sessionFilter.addEventListener('change', async () => { state.session = sessionFilter.value; state.page = 1; await loadReferrals(); });
+        hasCbcReportFilter.addEventListener('change', async () => { state.has_cbc_report = hasCbcReportFilter.value; state.page = 1; await loadReferrals(); });
         monthFilter.addEventListener('change', async () => { state.month = monthFilter.value; state.page = 1; await loadReferrals(); });
         yearFilter.addEventListener('change', async () => { state.year = yearFilter.value; state.page = 1; await loadReferrals(); });
         dateFromFilter.addEventListener('change', async () => { state.date_from = dateFromFilter.value; state.page = 1; await loadReferrals(); });

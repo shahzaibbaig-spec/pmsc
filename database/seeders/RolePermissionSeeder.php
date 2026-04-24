@@ -34,6 +34,10 @@ class RolePermissionSeeder extends Seeder
             'create_medical_requests',
             'create_direct_medical_visit',
             'view_all_medical_records',
+            'create_cbc_report',
+            'view_cbc_report',
+            'print_cbc_report',
+            'view_all_cbc_reports',
             'view_teacher_performance',
             'manage_teacher_acr',
             'view_teacher_acr',
@@ -112,6 +116,8 @@ class RolePermissionSeeder extends Seeder
             'view_medical_requests',
             'create_medical_requests',
             'view_all_medical_records',
+            'view_all_cbc_reports',
+            'print_cbc_report',
             'view_teacher_performance',
             'manage_teacher_acr',
             'view_teacher_acr',
@@ -149,6 +155,9 @@ class RolePermissionSeeder extends Seeder
         $doctor->syncPermissions([
             'view_medical_requests',
             'create_direct_medical_visit',
+            'create_cbc_report',
+            'view_cbc_report',
+            'print_cbc_report',
         ]);
         $student->syncPermissions([
             'view_student_daily_diary',

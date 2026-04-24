@@ -29,6 +29,7 @@ class MedicalReferralListRequest extends FormRequest
             'date_from' => ['nullable', 'date'],
             'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
             'session' => ['nullable', 'regex:/^\d{4}-\d{4}$/'],
+            'has_cbc_report' => ['nullable', 'boolean'],
             'month' => ['nullable', 'integer', 'min:1', 'max:12'],
             'year' => ['nullable', 'integer', 'min:2000', 'max:2100'],
             'page' => ['nullable', 'integer', 'min:1'],

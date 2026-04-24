@@ -85,6 +85,21 @@ class User extends Authenticatable
         return $this->hasMany(MedicalReferral::class, 'added_by');
     }
 
+    public function doctorCbcReports(): HasMany
+    {
+        return $this->hasMany(StudentCbcReport::class, 'doctor_id');
+    }
+
+    public function createdCbcReports(): HasMany
+    {
+        return $this->hasMany(StudentCbcReport::class, 'created_by');
+    }
+
+    public function updatedCbcReports(): HasMany
+    {
+        return $this->hasMany(StudentCbcReport::class, 'updated_by');
+    }
+
     public function createdFeeStructures(): HasMany
     {
         return $this->hasMany(FeeStructure::class, 'created_by');

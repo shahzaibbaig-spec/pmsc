@@ -144,6 +144,14 @@
                             </select>
                         </div>
                         <div>
+                            <x-input-label for="has_cbc_report" value="CBC Report" />
+                            <select id="has_cbc_report" class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                <option value="">All</option>
+                                <option value="1">Has CBC</option>
+                                <option value="0">No CBC</option>
+                            </select>
+                        </div>
+                        <div>
                             <x-input-label for="month" value="Month" />
                             <select id="month" class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                                 <option value="">All</option>
@@ -177,13 +185,14 @@
                                     <th class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-600">Problem</th>
                                     <th class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-600">Doctor</th>
                                     <th class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-600">Diagnosis</th>
+                                    <th class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-600">CBC</th>
                                     <th class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-600">Session</th>
                                     <th class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-600">Status</th>
                                 </tr>
                             </thead>
                             <tbody id="historyBody" class="divide-y divide-gray-200 bg-white">
                                 <tr>
-                                    <td colspan="9" class="px-4 py-8 text-center text-sm text-gray-500">Loading medical history...</td>
+                                    <td colspan="10" class="px-4 py-8 text-center text-sm text-gray-500">Loading medical history...</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -232,6 +241,7 @@
         const dateFromFilter = document.getElementById('date_from');
         const dateToFilter = document.getElementById('date_to');
         const sessionFilter = document.getElementById('session_filter');
+        const hasCbcReportFilter = document.getElementById('has_cbc_report');
         const monthFilter = document.getElementById('month');
         const yearFilter = document.getElementById('year');
         const perPageFilter = document.getElementById('per_page');
@@ -248,6 +258,7 @@
             date_from: '',
             date_to: '',
             session: '',
+            has_cbc_report: '',
             month: '',
             year: new Date().getFullYear(),
         };
@@ -371,7 +382,7 @@
         }
 
         async function loadHistory() {
-            historyBody.innerHTML = '<tr><td colspan="9" class="px-4 py-8 text-center text-sm text-gray-500">Loading medical history...</td></tr>';
+            historyBody.innerHTML = '<tr><td colspan="10" class="px-4 py-8 text-center text-sm text-gray-500">Loading medical history...</td></tr>';
 
             const params = new URLSearchParams({
                 page: state.page,
@@ -385,6 +396,7 @@
                 date_from: state.date_from,
                 date_to: state.date_to,
                 session: state.session,
+                has_cbc_report: state.has_cbc_report,
                 month: state.month,
                 year: state.year,
             });
@@ -394,7 +406,7 @@
             });
 
             if (!response.ok) {
-                historyBody.innerHTML = '<tr><td colspan="9" class="px-4 py-8 text-center text-sm text-red-600">Failed to load medical history.</td></tr>';
+                historyBody.innerHTML = '<tr><td colspan="10" class="px-4 py-8 text-center text-sm text-red-600">Failed to load medical history.</td></tr>';
                 return;
             }
 
@@ -402,7 +414,7 @@
             const rows = result.data || [];
 
             if (!rows.length) {
-                historyBody.innerHTML = '<tr><td colspan="9" class="px-4 py-8 text-center text-sm text-gray-500">No records found.</td></tr>';
+                historyBody.innerHTML = '<tr><td colspan="10" class="px-4 py-8 text-center text-sm text-gray-500">No records found.</td></tr>';
             } else {
                 historyBody.innerHTML = rows.map(row => `
                     <tr>
@@ -413,6 +425,20 @@
                         <td class="px-4 py-2 text-sm text-gray-800">${escapeHtml(row.problem || row.illness_label || '-')}</td>
                         <td class="px-4 py-2 text-sm text-gray-800">${escapeHtml(row.doctor_name || '-')}</td>
                         <td class="px-4 py-2 text-sm text-gray-800">${escapeHtml(row.diagnosis || '-')}</td>
+                        <td class="px-4 py-2 text-sm text-gray-800">
+                            ${Number(row.cbc_reports_count || 0) > 0
+                                ? `<div class="space-y-1">
+                                    ${(row.cbc_reports || []).map(cbc => `
+                                        <div class="text-xs">
+                                            <span>#${escapeHtml(cbc.id)} ${escapeHtml(cbc.report_date || '-')}</span>
+                                            <a href="/principal/cbc-reports/${encodeURIComponent(cbc.id)}" class="ml-1 text-blue-700 hover:underline">View</a>
+                                            <a href="/principal/cbc-reports/${encodeURIComponent(cbc.id)}/print" target="_blank" class="ml-1 text-emerald-700 hover:underline">Print</a>
+                                        </div>
+                                    `).join('')}
+                                  </div>`
+                                : '<span class="text-gray-400">No CBC</span>'
+                            }
+                        </td>
                         <td class="px-4 py-2 text-sm text-gray-800">${escapeHtml(row.session || '-')}</td>
                         <td class="px-4 py-2 text-sm text-gray-800">${statusBadge(row.status)}</td>
                     </tr>
@@ -540,6 +566,7 @@
         dateFromFilter.addEventListener('change', async () => { state.date_from = dateFromFilter.value; state.page = 1; await loadHistory(); });
         dateToFilter.addEventListener('change', async () => { state.date_to = dateToFilter.value; state.page = 1; await loadHistory(); });
         sessionFilter.addEventListener('change', async () => { state.session = sessionFilter.value; state.page = 1; await loadHistory(); });
+        hasCbcReportFilter.addEventListener('change', async () => { state.has_cbc_report = hasCbcReportFilter.value; state.page = 1; await loadHistory(); });
         monthFilter.addEventListener('change', async () => { state.month = monthFilter.value; state.page = 1; await loadHistory(); });
         yearFilter.addEventListener('change', async () => { state.year = yearFilter.value; state.page = 1; await loadHistory(); });
         perPageFilter.addEventListener('change', async () => { state.per_page = perPageFilter.value; state.page = 1; await loadHistory(); });

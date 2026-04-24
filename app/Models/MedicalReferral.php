@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class MedicalReferral extends Model
 {
@@ -61,6 +62,11 @@ class MedicalReferral extends Model
     public function addedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'added_by');
+    }
+
+    public function cbcReports(): HasMany
+    {
+        return $this->hasMany(StudentCbcReport::class, 'student_medical_record_id');
     }
 
     public function getIllnessLabelAttribute(): string

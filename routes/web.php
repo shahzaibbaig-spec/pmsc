@@ -61,6 +61,7 @@ use App\Modules\Fees\Controllers\StudentCustomFeeController;
 use App\Modules\Medical\Controllers\DoctorDashboardController;
 use App\Modules\Medical\Controllers\DoctorMedicalRequestListController;
 use App\Modules\Medical\Controllers\MedicalReferralController;
+use App\Modules\Medical\Controllers\StudentCbcReportController;
 use App\Modules\Payroll\Controllers\PayrollProfileController;
 use App\Modules\Payroll\Controllers\PayrollRunController;
 use App\Modules\Payroll\Controllers\PayrollDashboardController;
@@ -1373,9 +1374,37 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
         ->middleware(['role:Doctor', 'permission:create_direct_medical_visit'])
         ->name('doctor.medical.direct-visits.store');
 
+    Route::post('/doctor/medical/referrals/{medicalReferral}/cbc-reports', [StudentCbcReportController::class, 'storeForMedicalRecord'])
+        ->middleware(['role:Doctor', 'permission:create_cbc_report'])
+        ->name('doctor.cbc-reports.attach');
+
+    Route::post('/doctor/cbc-reports', [StudentCbcReportController::class, 'storeStandalone'])
+        ->middleware(['role:Doctor', 'permission:create_cbc_report'])
+        ->name('doctor.cbc-reports.store');
+
+    Route::put('/doctor/cbc-reports/{cbcReport}', [StudentCbcReportController::class, 'update'])
+        ->middleware(['role:Doctor', 'permission:create_cbc_report'])
+        ->name('doctor.cbc-reports.update');
+
+    Route::get('/doctor/cbc-reports/{cbcReport}', [StudentCbcReportController::class, 'showForDoctor'])
+        ->middleware(['role:Doctor', 'permission:view_cbc_report'])
+        ->name('doctor.cbc-reports.show');
+
+    Route::get('/doctor/cbc-reports/{cbcReport}/print', [StudentCbcReportController::class, 'printForDoctor'])
+        ->middleware(['role:Doctor', 'permission:print_cbc_report'])
+        ->name('doctor.cbc-reports.print');
+
     Route::put('/doctor/medical/referrals/{medicalReferral}', [MedicalReferralController::class, 'update'])
         ->middleware(['role:Doctor', 'permission:view_medical_requests'])
         ->name('doctor.medical.referrals.update');
+
+    Route::get('/principal/cbc-reports/{cbcReport}', [StudentCbcReportController::class, 'showForPrincipal'])
+        ->middleware(['role:Principal,Admin', 'permission:view_all_cbc_reports|view_cbc_report'])
+        ->name('principal.cbc-reports.show');
+
+    Route::get('/principal/cbc-reports/{cbcReport}/print', [StudentCbcReportController::class, 'printForPrincipal'])
+        ->middleware(['role:Principal,Admin', 'permission:print_cbc_report'])
+        ->name('principal.cbc-reports.print');
 
     Route::get('/doctor/dashboard', DoctorDashboardController::class)
         ->middleware('role:Doctor')

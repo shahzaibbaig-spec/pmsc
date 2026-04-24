@@ -10,6 +10,7 @@ use App\Models\MedicalHistory;
 use App\Models\MedicalReferral;
 use App\Models\SchoolClass;
 use App\Models\Student;
+use App\Models\StudentCbcReport;
 use App\Models\StudentAttendance;
 use App\Services\StudentPhotoService;
 use App\Services\StudentResultService;
@@ -712,13 +713,23 @@ class StudentManagementController extends Controller
 
         $referrals = MedicalReferral::query()
             ->where('student_id', (int) $student->id)
+            ->with(['doctor:id,name', 'cbcReports:id,student_medical_record_id,report_date,machine_report_no,doctor_id', 'cbcReports.doctor:id,name'])
             ->orderByDesc('referred_at')
+            ->limit(40)
+            ->get();
+
+        $standaloneCbcReports = StudentCbcReport::query()
+            ->where('student_id', (int) $student->id)
+            ->whereNull('student_medical_record_id')
+            ->with(['doctor:id,name'])
+            ->orderByDesc('report_date')
             ->limit(40)
             ->get();
 
         return [
             'medicalHistory' => $medicalHistory,
             'medicalReferrals' => $referrals,
+            'standaloneCbcReports' => $standaloneCbcReports,
         ];
     }
 
