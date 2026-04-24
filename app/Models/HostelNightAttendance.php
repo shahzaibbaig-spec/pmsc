@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -46,5 +47,19 @@ class HostelNightAttendance extends Model
     public function markedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'marked_by');
+    }
+
+    public function scopeForWarden(Builder $query, User $user): Builder
+    {
+        if (! $user->isWarden()) {
+            return $query;
+        }
+
+        $hostelId = (int) ($user->hostel_id ?? 0);
+        if ($hostelId <= 0) {
+            return $query->whereRaw('1 = 0');
+        }
+
+        return $query->whereHas('hostelRoom', fn (Builder $roomQuery) => $roomQuery->where('hostel_id', $hostelId));
     }
 }

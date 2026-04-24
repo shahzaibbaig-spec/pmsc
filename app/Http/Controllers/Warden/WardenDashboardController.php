@@ -21,7 +21,10 @@ class WardenDashboardController extends Controller
         ]);
 
         return view('warden.dashboard', [
-            'summary' => $this->wardenDashboardService->getDashboardData($validated['date'] ?? null),
+            'summary' => $this->wardenDashboardService->getDashboardData(
+                $validated['date'] ?? null,
+                $request->user()
+            ),
         ]);
     }
 }

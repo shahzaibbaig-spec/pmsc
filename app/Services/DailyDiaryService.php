@@ -519,6 +519,104 @@ class DailyDiaryService
         ];
     }
 
+    /**
+     * @param array<string, mixed> $filters
+     * @return array{
+     *     entries:LengthAwarePaginator,
+     *     filters:array<string, mixed>,
+     *     sessions:array<int, string>,
+     *     teachers:array<int, array{id:int,name:string,teacher_code:string}>,
+     *     classes:array<int, array{id:int,name:string}>,
+     *     subjects:array<int, array{id:int,name:string}>
+     * }
+     */
+    public function getWardenDiaryEntries(User $user, array $filters = []): array
+    {
+        $normalized = $this->normalizeFilters($filters);
+        $normalized['session'] = $this->resolveSession(
+            isset($normalized['session']) ? (string) $normalized['session'] : null
+        );
+
+        $hostelClassIds = Student::query()
+            ->forWarden($user)
+            ->distinct()
+            ->pluck('class_id')
+            ->map(fn ($id): int => (int) $id)
+            ->values()
+            ->all();
+
+        $entries = DailyDiary::query()
+            ->with([
+                'teacher.user:id,name',
+                'classRoom:id,name,section',
+                'subject:id,name',
+                'createdBy:id,name',
+                'attachments:id,daily_diary_id,file_path,file_name',
+            ])
+            ->where('session', (string) $normalized['session'])
+            ->when($hostelClassIds !== [], fn ($query) => $query->whereIn('class_id', $hostelClassIds))
+            ->when($hostelClassIds === [], fn ($query) => $query->whereRaw('1 = 0'))
+            ->when(isset($normalized['teacher_id']) && $normalized['teacher_id'] !== null, function ($query) use ($normalized): void {
+                $query->where('teacher_id', (int) $normalized['teacher_id']);
+            })
+            ->when(isset($normalized['class_id']) && $normalized['class_id'] !== null, function ($query) use ($normalized): void {
+                $query->where('class_id', (int) $normalized['class_id']);
+            })
+            ->when(isset($normalized['subject_id']) && $normalized['subject_id'] !== null, function ($query) use ($normalized): void {
+                $query->where('subject_id', (int) $normalized['subject_id']);
+            })
+            ->when(isset($normalized['is_published']) && $normalized['is_published'] !== null, function ($query) use ($normalized): void {
+                $query->where('is_published', (bool) $normalized['is_published']);
+            })
+            ->when(isset($normalized['diary_date']) && $normalized['diary_date'] !== null, function ($query) use ($normalized): void {
+                $query->whereDate('diary_date', (string) $normalized['diary_date']);
+            })
+            ->when(isset($normalized['date_from']) && $normalized['date_from'] !== null, function ($query) use ($normalized): void {
+                $query->whereDate('diary_date', '>=', (string) $normalized['date_from']);
+            })
+            ->when(isset($normalized['date_to']) && $normalized['date_to'] !== null, function ($query) use ($normalized): void {
+                $query->whereDate('diary_date', '<=', (string) $normalized['date_to']);
+            })
+            ->orderByDesc('diary_date')
+            ->orderBy('class_id')
+            ->orderBy('subject_id')
+            ->orderByDesc('updated_at')
+            ->paginate(25)
+            ->withQueryString();
+
+        return [
+            'entries' => $entries,
+            'filters' => $normalized,
+            'sessions' => $this->principalSessions(),
+            'teachers' => $this->wardenTeacherOptions((string) $normalized['session'], $hostelClassIds),
+            'classes' => $this->wardenClassOptions((string) $normalized['session'], $hostelClassIds),
+            'subjects' => $this->wardenSubjectOptions((string) $normalized['session'], $hostelClassIds),
+        ];
+    }
+
+    public function getDiaryForWarden(DailyDiary $dailyDiary, User $user): DailyDiary
+    {
+        $allowedClassIds = Student::query()
+            ->forWarden($user)
+            ->distinct()
+            ->pluck('class_id')
+            ->map(fn ($id): int => (int) $id)
+            ->values()
+            ->all();
+
+        if (! in_array((int) $dailyDiary->class_id, $allowedClassIds, true)) {
+            throw new RuntimeException('You are not allowed to access this diary entry.');
+        }
+
+        return $dailyDiary->load([
+            'teacher.user:id,name',
+            'classRoom:id,name,section',
+            'subject:id,name',
+            'createdBy:id,name',
+            'attachments:id,daily_diary_id,file_path,file_name,created_at',
+        ]);
+    }
+
     public function teacherCanPostDiary(int $teacherId, int $classId, int $subjectId, string $session): bool
     {
         return TeacherAssignment::query()
@@ -882,6 +980,79 @@ class DailyDiaryService
                 return [
                     'id' => (int) $assignment->subject_id,
                     'name' => (string) ($assignment->subject?->name ?? 'Subject'),
+                ];
+            })
+            ->unique('id')
+            ->sortBy('name')
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param array<int, int> $classIds
+     * @return array<int, array{id:int,name:string,teacher_code:string}>
+     */
+    private function wardenTeacherOptions(string $session, array $classIds): array
+    {
+        return DailyDiary::query()
+            ->with('teacher.user:id,name')
+            ->where('session', $session)
+            ->when($classIds !== [], fn ($query) => $query->whereIn('class_id', $classIds))
+            ->when($classIds === [], fn ($query) => $query->whereRaw('1 = 0'))
+            ->get(['teacher_id'])
+            ->map(function (DailyDiary $diary): array {
+                return [
+                    'id' => (int) $diary->teacher_id,
+                    'name' => (string) ($diary->teacher?->user?->name ?? 'Teacher'),
+                    'teacher_code' => (string) ($diary->teacher?->teacher_id ?? ''),
+                ];
+            })
+            ->unique('id')
+            ->sortBy('name')
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param array<int, int> $classIds
+     * @return array<int, array{id:int,name:string}>
+     */
+    private function wardenClassOptions(string $session, array $classIds): array
+    {
+        return DailyDiary::query()
+            ->with('classRoom:id,name,section')
+            ->where('session', $session)
+            ->when($classIds !== [], fn ($query) => $query->whereIn('class_id', $classIds))
+            ->when($classIds === [], fn ($query) => $query->whereRaw('1 = 0'))
+            ->get(['class_id'])
+            ->map(function (DailyDiary $diary): array {
+                return [
+                    'id' => (int) $diary->class_id,
+                    'name' => trim((string) ($diary->classRoom?->name ?? '').' '.(string) ($diary->classRoom?->section ?? '')),
+                ];
+            })
+            ->unique('id')
+            ->sortBy('name')
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param array<int, int> $classIds
+     * @return array<int, array{id:int,name:string}>
+     */
+    private function wardenSubjectOptions(string $session, array $classIds): array
+    {
+        return DailyDiary::query()
+            ->with('subject:id,name')
+            ->where('session', $session)
+            ->when($classIds !== [], fn ($query) => $query->whereIn('class_id', $classIds))
+            ->when($classIds === [], fn ($query) => $query->whereRaw('1 = 0'))
+            ->get(['subject_id'])
+            ->map(function (DailyDiary $diary): array {
+                return [
+                    'id' => (int) $diary->subject_id,
+                    'name' => (string) ($diary->subject?->name ?? 'Subject'),
                 ];
             })
             ->unique('id')

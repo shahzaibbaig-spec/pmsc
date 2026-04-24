@@ -6,7 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Warden\WardenDisciplineFilterRequest;
 use App\Models\DisciplineComplaint;
 use App\Services\WardenDisciplineService;
+use Illuminate\Http\Request;
 use Illuminate\View\View;
+use RuntimeException;
 
 class WardenDisciplineController extends Controller
 {
@@ -17,15 +19,22 @@ class WardenDisciplineController extends Controller
 
     public function index(WardenDisciplineFilterRequest $request): View
     {
-        $reportData = $this->wardenDisciplineService->getReports($request->validated());
+        $reportData = $this->wardenDisciplineService->getReports(
+            $request->validated(),
+            $request->user()
+        );
 
         return view('warden.discipline-reports.index', $reportData);
     }
 
-    public function show(DisciplineComplaint $report): View
+    public function show(DisciplineComplaint $report, Request $request): View
     {
-        return view('warden.discipline-reports.show', [
-            'report' => $this->wardenDisciplineService->getReportDetail($report),
-        ]);
+        try {
+            $report = $this->wardenDisciplineService->getReportDetail($report, $request->user());
+        } catch (RuntimeException $exception) {
+            abort(403, $exception->getMessage());
+        }
+
+        return view('warden.discipline-reports.show', ['report' => $report]);
     }
 }

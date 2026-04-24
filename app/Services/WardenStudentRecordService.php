@@ -9,8 +9,10 @@ use App\Models\Student;
 use App\Models\StudentAttendance;
 use App\Models\StudentClassHistory;
 use App\Models\StudentResult;
+use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Carbon;
+use RuntimeException;
 
 class WardenStudentRecordService
 {
@@ -29,11 +31,12 @@ class WardenStudentRecordService
      *     sessions:array<int, string>
      * }
      */
-    public function getStudents(array $filters): array
+    public function getStudents(array $filters, User $user): array
     {
         $normalized = $this->normalizeFilters($filters);
 
         $students = Student::query()
+            ->forWarden($user)
             ->with('classRoom:id,name,section')
             ->when($normalized['search'] !== null, function ($query) use ($normalized): void {
                 $search = (string) $normalized['search'];
@@ -67,7 +70,7 @@ class WardenStudentRecordService
         return [
             'students' => $students,
             'filters' => $normalized,
-            'classes' => $this->classOptions(),
+            'classes' => $this->classOptions($user),
             'sessions' => $this->sessionOptions(),
         ];
     }
@@ -85,11 +88,25 @@ class WardenStudentRecordService
      *     discipline_summary:array<string, mixed>
      * }
      */
-    public function getStudentRecord(Student $student, ?string $session = null): array
+    public function getStudentRecord(Student $student, ?string $session = null, ?User $user = null): array
     {
+        $user = $user ?? auth()->user();
+        if (! $user instanceof User) {
+            throw new RuntimeException('Authenticated user context is required.');
+        }
+
+        $isVisibleToWarden = Student::query()
+            ->forWarden($user)
+            ->whereKey((int) $student->id)
+            ->exists();
+
+        if (! $isVisibleToWarden) {
+            throw new RuntimeException('You are not allowed to access this student profile.');
+        }
+
         $student->load('classRoom:id,name,section');
 
-        $sessions = $this->studentSessionOptions((int) $student->id);
+        $sessions = $this->studentSessionOptions((int) $student->id, $user);
         $selectedSession = $this->resolveRequestedSession($session, $sessions);
         [$fromDate, $toDate] = $this->sessionDateRange($selectedSession);
 
@@ -147,9 +164,19 @@ class WardenStudentRecordService
     /**
      * @return array<int, array{id:int,name:string}>
      */
-    private function classOptions(): array
+    private function classOptions(User $user): array
     {
+        $classIds = Student::query()
+            ->forWarden($user)
+            ->distinct()
+            ->pluck('class_id')
+            ->map(fn ($id): int => (int) $id)
+            ->values()
+            ->all();
+
         return SchoolClass::query()
+            ->when($classIds !== [], fn ($query) => $query->whereIn('id', $classIds))
+            ->when($classIds === [], fn ($query) => $query->whereRaw('1 = 0'))
             ->orderBy('name')
             ->orderBy('section')
             ->get(['id', 'name', 'section'])
@@ -206,9 +233,10 @@ class WardenStudentRecordService
     /**
      * @return array<int, string>
      */
-    private function studentSessionOptions(int $studentId): array
+    private function studentSessionOptions(int $studentId, User $user): array
     {
         $student = Student::query()
+            ->forWarden($user)
             ->whereKey($studentId)
             ->with([
                 'subjectMatrixAssignments:id,student_id,session',

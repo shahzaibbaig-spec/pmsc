@@ -33,14 +33,14 @@ class HostelRoomAllocationController extends Controller
             'per_page' => ['nullable', 'integer', 'min:10', 'max:100'],
         ]);
 
-        $payload = $this->allocationService->getAllocationList($filters);
+        $payload = $this->allocationService->getAllocationList($filters, $request->user());
 
         return view('warden.hostel.allocations.index', $payload);
     }
 
-    public function create(): View
+    public function create(Request $request): View
     {
-        $options = $this->allocationService->getCreateFormOptions();
+        $options = $this->allocationService->getCreateFormOptions($request->user());
 
         return view('warden.hostel.allocations.create', $options);
     }
@@ -52,7 +52,7 @@ class HostelRoomAllocationController extends Controller
                 (int) $request->integer('student_id'),
                 (int) $request->integer('hostel_room_id'),
                 $request->validated(),
-                (int) $request->user()->id
+                $request->user()
             );
         } catch (RuntimeException $exception) {
             return back()
@@ -65,10 +65,10 @@ class HostelRoomAllocationController extends Controller
             ->with('success', 'Student allocated to hostel room successfully.');
     }
 
-    public function editShift(Student $student): View
+    public function editShift(Student $student, Request $request): View
     {
         try {
-            $options = $this->allocationService->getShiftFormOptions((int) $student->id);
+            $options = $this->allocationService->getShiftFormOptions((int) $student->id, $request->user());
         } catch (RuntimeException $exception) {
             abort(404, $exception->getMessage());
         }
@@ -87,7 +87,7 @@ class HostelRoomAllocationController extends Controller
                 (int) $student->id,
                 (int) $request->integer('hostel_room_id'),
                 $request->validated(),
-                (int) $request->user()->id
+                $request->user()
             );
         } catch (RuntimeException $exception) {
             return back()
@@ -112,7 +112,7 @@ class HostelRoomAllocationController extends Controller
                 (int) $student->id,
                 (string) $validated['allocated_to'],
                 $validated['remarks'] ?? null,
-                (int) $request->user()->id
+                $request->user()
             );
         } catch (RuntimeException $exception) {
             return back()->withErrors(['allocation' => $exception->getMessage()]);
@@ -123,13 +123,19 @@ class HostelRoomAllocationController extends Controller
             ->with('success', 'Student room allocation closed successfully.');
     }
 
-    public function roomStudents(HostelRoom $room): View
+    public function roomStudents(HostelRoom $room, Request $request): View
     {
+        try {
+            $students = $this->allocationService->getRoomStudents((int) $room->id, $request->user());
+            $occupancy = $this->hostelRoomService->getRoomOccupancySummary((int) $room->id, $request->user());
+        } catch (RuntimeException $exception) {
+            abort(403, $exception->getMessage());
+        }
+
         return view('warden.hostel.rooms.students', [
             'room' => $room,
-            'students' => $this->allocationService->getRoomStudents((int) $room->id),
-            'occupancy' => $this->hostelRoomService->getRoomOccupancySummary((int) $room->id),
+            'students' => $students,
+            'occupancy' => $occupancy,
         ]);
     }
 }
-

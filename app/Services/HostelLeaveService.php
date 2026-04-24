@@ -7,6 +7,7 @@ use App\Models\HostelRoom;
 use App\Models\HostelRoomAllocation;
 use App\Models\SchoolClass;
 use App\Models\Student;
+use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
@@ -15,8 +16,9 @@ use RuntimeException;
 
 class HostelLeaveService
 {
-    public function createLeaveRequest(array $data, int $userId): HostelLeaveRequest
+    public function createLeaveRequest(array $data, ?User $user = null): HostelLeaveRequest
     {
+        $user = $this->resolveUser($user);
         $studentId = (int) ($data['student_id'] ?? 0);
         $leaveFrom = Carbon::parse((string) ($data['leave_from'] ?? now()))->toDateTimeString();
         $leaveTo = Carbon::parse((string) ($data['leave_to'] ?? now()))->toDateTimeString();
@@ -31,15 +33,17 @@ class HostelLeaveService
             throw new RuntimeException('Leave reason is required.');
         }
 
-        return DB::transaction(function () use ($studentId, $leaveFrom, $leaveTo, $reason, $remarks, $userId, $data): HostelLeaveRequest {
+        return DB::transaction(function () use ($studentId, $leaveFrom, $leaveTo, $reason, $remarks, $user, $data): HostelLeaveRequest {
             $student = Student::query()->findOrFail($studentId);
+            $this->assertStudentVisibleToWarden($student, $user);
 
             $roomId = isset($data['hostel_room_id']) && $data['hostel_room_id'] !== ''
                 ? (int) $data['hostel_room_id']
                 : $this->activeRoomIdForStudent((int) $student->id);
 
             if ($roomId !== null) {
-                HostelRoom::query()->findOrFail($roomId);
+                $room = HostelRoom::query()->findOrFail($roomId);
+                $this->assertRoomVisibleToWarden($room, $user);
             }
 
             return HostelLeaveRequest::query()->create([
@@ -49,7 +53,7 @@ class HostelLeaveService
                 'leave_to' => $leaveTo,
                 'reason' => $reason,
                 'status' => HostelLeaveRequest::STATUS_PENDING,
-                'requested_by' => $userId,
+                'requested_by' => (int) $user->id,
                 'remarks' => $remarks,
             ])->load([
                 'student:id,name,student_id,class_id',
@@ -59,12 +63,15 @@ class HostelLeaveService
         });
     }
 
-    public function approveLeave(int $leaveId, int $userId, ?string $remarks = null): void
+    public function approveLeave(int $leaveId, ?User $user = null, ?string $remarks = null): void
     {
-        DB::transaction(function () use ($leaveId, $userId, $remarks): void {
+        $user = $this->resolveUser($user);
+
+        DB::transaction(function () use ($leaveId, $user, $remarks): void {
             $leave = HostelLeaveRequest::query()
                 ->lockForUpdate()
                 ->findOrFail($leaveId);
+            $this->assertLeaveVisibleToWarden($leave, $user);
 
             if ($leave->status !== HostelLeaveRequest::STATUS_PENDING) {
                 throw new RuntimeException('Only pending leave requests can be approved.');
@@ -72,19 +79,22 @@ class HostelLeaveService
 
             $leave->forceFill([
                 'status' => HostelLeaveRequest::STATUS_APPROVED,
-                'approved_by' => $userId,
+                'approved_by' => (int) $user->id,
                 'approved_at' => now(),
                 'remarks' => $this->mergeRemarks($leave->remarks, $remarks),
             ])->save();
         });
     }
 
-    public function rejectLeave(int $leaveId, int $userId, ?string $remarks = null): void
+    public function rejectLeave(int $leaveId, ?User $user = null, ?string $remarks = null): void
     {
-        DB::transaction(function () use ($leaveId, $userId, $remarks): void {
+        $user = $this->resolveUser($user);
+
+        DB::transaction(function () use ($leaveId, $user, $remarks): void {
             $leave = HostelLeaveRequest::query()
                 ->lockForUpdate()
                 ->findOrFail($leaveId);
+            $this->assertLeaveVisibleToWarden($leave, $user);
 
             if ($leave->status !== HostelLeaveRequest::STATUS_PENDING) {
                 throw new RuntimeException('Only pending leave requests can be rejected.');
@@ -92,19 +102,22 @@ class HostelLeaveService
 
             $leave->forceFill([
                 'status' => HostelLeaveRequest::STATUS_REJECTED,
-                'approved_by' => $userId,
+                'approved_by' => (int) $user->id,
                 'approved_at' => now(),
                 'remarks' => $this->mergeRemarks($leave->remarks, $remarks),
             ])->save();
         });
     }
 
-    public function markReturned(int $leaveId, int $userId, ?string $remarks = null): void
+    public function markReturned(int $leaveId, ?User $user = null, ?string $remarks = null): void
     {
-        DB::transaction(function () use ($leaveId, $userId, $remarks): void {
+        $user = $this->resolveUser($user);
+
+        DB::transaction(function () use ($leaveId, $user, $remarks): void {
             $leave = HostelLeaveRequest::query()
                 ->lockForUpdate()
                 ->findOrFail($leaveId);
+            $this->assertLeaveVisibleToWarden($leave, $user);
 
             if ($leave->status !== HostelLeaveRequest::STATUS_APPROVED) {
                 throw new RuntimeException('Only approved leave requests can be marked as returned.');
@@ -113,7 +126,7 @@ class HostelLeaveService
             $leave->forceFill([
                 'status' => HostelLeaveRequest::STATUS_RETURNED,
                 'returned_at' => now(),
-                'approved_by' => $leave->approved_by ?: $userId,
+                'approved_by' => $leave->approved_by ?: (int) $user->id,
                 'remarks' => $this->mergeRemarks($leave->remarks, $remarks),
             ])->save();
         });
@@ -130,11 +143,14 @@ class HostelLeaveService
      *     statuses:array<int, string>
      * }
      */
-    public function getLeaveSummary(array $filters = []): array
+    public function getLeaveSummary(array $filters = [], ?User $user = null): array
     {
+        $user = $this->resolveUser($user);
         $normalized = $this->normalizeFilters($filters);
+        $classIds = $this->wardenClassIds($user);
 
         $leaves = HostelLeaveRequest::query()
+            ->forWarden($user)
             ->with([
                 'student:id,name,student_id,class_id',
                 'student.classRoom:id,name,section',
@@ -173,6 +189,7 @@ class HostelLeaveService
             'leaves' => $leaves,
             'filters' => $normalized,
             'students' => Student::query()
+                ->forWarden($user)
                 ->orderBy('name')
                 ->limit(500)
                 ->get(['id', 'name', 'student_id'])
@@ -183,6 +200,8 @@ class HostelLeaveService
                 ->values()
                 ->all(),
             'classes' => SchoolClass::query()
+                ->when($classIds !== [], fn (Builder $query) => $query->whereIn('id', $classIds))
+                ->when($classIds === [], fn (Builder $query) => $query->whereRaw('1 = 0'))
                 ->orderBy('name')
                 ->orderBy('section')
                 ->get(['id', 'name', 'section'])
@@ -193,6 +212,7 @@ class HostelLeaveService
                 ->values()
                 ->all(),
             'rooms' => HostelRoom::query()
+                ->forWarden($user)
                 ->orderBy('floor_number')
                 ->orderBy('room_name')
                 ->get(['id', 'room_name', 'floor_number'])
@@ -209,6 +229,20 @@ class HostelLeaveService
                 HostelLeaveRequest::STATUS_RETURNED,
             ],
         ];
+    }
+
+    public function getLeaveDetail(HostelLeaveRequest $leave, ?User $user = null): HostelLeaveRequest
+    {
+        $user = $this->resolveUser($user);
+        $this->assertLeaveVisibleToWarden($leave, $user);
+
+        return $leave->load([
+            'student:id,name,student_id,father_name,class_id',
+            'student.classRoom:id,name,section',
+            'hostelRoom:id,room_name,floor_number,hostel_id',
+            'requestedBy:id,name',
+            'approvedBy:id,name',
+        ]);
     }
 
     private function activeRoomIdForStudent(int $studentId): ?int
@@ -262,5 +296,82 @@ class HostelLeaveService
 
         return $existingValue.' | '.$incomingValue;
     }
-}
 
+    private function resolveUser(?User $user): User
+    {
+        $resolved = $user ?? auth()->user();
+
+        if (! $resolved instanceof User) {
+            throw new RuntimeException('Authenticated user context is required.');
+        }
+
+        return $resolved;
+    }
+
+    private function assertLeaveVisibleToWarden(HostelLeaveRequest $leave, User $user): void
+    {
+        if (! $user->isWarden()) {
+            return;
+        }
+
+        $hostelId = (int) ($user->hostel_id ?? 0);
+        $roomHostelId = (int) ($leave->hostelRoom?->hostel_id ?? 0);
+
+        if ($hostelId <= 0 || $roomHostelId !== $hostelId) {
+            $leave->loadMissing('hostelRoom:id,hostel_id');
+            $roomHostelId = (int) ($leave->hostelRoom?->hostel_id ?? 0);
+        }
+
+        if ($hostelId <= 0 || $roomHostelId !== $hostelId) {
+            throw new RuntimeException('You are not allowed to access this leave request.');
+        }
+    }
+
+    private function assertRoomVisibleToWarden(HostelRoom $room, User $user): void
+    {
+        if (! $user->isWarden()) {
+            return;
+        }
+
+        $hostelId = (int) ($user->hostel_id ?? 0);
+        if ($hostelId <= 0 || (int) ($room->hostel_id ?? 0) !== $hostelId) {
+            throw new RuntimeException('You are not allowed to use this hostel room.');
+        }
+    }
+
+    private function assertStudentVisibleToWarden(Student $student, User $user): void
+    {
+        if (! $user->isWarden()) {
+            return;
+        }
+
+        $hostelId = (int) ($user->hostel_id ?? 0);
+        if ($hostelId <= 0) {
+            throw new RuntimeException('Your warden account is not assigned to a hostel.');
+        }
+
+        $hasVisibleAllocation = HostelRoomAllocation::query()
+            ->where('student_id', (int) $student->id)
+            ->where('hostel_id', $hostelId)
+            ->active()
+            ->exists();
+
+        if (! $hasVisibleAllocation) {
+            throw new RuntimeException('Student is not allocated to your hostel.');
+        }
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    private function wardenClassIds(User $user): array
+    {
+        return Student::query()
+            ->forWarden($user)
+            ->distinct()
+            ->pluck('class_id')
+            ->map(fn ($id): int => (int) $id)
+            ->values()
+            ->all();
+    }
+}

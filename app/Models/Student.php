@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -21,6 +22,7 @@ class Student extends Model
         'class_id',
         'date_of_birth',
         'age',
+        'gender',
         'contact',
         'address',
         'photo_path',
@@ -224,7 +226,40 @@ class Student extends Model
     public function activeHostelRoomAllocation(): HasOne
     {
         return $this->hasOne(HostelRoomAllocation::class)
-            ->where('status', HostelRoomAllocation::STATUS_ACTIVE);
+            ->where(function (Builder $query): void {
+                $query->where('status', HostelRoomAllocation::STATUS_ACTIVE)
+                    ->orWhere('is_active', true);
+            });
+    }
+
+    public function hostelAllocation(): HasOne
+    {
+        return $this->hasOne(HostelRoomAllocation::class)
+            ->where(function (Builder $query): void {
+                $query->where('status', HostelRoomAllocation::STATUS_ACTIVE)
+                    ->orWhere('is_active', true);
+            });
+    }
+
+    public function scopeForWarden(Builder $query, User $user): Builder
+    {
+        if (! $user->isWarden()) {
+            return $query;
+        }
+
+        $hostelId = (int) ($user->hostel_id ?? 0);
+        if ($hostelId <= 0) {
+            return $query->whereRaw('1 = 0');
+        }
+
+        return $query->whereHas('hostelAllocation', function (Builder $allocationQuery) use ($hostelId): void {
+            $allocationQuery
+                ->where('hostel_id', $hostelId)
+                ->where(function (Builder $statusQuery): void {
+                    $statusQuery->where('status', HostelRoomAllocation::STATUS_ACTIVE)
+                        ->orWhere('is_active', true);
+                });
+        });
     }
 
     public function hostelLeaveRequests(): HasMany
@@ -235,5 +270,20 @@ class Student extends Model
     public function hostelNightAttendances(): HasMany
     {
         return $this->hasMany(HostelNightAttendance::class);
+    }
+
+    public function wardenAttendanceRows(): HasMany
+    {
+        return $this->hasMany(WardenAttendance::class);
+    }
+
+    public function wardenDisciplineLogs(): HasMany
+    {
+        return $this->hasMany(WardenDisciplineLog::class);
+    }
+
+    public function wardenHealthLogs(): HasMany
+    {
+        return $this->hasMany(WardenHealthLog::class);
     }
 }

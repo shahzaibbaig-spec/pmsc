@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\HostelRoom;
 use App\Models\HostelRoomAllocation;
+use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
@@ -11,12 +12,13 @@ use RuntimeException;
 
 class HostelRoomService
 {
-    public function createRoom(array $data, int $userId): HostelRoom
+    public function createRoom(array $data, User $user): HostelRoom
     {
-        $payload = $this->normalizeRoomPayload($data);
+        $payload = $this->normalizeRoomPayload($data, $user);
 
-        return DB::transaction(function () use ($payload, $userId): HostelRoom {
+        return DB::transaction(function () use ($payload, $user): HostelRoom {
             $exists = HostelRoom::query()
+                ->when(isset($payload['hostel_id']) && $payload['hostel_id'] !== null, fn (Builder $query) => $query->where('hostel_id', (int) $payload['hostel_id']))
                 ->where('room_name', $payload['room_name'])
                 ->where('floor_number', $payload['floor_number'])
                 ->lockForUpdate()
@@ -28,17 +30,19 @@ class HostelRoomService
 
             return HostelRoom::query()->create([
                 ...$payload,
-                'created_by' => $userId,
+                'created_by' => (int) $user->id,
             ]);
         });
     }
 
-    public function updateRoom(HostelRoom $room, array $data, int $userId): HostelRoom
+    public function updateRoom(HostelRoom $room, array $data, User $user): HostelRoom
     {
-        $payload = $this->normalizeRoomPayload($data);
+        $this->assertRoomAccessible($room, $user);
+        $payload = $this->normalizeRoomPayload($data, $user, $room);
 
-        return DB::transaction(function () use ($room, $payload, $userId): HostelRoom {
+        return DB::transaction(function () use ($room, $payload, $user): HostelRoom {
             $exists = HostelRoom::query()
+                ->when(isset($payload['hostel_id']) && $payload['hostel_id'] !== null, fn (Builder $query) => $query->where('hostel_id', (int) $payload['hostel_id']))
                 ->where('room_name', $payload['room_name'])
                 ->where('floor_number', $payload['floor_number'])
                 ->whereKeyNot($room->id)
@@ -51,7 +55,7 @@ class HostelRoomService
 
             $room->forceFill([
                 ...$payload,
-                'created_by' => $room->created_by ?: $userId,
+                'created_by' => $room->created_by ?: (int) $user->id,
             ])->save();
 
             return $room->refresh();
@@ -67,11 +71,13 @@ class HostelRoomService
      *     gender_options:array<int, string>
      * }
      */
-    public function getRoomList(array $filters = []): array
+    public function getRoomList(array $filters = [], ?User $user = null): array
     {
+        $user = $this->resolveUser($user);
         $normalized = $this->normalizeFilters($filters);
 
         $rooms = HostelRoom::query()
+            ->forWarden($user)
             ->withCount([
                 'activeAllocations as occupied_beds' => fn (Builder $query) => $query->where('status', HostelRoomAllocation::STATUS_ACTIVE),
             ])
@@ -95,6 +101,7 @@ class HostelRoomService
             'rooms' => $rooms,
             'filters' => $normalized,
             'floor_options' => HostelRoom::query()
+                ->forWarden($user)
                 ->select('floor_number')
                 ->distinct()
                 ->orderBy('floor_number')
@@ -103,6 +110,7 @@ class HostelRoomService
                 ->values()
                 ->all(),
             'gender_options' => HostelRoom::query()
+                ->forWarden($user)
                 ->select('gender')
                 ->whereNotNull('gender')
                 ->where('gender', '!=', '')
@@ -130,9 +138,11 @@ class HostelRoomService
      *     }>
      * }
      */
-    public function getRoomOccupancySummary(int $roomId): array
+    public function getRoomOccupancySummary(int $roomId, ?User $user = null): array
     {
+        $user = $this->resolveUser($user);
         $room = HostelRoom::query()
+            ->forWarden($user)
             ->with([
                 'activeAllocations.student:id,name,student_id,class_id',
                 'activeAllocations.student.classRoom:id,name,section',
@@ -178,7 +188,7 @@ class HostelRoomService
      *     is_active:bool
      * }
      */
-    private function normalizeRoomPayload(array $data): array
+    private function normalizeRoomPayload(array $data, User $user, ?HostelRoom $room = null): array
     {
         $roomName = trim((string) ($data['room_name'] ?? ''));
         if ($roomName === '') {
@@ -192,7 +202,20 @@ class HostelRoomService
 
         $capacity = max(1, (int) ($data['capacity'] ?? HostelRoom::DEFAULT_CAPACITY));
 
+        $hostelId = null;
+        if ($user->isWarden()) {
+            $hostelId = (int) ($user->hostel_id ?? 0);
+            if ($hostelId <= 0) {
+                throw new RuntimeException('Your warden account is not assigned to a hostel.');
+            }
+        } elseif (array_key_exists('hostel_id', $data) && $data['hostel_id'] !== null && $data['hostel_id'] !== '') {
+            $hostelId = (int) $data['hostel_id'];
+        } elseif ($room instanceof HostelRoom) {
+            $hostelId = $room->hostel_id !== null ? (int) $room->hostel_id : null;
+        }
+
         return [
+            'hostel_id' => $hostelId,
             'room_name' => $roomName,
             'floor_number' => $floorNumber,
             'capacity' => $capacity,
@@ -233,5 +256,27 @@ class HostelRoomService
 
         return $normalized !== '' ? $normalized : null;
     }
-}
 
+    private function resolveUser(?User $user): User
+    {
+        $resolved = $user ?? auth()->user();
+
+        if (! $resolved instanceof User) {
+            throw new RuntimeException('Authenticated user context is required.');
+        }
+
+        return $resolved;
+    }
+
+    private function assertRoomAccessible(HostelRoom $room, User $user): void
+    {
+        if (! $user->isWarden()) {
+            return;
+        }
+
+        $hostelId = (int) ($user->hostel_id ?? 0);
+        if ($hostelId <= 0 || (int) ($room->hostel_id ?? 0) !== $hostelId) {
+            throw new RuntimeException('You are not allowed to access this hostel room.');
+        }
+    }
+}

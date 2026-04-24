@@ -6,6 +6,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use NotificationChannels\WebPush\HasPushSubscriptions;
@@ -26,6 +27,7 @@ class User extends Authenticatable
         'email',
         'password',
         'status',
+        'hostel_id',
         'must_change_password',
         'password_changed_at',
     ];
@@ -52,12 +54,27 @@ class User extends Authenticatable
             'password' => 'hashed',
             'must_change_password' => 'boolean',
             'password_changed_at' => 'datetime',
+            'hostel_id' => 'integer',
         ];
     }
 
     public function teacherProfile(): HasOne
     {
         return $this->hasOne(Teacher::class);
+    }
+
+    public function hostel(): BelongsTo
+    {
+        return $this->belongsTo(Hostel::class);
+    }
+
+    public function isWarden(): bool
+    {
+        $legacyRole = strtolower(trim((string) ($this->role ?? '')));
+
+        return $legacyRole === 'warden'
+            || $this->hasRole('Warden')
+            || $this->hasRole('warden');
     }
 
     public function teacher(): HasOne
@@ -233,6 +250,11 @@ class User extends Authenticatable
     public function createdDailyDiaries(): HasMany
     {
         return $this->hasMany(DailyDiary::class, 'created_by');
+    }
+
+    public function wardenDailyReports(): HasMany
+    {
+        return $this->hasMany(WardenDailyReport::class, 'created_by');
     }
 
 }

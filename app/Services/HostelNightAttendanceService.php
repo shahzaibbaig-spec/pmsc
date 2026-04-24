@@ -8,6 +8,7 @@ use App\Models\HostelRoom;
 use App\Models\HostelRoomAllocation;
 use App\Models\SchoolClass;
 use App\Models\Student;
+use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
@@ -25,11 +26,12 @@ class HostelNightAttendanceService
      *     updated:int
      * }
      */
-    public function markAttendance(array $rows, string $date, int $userId): array
+    public function markAttendance(array $rows, string $date, ?User $user = null): array
     {
+        $user = $this->resolveUser($user);
         $attendanceDate = Carbon::parse($date)->toDateString();
 
-        return DB::transaction(function () use ($rows, $attendanceDate, $userId): array {
+        return DB::transaction(function () use ($rows, $attendanceDate, $user): array {
             $created = 0;
             $updated = 0;
 
@@ -39,7 +41,8 @@ class HostelNightAttendanceService
                     throw new RuntimeException('Student ID is required for each attendance row.');
                 }
 
-                Student::query()->findOrFail($studentId);
+                $student = Student::query()->findOrFail($studentId);
+                $this->assertStudentVisibleToWarden($student, $user);
 
                 $status = trim((string) ($row['status'] ?? HostelNightAttendance::STATUS_PRESENT));
                 $this->ensureValidStatus($status);
@@ -56,7 +59,8 @@ class HostelNightAttendanceService
                     : $this->activeRoomIdForStudent($studentId);
 
                 if ($roomId !== null) {
-                    HostelRoom::query()->findOrFail($roomId);
+                    $room = HostelRoom::query()->findOrFail($roomId);
+                    $this->assertRoomVisibleToWarden($room, $user);
                 }
 
                 $attendance = HostelNightAttendance::query()->updateOrCreate(
@@ -68,7 +72,7 @@ class HostelNightAttendanceService
                         'hostel_room_id' => $roomId,
                         'status' => $status,
                         'remarks' => $this->nullableTrimmedString($row['remarks'] ?? null),
-                        'marked_by' => $userId,
+                        'marked_by' => (int) $user->id,
                     ]
                 );
 
@@ -110,12 +114,14 @@ class HostelNightAttendanceService
      *     statuses:array<int, string>
      * }
      */
-    public function getNightAttendanceByDate(string $date, array $filters = []): array
+    public function getNightAttendanceByDate(string $date, array $filters = [], ?User $user = null): array
     {
+        $user = $this->resolveUser($user);
         $attendanceDate = Carbon::parse($date)->toDateString();
         $normalized = $this->normalizeFilters($filters);
 
         $attendanceRows = HostelNightAttendance::query()
+            ->forWarden($user)
             ->with([
                 'student:id,name,student_id,class_id',
                 'student.classRoom:id,name,section',
@@ -149,10 +155,10 @@ class HostelNightAttendanceService
         return [
             'attendance_date' => $attendanceDate,
             'attendance_rows' => $attendanceRows,
-            'hostel_students' => $this->hostelStudentsForDate($attendanceDate, $normalized),
+            'hostel_students' => $this->hostelStudentsForDate($attendanceDate, $normalized, $user),
             'filters' => $normalized,
-            'rooms' => $this->roomOptions(),
-            'classes' => $this->classOptions(),
+            'rooms' => $this->roomOptions($user),
+            'classes' => $this->classOptions($user),
             'statuses' => [
                 HostelNightAttendance::STATUS_PRESENT,
                 HostelNightAttendance::STATUS_ABSENT,
@@ -172,9 +178,12 @@ class HostelNightAttendanceService
      *     marked_by:string
      * }>
      */
-    public function getStudentNightAttendanceHistory(int $studentId): array
+    public function getStudentNightAttendanceHistory(int $studentId, ?User $user = null): array
     {
+        $user = $this->resolveUser($user);
+
         return HostelNightAttendance::query()
+            ->forWarden($user)
             ->with([
                 'hostelRoom:id,room_name,floor_number',
                 'markedBy:id,name',
@@ -212,9 +221,10 @@ class HostelNightAttendanceService
      *     existing_remarks:?string
      * }>
      */
-    private function hostelStudentsForDate(string $date, array $filters): array
+    private function hostelStudentsForDate(string $date, array $filters, User $user): array
     {
         $rows = HostelRoomAllocation::query()
+            ->forWarden($user)
             ->with([
                 'student:id,name,student_id,class_id',
                 'student.classRoom:id,name,section',
@@ -240,6 +250,7 @@ class HostelNightAttendanceService
             ->get();
 
         $existingMap = HostelNightAttendance::query()
+            ->forWarden($user)
             ->whereDate('attendance_date', $date)
             ->whereIn('student_id', $rows->pluck('student_id')->values()->all())
             ->get(['student_id', 'status', 'remarks'])
@@ -268,9 +279,10 @@ class HostelNightAttendanceService
     /**
      * @return array<int, array{id:int,name:string}>
      */
-    private function roomOptions(): array
+    private function roomOptions(User $user): array
     {
         return HostelRoom::query()
+            ->forWarden($user)
             ->orderBy('floor_number')
             ->orderBy('room_name')
             ->get(['id', 'room_name', 'floor_number'])
@@ -285,9 +297,19 @@ class HostelNightAttendanceService
     /**
      * @return array<int, array{id:int,name:string}>
      */
-    private function classOptions(): array
+    private function classOptions(User $user): array
     {
+        $classIds = Student::query()
+            ->forWarden($user)
+            ->distinct()
+            ->pluck('class_id')
+            ->map(fn ($id): int => (int) $id)
+            ->values()
+            ->all();
+
         return SchoolClass::query()
+            ->when($classIds !== [], fn (Builder $query) => $query->whereIn('id', $classIds))
+            ->when($classIds === [], fn (Builder $query) => $query->whereRaw('1 = 0'))
             ->orderBy('name')
             ->orderBy('section')
             ->get(['id', 'name', 'section'])
@@ -364,5 +386,49 @@ class HostelNightAttendanceService
 
         return $normalized !== '' ? $normalized : null;
     }
-}
 
+    private function resolveUser(?User $user): User
+    {
+        $resolved = $user ?? auth()->user();
+
+        if (! $resolved instanceof User) {
+            throw new RuntimeException('Authenticated user context is required.');
+        }
+
+        return $resolved;
+    }
+
+    private function assertRoomVisibleToWarden(HostelRoom $room, User $user): void
+    {
+        if (! $user->isWarden()) {
+            return;
+        }
+
+        $hostelId = (int) ($user->hostel_id ?? 0);
+        if ($hostelId <= 0 || (int) ($room->hostel_id ?? 0) !== $hostelId) {
+            throw new RuntimeException('You are not allowed to use this hostel room.');
+        }
+    }
+
+    private function assertStudentVisibleToWarden(Student $student, User $user): void
+    {
+        if (! $user->isWarden()) {
+            return;
+        }
+
+        $hostelId = (int) ($user->hostel_id ?? 0);
+        if ($hostelId <= 0) {
+            throw new RuntimeException('Your warden account is not assigned to a hostel.');
+        }
+
+        $hasVisibleAllocation = HostelRoomAllocation::query()
+            ->where('student_id', (int) $student->id)
+            ->where('hostel_id', $hostelId)
+            ->active()
+            ->exists();
+
+        if (! $hasVisibleAllocation) {
+            throw new RuntimeException('Student is not allocated to your hostel.');
+        }
+    }
+}

@@ -31,16 +31,16 @@ class HostelLeaveController extends Controller
             'per_page' => ['nullable', 'integer', 'min:10', 'max:100'],
         ]);
 
-        $payload = $this->hostelLeaveService->getLeaveSummary($filters);
+        $payload = $this->hostelLeaveService->getLeaveSummary($filters, $request->user());
 
         return view('warden.hostel.leaves.index', $payload);
     }
 
-    public function create(): View
+    public function create(Request $request): View
     {
         $payload = $this->hostelLeaveService->getLeaveSummary([
             'per_page' => 10,
-        ]);
+        ], $request->user());
 
         return view('warden.hostel.leaves.create', [
             'students' => $payload['students'],
@@ -53,7 +53,7 @@ class HostelLeaveController extends Controller
         try {
             $this->hostelLeaveService->createLeaveRequest(
                 $request->validated(),
-                (int) $request->user()->id
+                $request->user()
             );
         } catch (RuntimeException $exception) {
             return back()
@@ -66,15 +66,13 @@ class HostelLeaveController extends Controller
             ->with('success', 'Hostel leave request recorded successfully.');
     }
 
-    public function show(HostelLeaveRequest $leave): View
+    public function show(HostelLeaveRequest $leave, Request $request): View
     {
-        $leave->load([
-            'student:id,name,student_id,father_name,class_id',
-            'student.classRoom:id,name,section',
-            'hostelRoom:id,room_name,floor_number',
-            'requestedBy:id,name',
-            'approvedBy:id,name',
-        ]);
+        try {
+            $leave = $this->hostelLeaveService->getLeaveDetail($leave, $request->user());
+        } catch (RuntimeException $exception) {
+            abort(403, $exception->getMessage());
+        }
 
         return view('warden.hostel.leaves.show', [
             'leave' => $leave,
@@ -90,7 +88,7 @@ class HostelLeaveController extends Controller
         try {
             $this->hostelLeaveService->approveLeave(
                 (int) $leave->id,
-                (int) $request->user()->id,
+                $request->user(),
                 $validated['remarks'] ?? null
             );
         } catch (RuntimeException $exception) {
@@ -109,7 +107,7 @@ class HostelLeaveController extends Controller
         try {
             $this->hostelLeaveService->rejectLeave(
                 (int) $leave->id,
-                (int) $request->user()->id,
+                $request->user(),
                 $validated['remarks'] ?? null
             );
         } catch (RuntimeException $exception) {
@@ -128,7 +126,7 @@ class HostelLeaveController extends Controller
         try {
             $this->hostelLeaveService->markReturned(
                 (int) $leave->id,
-                (int) $request->user()->id,
+                $request->user(),
                 $validated['remarks'] ?? null
             );
         } catch (RuntimeException $exception) {
@@ -138,4 +136,3 @@ class HostelLeaveController extends Controller
         return back()->with('success', 'Student marked as returned to hostel.');
     }
 }
-

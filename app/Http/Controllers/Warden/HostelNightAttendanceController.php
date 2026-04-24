@@ -35,7 +35,7 @@ class HostelNightAttendanceController extends Controller
             'class_id' => $validated['class_id'] ?? null,
             'status' => $validated['status'] ?? null,
             'per_page' => $validated['per_page'] ?? null,
-        ]);
+        ], $request->user());
 
         return view('warden.hostel.night-attendance.index', $payload);
     }
@@ -55,7 +55,7 @@ class HostelNightAttendanceController extends Controller
             'room_id' => $validated['room_id'] ?? null,
             'class_id' => $validated['class_id'] ?? null,
             'per_page' => 100,
-        ]);
+        ], $request->user());
 
         return view('warden.hostel.night-attendance.create', $payload);
     }
@@ -68,7 +68,7 @@ class HostelNightAttendanceController extends Controller
             $summary = $this->nightAttendanceService->markAttendance(
                 $validated['rows'],
                 (string) $validated['attendance_date'],
-                (int) $request->user()->id
+                $request->user()
             );
         } catch (RuntimeException $exception) {
             return back()
@@ -86,4 +86,3 @@ class HostelNightAttendanceController extends Controller
             );
     }
 }
-

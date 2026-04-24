@@ -6,7 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Warden\WardenDailyDiaryFilterRequest;
 use App\Models\DailyDiary;
 use App\Services\DailyDiaryService;
+use Illuminate\Http\Request;
 use Illuminate\View\View;
+use RuntimeException;
 
 class WardenDailyDiaryController extends Controller
 {
@@ -18,7 +20,7 @@ class WardenDailyDiaryController extends Controller
     public function index(WardenDailyDiaryFilterRequest $request): View
     {
         $validated = $request->validated();
-        $result = $this->dailyDiaryService->getPrincipalDiaryEntries([
+        $result = $this->dailyDiaryService->getWardenDiaryEntries($request->user(), [
             'session' => $validated['session'] ?? null,
             'diary_date' => $validated['date'] ?? null,
             'class_id' => $validated['class_id'] ?? null,
@@ -44,15 +46,13 @@ class WardenDailyDiaryController extends Controller
         ]);
     }
 
-    public function show(DailyDiary $dailyDiary): View
+    public function show(DailyDiary $dailyDiary, Request $request): View
     {
-        $dailyDiary->load([
-            'teacher.user:id,name',
-            'classRoom:id,name,section',
-            'subject:id,name',
-            'createdBy:id,name',
-            'attachments:id,daily_diary_id,file_path,file_name,created_at',
-        ]);
+        try {
+            $dailyDiary = $this->dailyDiaryService->getDiaryForWarden($dailyDiary, $request->user());
+        } catch (RuntimeException $exception) {
+            abort(403, $exception->getMessage());
+        }
 
         return view('warden.daily-diary.show', [
             'dailyDiary' => $dailyDiary,

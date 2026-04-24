@@ -6,6 +6,7 @@ use App\Models\HostelRoom;
 use App\Models\HostelRoomAllocation;
 use App\Models\SchoolClass;
 use App\Models\Student;
+use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
@@ -14,15 +15,18 @@ use RuntimeException;
 
 class HostelRoomAllocationService
 {
-    public function allocateStudentToRoom(int $studentId, int $roomId, array $data, int $userId): HostelRoomAllocation
+    public function allocateStudentToRoom(int $studentId, int $roomId, array $data, ?User $user = null): HostelRoomAllocation
     {
+        $user = $this->resolveUser($user);
         $allocatedFrom = $this->resolveDate($data['allocated_from'] ?? now()->toDateString());
+        $session = $this->resolveSession($data['session'] ?? null, $allocatedFrom);
         $remarks = $this->nullableTrimmedString($data['remarks'] ?? null);
 
-        return DB::transaction(function () use ($studentId, $roomId, $allocatedFrom, $remarks, $userId): HostelRoomAllocation {
+        return DB::transaction(function () use ($studentId, $roomId, $allocatedFrom, $session, $remarks, $user): HostelRoomAllocation {
             $student = Student::query()
-                ->select('id')
+                ->select('id', 'date_of_birth', 'age', 'gender')
                 ->findOrFail($studentId);
+            $this->assertStudentVisibleToWarden($student, $user);
 
             $activeAllocation = HostelRoomAllocation::query()
                 ->where('student_id', (int) $student->id)
@@ -37,17 +41,22 @@ class HostelRoomAllocationService
             $room = HostelRoom::query()
                 ->lockForUpdate()
                 ->findOrFail($roomId);
+            $this->assertRoomBelongsToWarden($room, $user);
 
             $this->ensureRoomCanReceiveStudent($room);
+            $this->ensureStudentMatchesHostelPolicy($student, $room);
 
             return HostelRoomAllocation::query()->create([
                 'hostel_room_id' => (int) $room->id,
+                'hostel_id' => (int) ($room->hostel_id ?? 0) ?: null,
                 'student_id' => (int) $student->id,
                 'allocated_from' => $allocatedFrom,
                 'allocated_to' => null,
+                'session' => $session,
                 'status' => HostelRoomAllocation::STATUS_ACTIVE,
+                'is_active' => true,
                 'remarks' => $remarks,
-                'allocated_by' => $userId,
+                'allocated_by' => (int) $user->id,
             ])->load([
                 'student:id,name,student_id,class_id',
                 'student.classRoom:id,name,section',
@@ -56,12 +65,14 @@ class HostelRoomAllocationService
         });
     }
 
-    public function shiftStudentRoom(int $studentId, int $newRoomId, array $data, int $userId): HostelRoomAllocation
+    public function shiftStudentRoom(int $studentId, int $newRoomId, array $data, ?User $user = null): HostelRoomAllocation
     {
+        $user = $this->resolveUser($user);
         $newAllocatedFrom = $this->resolveDate($data['allocated_from'] ?? now()->toDateString());
+        $session = $this->resolveSession($data['session'] ?? null, $newAllocatedFrom);
         $remarks = $this->nullableTrimmedString($data['remarks'] ?? null);
 
-        return DB::transaction(function () use ($studentId, $newRoomId, $newAllocatedFrom, $remarks, $userId): HostelRoomAllocation {
+        return DB::transaction(function () use ($studentId, $newRoomId, $newAllocatedFrom, $session, $remarks, $user): HostelRoomAllocation {
             $activeAllocation = HostelRoomAllocation::query()
                 ->where('student_id', $studentId)
                 ->active()
@@ -76,26 +87,38 @@ class HostelRoomAllocationService
                 throw new RuntimeException('Student is already allocated to this room.');
             }
 
+            $this->assertAllocationBelongsToWarden($activeAllocation, $user);
+
             $newRoom = HostelRoom::query()
                 ->lockForUpdate()
                 ->findOrFail($newRoomId);
+            $this->assertRoomBelongsToWarden($newRoom, $user);
 
             $this->ensureRoomCanReceiveStudent($newRoom);
+
+            $student = Student::query()
+                ->select('id', 'date_of_birth', 'age', 'gender')
+                ->findOrFail((int) $activeAllocation->student_id);
+            $this->ensureStudentMatchesHostelPolicy($student, $newRoom);
 
             $activeAllocation->forceFill([
                 'allocated_to' => $newAllocatedFrom,
                 'status' => HostelRoomAllocation::STATUS_SHIFTED,
+                'is_active' => false,
                 'remarks' => $this->appendShiftRemark($activeAllocation->remarks, $remarks),
             ])->save();
 
             return HostelRoomAllocation::query()->create([
                 'hostel_room_id' => (int) $newRoom->id,
+                'hostel_id' => (int) ($newRoom->hostel_id ?? 0) ?: null,
                 'student_id' => (int) $activeAllocation->student_id,
                 'allocated_from' => $newAllocatedFrom,
                 'allocated_to' => null,
+                'session' => $session,
                 'status' => HostelRoomAllocation::STATUS_ACTIVE,
+                'is_active' => true,
                 'remarks' => $remarks,
-                'allocated_by' => $userId,
+                'allocated_by' => (int) $user->id,
             ])->load([
                 'student:id,name,student_id,class_id',
                 'student.classRoom:id,name,section',
@@ -104,11 +127,12 @@ class HostelRoomAllocationService
         });
     }
 
-    public function removeStudentFromRoom(int $studentId, string $date, ?string $remarks, int $userId): void
+    public function removeStudentFromRoom(int $studentId, string $date, ?string $remarks, ?User $user = null): void
     {
+        $user = $this->resolveUser($user);
         $allocatedTo = $this->resolveDate($date);
 
-        DB::transaction(function () use ($studentId, $allocatedTo, $remarks, $userId): void {
+        DB::transaction(function () use ($studentId, $allocatedTo, $remarks, $user): void {
             $activeAllocation = HostelRoomAllocation::query()
                 ->where('student_id', $studentId)
                 ->active()
@@ -119,16 +143,19 @@ class HostelRoomAllocationService
                 throw new RuntimeException('No active room allocation exists for this student.');
             }
 
+            $this->assertAllocationBelongsToWarden($activeAllocation, $user);
+
             $note = $this->nullableTrimmedString($remarks);
             if ($note !== null) {
-                $note .= ' (closed by user #'.$userId.')';
+                $note .= ' (closed by user #'.$user->id.')';
             } else {
-                $note = 'Allocation closed by user #'.$userId.'.';
+                $note = 'Allocation closed by user #'.$user->id.'.';
             }
 
             $activeAllocation->forceFill([
                 'allocated_to' => $allocatedTo,
                 'status' => HostelRoomAllocation::STATUS_COMPLETED,
+                'is_active' => false,
                 'remarks' => $note,
             ])->save();
         });
@@ -140,8 +167,9 @@ class HostelRoomAllocationService
      *     rooms:array<int, array{id:int,name:string,capacity:int,occupied_beds:int,available_beds:int}>
      * }
      */
-    public function getCreateFormOptions(): array
+    public function getCreateFormOptions(?User $user = null): array
     {
+        $user = $this->resolveUser($user);
         $activeStudentIds = HostelRoomAllocation::query()
             ->active()
             ->pluck('student_id')
@@ -153,6 +181,16 @@ class HostelRoomAllocationService
             ->with('classRoom:id,name,section')
             ->orderBy('name')
             ->orderBy('student_id');
+
+        if ($user->isWarden()) {
+            $hostelId = (int) ($user->hostel_id ?? 0);
+            if ($hostelId <= 0) {
+                return [
+                    'students' => [],
+                    'rooms' => $this->activeRoomsWithOccupancy($user),
+                ];
+            }
+        }
 
         if ($activeStudentIds !== []) {
             $studentsQuery->whereNotIn('id', $activeStudentIds);
@@ -170,7 +208,7 @@ class HostelRoomAllocationService
             ->values()
             ->all();
 
-        $rooms = $this->activeRoomsWithOccupancy();
+        $rooms = $this->activeRoomsWithOccupancy($user);
 
         return [
             'students' => $students,
@@ -184,9 +222,11 @@ class HostelRoomAllocationService
      *     available_rooms:array<int, array{id:int,name:string,capacity:int,occupied_beds:int,available_beds:int}>
      * }
      */
-    public function getShiftFormOptions(int $studentId): array
+    public function getShiftFormOptions(int $studentId, ?User $user = null): array
     {
+        $user = $this->resolveUser($user);
         $currentAllocation = HostelRoomAllocation::query()
+            ->forWarden($user)
             ->with([
                 'student:id,name,student_id,class_id',
                 'student.classRoom:id,name,section',
@@ -200,7 +240,7 @@ class HostelRoomAllocationService
             throw new RuntimeException('No active room allocation exists for this student.');
         }
 
-        $availableRooms = collect($this->activeRoomsWithOccupancy())
+        $availableRooms = collect($this->activeRoomsWithOccupancy($user))
             ->reject(fn (array $room): bool => (int) $room['id'] === (int) $currentAllocation->hostel_room_id)
             ->values()
             ->all();
@@ -219,11 +259,20 @@ class HostelRoomAllocationService
      *     classes:array<int, array{id:int,name:string}>
      * }
      */
-    public function getAllocationList(array $filters = []): array
+    public function getAllocationList(array $filters = [], ?User $user = null): array
     {
+        $user = $this->resolveUser($user);
         $normalized = $this->normalizeFilters($filters);
+        $classIds = Student::query()
+            ->forWarden($user)
+            ->distinct()
+            ->pluck('class_id')
+            ->map(fn ($id): int => (int) $id)
+            ->values()
+            ->all();
 
         $allocations = HostelRoomAllocation::query()
+            ->forWarden($user)
             ->with([
                 'student:id,name,student_id,class_id,status',
                 'student.classRoom:id,name,section',
@@ -263,6 +312,7 @@ class HostelRoomAllocationService
             'allocations' => $allocations,
             'filters' => $normalized,
             'rooms' => HostelRoom::query()
+                ->forWarden($user)
                 ->orderBy('floor_number')
                 ->orderBy('room_name')
                 ->get(['id', 'room_name', 'floor_number'])
@@ -273,6 +323,8 @@ class HostelRoomAllocationService
                 ->values()
                 ->all(),
             'classes' => SchoolClass::query()
+                ->when($classIds !== [], fn (Builder $query) => $query->whereIn('id', $classIds))
+                ->when($classIds === [], fn (Builder $query) => $query->whereRaw('1 = 0'))
                 ->orderBy('name')
                 ->orderBy('section')
                 ->get(['id', 'name', 'section'])
@@ -298,9 +350,11 @@ class HostelRoomAllocationService
      *     remarks:?string
      * }|null
      */
-    public function getStudentRoomAllocation(int $studentId): ?array
+    public function getStudentRoomAllocation(int $studentId, ?User $user = null): ?array
     {
+        $user = $this->resolveUser($user);
         $allocation = HostelRoomAllocation::query()
+            ->forWarden($user)
             ->with([
                 'student:id,name,student_id,class_id',
                 'student.classRoom:id,name,section',
@@ -340,9 +394,12 @@ class HostelRoomAllocationService
      *     status:string
      * }>
      */
-    public function getRoomStudents(int $roomId): array
+    public function getRoomStudents(int $roomId, ?User $user = null): array
     {
+        $user = $this->resolveUser($user);
+
         return HostelRoomAllocation::query()
+            ->forWarden($user)
             ->with([
                 'student:id,name,student_id,class_id',
                 'student.classRoom:id,name,section',
@@ -436,9 +493,12 @@ class HostelRoomAllocationService
     /**
      * @return array<int, array{id:int,name:string,capacity:int,occupied_beds:int,available_beds:int}>
      */
-    private function activeRoomsWithOccupancy(): array
+    private function activeRoomsWithOccupancy(?User $user = null): array
     {
+        $user = $this->resolveUser($user);
+
         return HostelRoom::query()
+            ->forWarden($user)
             ->withCount([
                 'activeAllocations as occupied_beds' => fn (Builder $query) => $query->where('status', HostelRoomAllocation::STATUS_ACTIVE),
             ])
@@ -460,5 +520,139 @@ class HostelRoomAllocationService
             })
             ->values()
             ->all();
+    }
+
+    private function resolveUser(?User $user): User
+    {
+        $resolved = $user ?? auth()->user();
+
+        if (! $resolved instanceof User) {
+            throw new RuntimeException('Authenticated user context is required.');
+        }
+
+        return $resolved;
+    }
+
+    private function assertRoomBelongsToWarden(HostelRoom $room, User $user): void
+    {
+        if (! $user->isWarden()) {
+            return;
+        }
+
+        $hostelId = (int) ($user->hostel_id ?? 0);
+        if ($hostelId <= 0 || (int) ($room->hostel_id ?? 0) !== $hostelId) {
+            throw new RuntimeException('You are not allowed to manage this hostel room.');
+        }
+    }
+
+    private function assertAllocationBelongsToWarden(HostelRoomAllocation $allocation, User $user): void
+    {
+        if (! $user->isWarden()) {
+            return;
+        }
+
+        $hostelId = (int) ($user->hostel_id ?? 0);
+        if ($hostelId <= 0 || (int) ($allocation->hostel_id ?? 0) !== $hostelId) {
+            throw new RuntimeException('You are not allowed to access this hostel allocation.');
+        }
+    }
+
+    private function assertStudentVisibleToWarden(Student $student, User $user): void
+    {
+        if (! $user->isWarden()) {
+            return;
+        }
+
+        $hostelId = (int) ($user->hostel_id ?? 0);
+        if ($hostelId <= 0) {
+            throw new RuntimeException('Your warden account is not assigned to a hostel.');
+        }
+
+        $activeAllocation = HostelRoomAllocation::query()
+            ->select('hostel_id')
+            ->where('student_id', (int) $student->id)
+            ->active()
+            ->first();
+
+        if (
+            $activeAllocation instanceof HostelRoomAllocation
+            && (int) ($activeAllocation->hostel_id ?? 0) !== $hostelId
+        ) {
+            throw new RuntimeException('Student is currently allocated in another hostel.');
+        }
+    }
+
+    private function ensureStudentMatchesHostelPolicy(Student $student, HostelRoom $room): void
+    {
+        if ($room->hostel === null) {
+            $room->loadMissing('hostel:id,name');
+        }
+
+        $hostelName = trim((string) ($room->hostel?->name ?? ''));
+        if ($hostelName === '') {
+            return;
+        }
+
+        $gender = $this->normalizeGender($student->gender ?? null);
+        if ($gender === null) {
+            throw new RuntimeException('Student gender is required before hostel allocation.');
+        }
+
+        $age = null;
+        if ($student->date_of_birth !== null) {
+            $age = Carbon::parse((string) $student->date_of_birth)->age;
+        } elseif ($student->age !== null) {
+            $age = (int) $student->age;
+        }
+
+        if ($age === null) {
+            throw new RuntimeException('Student age or date of birth is required for hostel allocation.');
+        }
+
+        if ($hostelName === 'Fatimah House' && $gender === 'male' && $age >= 6) {
+            throw new RuntimeException('Boys 6+ cannot be assigned to Fatimah House.');
+        }
+
+        if ($hostelName === 'Jinnah House') {
+            if ($gender === 'female') {
+                throw new RuntimeException('Girls cannot be assigned to Jinnah House.');
+            }
+
+            if ($age < 6) {
+                throw new RuntimeException('Boys under 6 cannot be assigned to Jinnah House.');
+            }
+        }
+    }
+
+    private function resolveSession(mixed $session, string $allocatedFrom): string
+    {
+        $resolved = trim((string) $session);
+        if ($resolved !== '') {
+            return $resolved;
+        }
+
+        $date = Carbon::parse($allocatedFrom);
+        $startYear = $date->month >= 7 ? $date->year : $date->year - 1;
+
+        return $startYear.'-'.($startYear + 1);
+    }
+
+    private function normalizeGender(mixed $gender): ?string
+    {
+        $value = strtolower(trim((string) $gender));
+
+        if ($value === '') {
+            return null;
+        }
+
+        if (in_array($value, ['m', 'male', 'boy', 'boys'], true)) {
+            return 'male';
+        }
+
+        if (in_array($value, ['f', 'female', 'girl', 'girls'], true)) {
+            return 'female';
+        }
+
+        return $value;
     }
 }

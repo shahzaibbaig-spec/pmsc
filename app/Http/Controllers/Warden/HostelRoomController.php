@@ -29,7 +29,7 @@ class HostelRoomController extends Controller
             'per_page' => ['nullable', 'integer', 'min:10', 'max:100'],
         ]);
 
-        $payload = $this->hostelRoomService->getRoomList($filters);
+        $payload = $this->hostelRoomService->getRoomList($filters, $request->user());
 
         return view('warden.hostel.rooms.index', $payload);
     }
@@ -44,7 +44,7 @@ class HostelRoomController extends Controller
         try {
             $this->hostelRoomService->createRoom(
                 $request->validated(),
-                (int) $request->user()->id
+                $request->user()
             );
         } catch (RuntimeException $exception) {
             return back()
@@ -57,9 +57,13 @@ class HostelRoomController extends Controller
             ->with('success', 'Hostel room created successfully.');
     }
 
-    public function edit(HostelRoom $room): View
+    public function edit(HostelRoom $room, Request $request): View
     {
-        $occupancy = $this->hostelRoomService->getRoomOccupancySummary((int) $room->id);
+        try {
+            $occupancy = $this->hostelRoomService->getRoomOccupancySummary((int) $room->id, $request->user());
+        } catch (RuntimeException $exception) {
+            abort(403, $exception->getMessage());
+        }
 
         return view('warden.hostel.rooms.edit', [
             'room' => $room,
@@ -73,7 +77,7 @@ class HostelRoomController extends Controller
             $this->hostelRoomService->updateRoom(
                 $room,
                 $request->validated(),
-                (int) $request->user()->id
+                $request->user()
             );
         } catch (RuntimeException $exception) {
             return back()
@@ -86,4 +90,3 @@ class HostelRoomController extends Controller
             ->with('success', 'Hostel room updated successfully.');
     }
 }
-

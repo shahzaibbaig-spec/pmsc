@@ -23,6 +23,7 @@ use App\Http\Controllers\Teacher\TeacherInventoryController;
 use App\Http\Controllers\Teacher\TeacherInventoryDemandController;
 use App\Http\Controllers\Teacher\TeacherPromotionController;
 use App\Http\Controllers\Warden\WardenDailyDiaryController;
+use App\Http\Controllers\Warden\WardenDailyReportController;
 use App\Http\Controllers\Warden\WardenDashboardController;
 use App\Http\Controllers\Warden\WardenDisciplineController;
 use App\Http\Controllers\Warden\HostelLeaveController;
@@ -1413,6 +1414,11 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
     Route::get('/warden/dashboard', WardenDashboardController::class)
         ->middleware(['role:Warden'])
         ->name('warden.dashboard');
+
+    Route::resource('/warden/daily-reports', WardenDailyReportController::class)
+        ->only(['index', 'create', 'store', 'show'])
+        ->middleware(['role:Warden'])
+        ->names('warden.daily-reports');
 
     Route::get('/warden/daily-diary', [WardenDailyDiaryController::class, 'index'])
         ->middleware(['role:Warden', 'permission:view_all_daily_diary'])

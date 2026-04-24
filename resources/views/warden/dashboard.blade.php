@@ -46,6 +46,29 @@
             </section>
 
             <section class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <article class="rounded-2xl border border-blue-200 bg-blue-50 p-5 shadow-sm">
+                    <p class="text-xs font-semibold uppercase tracking-wide text-blue-700">Daily Reports (Date)</p>
+                    <p class="mt-2 text-2xl font-semibold text-blue-800">{{ number_format((int) ($summary['warden_reports_today'] ?? 0)) }}</p>
+                </article>
+                <article class="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 shadow-sm">
+                    <p class="text-xs font-semibold uppercase tracking-wide text-emerald-700">Present (Daily Report)</p>
+                    <p class="mt-2 text-2xl font-semibold text-emerald-800">{{ number_format((int) ($summary['warden_present_today'] ?? 0)) }}</p>
+                </article>
+                <article class="rounded-2xl border border-rose-200 bg-rose-50 p-5 shadow-sm">
+                    <p class="text-xs font-semibold uppercase tracking-wide text-rose-700">Absent (Daily Report)</p>
+                    <p class="mt-2 text-2xl font-semibold text-rose-800">{{ number_format((int) ($summary['warden_absent_today'] ?? 0)) }}</p>
+                </article>
+                <article class="rounded-2xl border border-orange-200 bg-orange-50 p-5 shadow-sm">
+                    <p class="text-xs font-semibold uppercase tracking-wide text-orange-700">Discipline Incidents (Date)</p>
+                    <p class="mt-2 text-2xl font-semibold text-orange-800">{{ number_format((int) ($summary['warden_discipline_incidents_today'] ?? 0)) }}</p>
+                </article>
+            </section>
+
+            <section class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <article class="rounded-2xl border border-cyan-200 bg-cyan-50 p-5 shadow-sm">
+                    <p class="text-xs font-semibold uppercase tracking-wide text-cyan-700">Health Cases (Date)</p>
+                    <p class="mt-2 text-2xl font-semibold text-cyan-800">{{ number_format((int) ($summary['warden_health_cases_today'] ?? 0)) }}</p>
+                </article>
                 <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                     <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Hostel Rooms</p>
                     <p class="mt-2 text-2xl font-semibold text-slate-900">{{ number_format((int) ($summary['total_hostel_rooms'] ?? 0)) }}</p>
@@ -76,6 +99,10 @@
                 <a href="{{ route('warden.students.index') }}" class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:bg-slate-50">
                     <h3 class="text-base font-semibold text-slate-900">Students / Educational Records</h3>
                     <p class="mt-1 text-sm text-slate-500">Open student profiles for attendance and academic history.</p>
+                </a>
+                <a href="{{ route('warden.daily-reports.index') }}" class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:bg-slate-50">
+                    <h3 class="text-base font-semibold text-slate-900">Warden Daily Reports</h3>
+                    <p class="mt-1 text-sm text-slate-500">Record and review attendance, discipline, and health logs by day.</p>
                 </a>
                 <a href="{{ route('warden.hostel.rooms.index') }}" class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:bg-slate-50">
                     <h3 class="text-base font-semibold text-slate-900">Hostel Rooms</h3>
@@ -132,4 +159,3 @@
         </div>
     </div>
 </x-app-layout>
-

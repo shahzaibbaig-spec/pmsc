@@ -5,7 +5,10 @@ namespace App\Services;
 use App\Models\DisciplineComplaint;
 use App\Models\SchoolClass;
 use App\Models\Student;
+use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Database\Eloquent\Builder;
+use RuntimeException;
 
 class WardenDisciplineService
 {
@@ -19,7 +22,7 @@ class WardenDisciplineService
      *     statuses:array<int, string>
      * }
      */
-    public function getReports(array $filters): array
+    public function getReports(array $filters, User $user): array
     {
         $normalized = $this->normalizeFilters($filters);
 
@@ -28,6 +31,7 @@ class WardenDisciplineService
                 'student:id,student_id,name,class_id,status',
                 'student.classRoom:id,name,section',
             ])
+            ->whereHas('student', fn (Builder $query) => $query->forWarden($user))
             ->when($normalized['search'] !== null, function ($query) use ($normalized): void {
                 $search = (string) $normalized['search'];
                 $contains = '%'.$search.'%';
@@ -62,14 +66,23 @@ class WardenDisciplineService
         return [
             'reports' => $reports,
             'filters' => $normalized,
-            'classes' => $this->classOptions(),
-            'students' => $this->studentOptions(),
+            'classes' => $this->classOptions($user),
+            'students' => $this->studentOptions($user),
             'statuses' => $this->statusOptions(),
         ];
     }
 
-    public function getReportDetail(DisciplineComplaint $report): DisciplineComplaint
+    public function getReportDetail(DisciplineComplaint $report, User $user): DisciplineComplaint
     {
+        $allowed = DisciplineComplaint::query()
+            ->whereKey((int) $report->id)
+            ->whereHas('student', fn (Builder $query) => $query->forWarden($user))
+            ->exists();
+
+        if (! $allowed) {
+            throw new RuntimeException('You are not allowed to access this discipline report.');
+        }
+
         return $report->load([
             'student:id,student_id,name,father_name,class_id,status',
             'student.classRoom:id,name,section',
@@ -79,9 +92,19 @@ class WardenDisciplineService
     /**
      * @return array<int, array{id:int,name:string}>
      */
-    private function classOptions(): array
+    private function classOptions(User $user): array
     {
+        $classIds = Student::query()
+            ->forWarden($user)
+            ->distinct()
+            ->pluck('class_id')
+            ->map(fn ($id): int => (int) $id)
+            ->values()
+            ->all();
+
         return SchoolClass::query()
+            ->when($classIds !== [], fn (Builder $query) => $query->whereIn('id', $classIds))
+            ->when($classIds === [], fn (Builder $query) => $query->whereRaw('1 = 0'))
             ->orderBy('name')
             ->orderBy('section')
             ->get(['id', 'name', 'section'])
@@ -119,9 +142,10 @@ class WardenDisciplineService
     /**
      * @return array<int, array{id:int,name:string}>
      */
-    private function studentOptions(): array
+    private function studentOptions(User $user): array
     {
         return Student::query()
+            ->forWarden($user)
             ->whereHas('disciplineComplaints')
             ->orderBy('name')
             ->limit(400)
