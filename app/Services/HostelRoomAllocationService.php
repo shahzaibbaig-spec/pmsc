@@ -15,6 +15,104 @@ use RuntimeException;
 
 class HostelRoomAllocationService
 {
+    /**
+     * @param array<int, int> $studentIds
+     */
+    public function allocateStudentsToRoomInBulk(array $studentIds, int $roomId, array $data, ?User $user = null): int
+    {
+        $user = $this->resolveUser($user);
+        $studentIds = collect($studentIds)
+            ->map(fn ($id): int => (int) $id)
+            ->filter(fn (int $id): bool => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($studentIds === []) {
+            throw new RuntimeException('Please select at least one student for bulk allocation.');
+        }
+
+        $allocatedFrom = $this->resolveDate($data['allocated_from'] ?? now()->toDateString());
+        $session = $this->resolveSession($data['session'] ?? null, $allocatedFrom);
+        $remarks = $this->nullableTrimmedString($data['remarks'] ?? null);
+
+        return DB::transaction(function () use ($studentIds, $roomId, $allocatedFrom, $session, $remarks, $user): int {
+            $room = HostelRoom::query()
+                ->lockForUpdate()
+                ->findOrFail($roomId);
+            $this->assertRoomBelongsToWarden($room, $user);
+
+            if (! (bool) $room->is_active) {
+                throw new RuntimeException('This room is not active for new allocations.');
+            }
+
+            $activeCount = HostelRoomAllocation::query()
+                ->where('hostel_room_id', (int) $room->id)
+                ->active()
+                ->lockForUpdate()
+                ->count();
+
+            $availableBeds = max(0, (int) $room->capacity - $activeCount);
+            if (count($studentIds) > $availableBeds) {
+                throw new RuntimeException('Selected room does not have enough available beds for all selected students.');
+            }
+
+            $students = Student::query()
+                ->select('id', 'date_of_birth', 'age', 'gender')
+                ->whereIn('id', $studentIds)
+                ->get()
+                ->keyBy('id');
+
+            if ($students->count() !== count($studentIds)) {
+                throw new RuntimeException('One or more selected students could not be found.');
+            }
+
+            $existingActiveAllocations = HostelRoomAllocation::query()
+                ->active()
+                ->whereIn('student_id', $studentIds)
+                ->lockForUpdate()
+                ->pluck('student_id')
+                ->map(fn ($id): int => (int) $id)
+                ->values()
+                ->all();
+
+            if ($existingActiveAllocations !== []) {
+                throw new RuntimeException('One or more selected students already have active hostel allocations.');
+            }
+
+            $now = now();
+            $rows = [];
+            foreach ($studentIds as $studentId) {
+                $student = $students->get($studentId);
+                if (! $student instanceof Student) {
+                    throw new RuntimeException('One or more selected students could not be loaded.');
+                }
+
+                $this->assertStudentVisibleToWarden($student, $user);
+                $this->ensureStudentMatchesHostelPolicy($student, $room);
+
+                $rows[] = [
+                    'hostel_room_id' => (int) $room->id,
+                    'hostel_id' => (int) ($room->hostel_id ?? 0) ?: null,
+                    'student_id' => (int) $student->id,
+                    'allocated_from' => $allocatedFrom,
+                    'allocated_to' => null,
+                    'session' => $session,
+                    'status' => HostelRoomAllocation::STATUS_ACTIVE,
+                    'is_active' => true,
+                    'remarks' => $remarks,
+                    'allocated_by' => (int) $user->id,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
+            }
+
+            HostelRoomAllocation::query()->insert($rows);
+
+            return count($rows);
+        });
+    }
+
     public function allocateStudentToRoom(int $studentId, int $roomId, array $data, ?User $user = null): HostelRoomAllocation
     {
         $user = $this->resolveUser($user);
@@ -170,6 +268,38 @@ class HostelRoomAllocationService
     public function getCreateFormOptions(?User $user = null): array
     {
         $user = $this->resolveUser($user);
+        $students = $this->eligibleStudentsForAllocation($user);
+        $rooms = $this->activeRoomsWithOccupancy($user);
+
+        return [
+            'students' => $students,
+            'rooms' => $rooms,
+        ];
+    }
+
+    /**
+     * @return array{
+     *     students:array<int, array{id:int,name:string,class_name:string,student_code:string}>,
+     *     rooms:array<int, array{id:int,name:string,capacity:int,occupied_beds:int,available_beds:int}>
+     * }
+     */
+    public function getBulkCreateFormOptions(?User $user = null): array
+    {
+        $user = $this->resolveUser($user);
+        $students = $this->eligibleStudentsForAllocation($user);
+        $rooms = $this->activeRoomsWithOccupancy($user);
+
+        return [
+            'students' => $students,
+            'rooms' => $rooms,
+        ];
+    }
+
+    /**
+     * @return array<int, array{id:int,name:string,class_name:string,student_code:string}>
+     */
+    private function eligibleStudentsForAllocation(User $user): array
+    {
         $activeStudentIds = HostelRoomAllocation::query()
             ->active()
             ->pluck('student_id')
@@ -198,7 +328,19 @@ class HostelRoomAllocationService
 
         $students = $studentsQuery
             ->limit(1500)
-            ->get(['id', 'name', 'student_id', 'class_id'])
+            ->get(['id', 'name', 'student_id', 'class_id', 'date_of_birth', 'age', 'gender'])
+            ->filter(function (Student $student) use ($user): bool {
+                if (! $user->isWarden()) {
+                    return true;
+                }
+
+                $hostelName = trim((string) ($user->hostel?->name ?? ''));
+                if ($hostelName === '') {
+                    return false;
+                }
+
+                return $this->isStudentEligibleForHostelName($student, $hostelName);
+            })
             ->map(fn (Student $student): array => [
                 'id' => (int) $student->id,
                 'name' => (string) $student->name,
@@ -208,12 +350,7 @@ class HostelRoomAllocationService
             ->values()
             ->all();
 
-        $rooms = $this->activeRoomsWithOccupancy($user);
-
-        return [
-            'students' => $students,
-            'rooms' => $rooms,
-        ];
+        return $students;
     }
 
     /**
@@ -654,5 +791,34 @@ class HostelRoomAllocationService
         }
 
         return $value;
+    }
+
+    private function isStudentEligibleForHostelName(Student $student, string $hostelName): bool
+    {
+        $gender = $this->normalizeGender($student->gender ?? null);
+        if ($gender === null) {
+            return false;
+        }
+
+        $age = null;
+        if ($student->date_of_birth !== null) {
+            $age = Carbon::parse((string) $student->date_of_birth)->age;
+        } elseif ($student->age !== null) {
+            $age = (int) $student->age;
+        }
+
+        if ($age === null) {
+            return false;
+        }
+
+        if ($hostelName === 'Fatimah House') {
+            return ! ($gender === 'male' && $age >= 6);
+        }
+
+        if ($hostelName === 'Jinnah House') {
+            return $gender === 'male' && $age >= 6;
+        }
+
+        return true;
     }
 }

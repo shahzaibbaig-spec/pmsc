@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Warden;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Warden\StoreHostelBulkAllocationRequest;
 use App\Http\Requests\Warden\StoreHostelRoomAllocationRequest;
 use App\Http\Requests\Warden\UpdateHostelRoomAllocationRequest;
 use App\Models\HostelRoom;
@@ -45,6 +46,13 @@ class HostelRoomAllocationController extends Controller
         return view('warden.hostel.allocations.create', $options);
     }
 
+    public function bulkCreate(Request $request): View
+    {
+        $options = $this->allocationService->getBulkCreateFormOptions($request->user());
+
+        return view('warden.hostel.allocations.bulk-create', $options);
+    }
+
     public function store(StoreHostelRoomAllocationRequest $request): RedirectResponse
     {
         try {
@@ -63,6 +71,28 @@ class HostelRoomAllocationController extends Controller
         return redirect()
             ->route('warden.hostel.allocations.index')
             ->with('success', 'Student allocated to hostel room successfully.');
+    }
+
+    public function bulkStore(StoreHostelBulkAllocationRequest $request): RedirectResponse
+    {
+        $validated = $request->validated();
+
+        try {
+            $createdCount = $this->allocationService->allocateStudentsToRoomInBulk(
+                array_map('intval', (array) ($validated['student_ids'] ?? [])),
+                (int) $validated['hostel_room_id'],
+                $validated,
+                $request->user()
+            );
+        } catch (RuntimeException $exception) {
+            return back()
+                ->withInput()
+                ->withErrors(['allocation' => $exception->getMessage()]);
+        }
+
+        return redirect()
+            ->route('warden.hostel.allocations.index')
+            ->with('success', $createdCount.' students allocated to hostel room successfully.');
     }
 
     public function editShift(Student $student, Request $request): View

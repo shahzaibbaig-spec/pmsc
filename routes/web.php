@@ -35,6 +35,7 @@ use App\Modules\Academic\Controllers\AcademicCalendarController;
 use App\Modules\Academic\Controllers\AcademicNotificationController;
 use App\Modules\Accountant\Controllers\AccountantDashboardController;
 use App\Modules\Admin\Controllers\AdminDashboardController;
+use App\Modules\Admin\Controllers\HostelManagementController;
 use App\Modules\Admin\Controllers\RbacMatrixController;
 use App\Modules\Admin\Controllers\SchoolSettingController;
 use App\Modules\Admin\Controllers\UserManagementController;
@@ -187,6 +188,22 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
     Route::get('/admin/users', [UserManagementController::class, 'index'])
         ->middleware(['role:Admin', 'permission:manage_users'])
         ->name('admin.users.index');
+
+    Route::get('/admin/hostels', [HostelManagementController::class, 'index'])
+        ->middleware(['role:Admin', 'permission:manage_hostel_rooms'])
+        ->name('admin.hostels.index');
+
+    Route::post('/admin/hostels', [HostelManagementController::class, 'store'])
+        ->middleware(['role:Admin', 'permission:manage_hostel_rooms'])
+        ->name('admin.hostels.store');
+
+    Route::put('/admin/hostels/{hostel}', [HostelManagementController::class, 'update'])
+        ->middleware(['role:Admin', 'permission:manage_hostel_rooms'])
+        ->name('admin.hostels.update');
+
+    Route::delete('/admin/hostels/{hostel}', [HostelManagementController::class, 'destroy'])
+        ->middleware(['role:Admin', 'permission:manage_hostel_rooms'])
+        ->name('admin.hostels.destroy');
 
     Route::get('/admin/settings', [SchoolSettingController::class, 'edit'])
         ->middleware(['role:Admin', 'permission:manage_school_settings'])
@@ -1480,6 +1497,14 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
     Route::post('/warden/hostel/allocations', [HostelRoomAllocationController::class, 'store'])
         ->middleware(['role:Warden', 'permission:assign_students_to_rooms'])
         ->name('warden.hostel.allocations.store');
+
+    Route::get('/warden/hostel/allocations/bulk/create', [HostelRoomAllocationController::class, 'bulkCreate'])
+        ->middleware(['role:Warden', 'permission:assign_students_to_rooms'])
+        ->name('warden.hostel.allocations.bulk.create');
+
+    Route::post('/warden/hostel/allocations/bulk', [HostelRoomAllocationController::class, 'bulkStore'])
+        ->middleware(['role:Warden', 'permission:assign_students_to_rooms'])
+        ->name('warden.hostel.allocations.bulk.store');
 
     Route::get('/warden/hostel/allocations/{student}/shift', [HostelRoomAllocationController::class, 'editShift'])
         ->middleware(['role:Warden', 'permission:assign_students_to_rooms'])

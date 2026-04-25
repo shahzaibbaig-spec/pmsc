@@ -38,6 +38,9 @@
                         <x-nav-link :href="route('admin.users.index')" :active="request()->routeIs('admin.users.*')">
                             {{ __('Users') }}
                         </x-nav-link>
+                        <x-nav-link :href="route('admin.hostels.index')" :active="request()->routeIs('admin.hostels.*')">
+                            {{ __('Hostels') }}
+                        </x-nav-link>
                         <x-nav-link :href="route('admin.students.index')" :active="request()->routeIs('admin.students.*')">
                             {{ __('Students') }}
                         </x-nav-link>
@@ -351,6 +354,9 @@
                 </x-responsive-nav-link>
                 <x-responsive-nav-link :href="route('admin.users.index')" :active="request()->routeIs('admin.users.*')">
                     {{ __('Users') }}
+                </x-responsive-nav-link>
+                <x-responsive-nav-link :href="route('admin.hostels.index')" :active="request()->routeIs('admin.hostels.*')">
+                    {{ __('Hostels') }}
                 </x-responsive-nav-link>
                 <x-responsive-nav-link :href="route('admin.students.index')" :active="request()->routeIs('admin.students.*')">
                     {{ __('Students') }}

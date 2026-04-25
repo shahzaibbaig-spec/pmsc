@@ -5,9 +5,14 @@
                 <h2 class="text-xl font-semibold text-slate-900">Room Allocations</h2>
                 <p class="mt-1 text-sm text-slate-500">Manage current hostel room assignments and student shifts.</p>
             </div>
-            <a href="{{ route('warden.hostel.allocations.create') }}" class="inline-flex min-h-11 items-center rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800">
-                Allocate Student
-            </a>
+            <div class="flex flex-wrap items-center gap-2">
+                <a href="{{ route('warden.hostel.allocations.bulk.create') }}" class="inline-flex min-h-11 items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                    Bulk Allocate
+                </a>
+                <a href="{{ route('warden.hostel.allocations.create') }}" class="inline-flex min-h-11 items-center rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800">
+                    Allocate Student
+                </a>
+            </div>
         </div>
     </x-slot>
 
@@ -173,4 +178,3 @@
         </div>
     </div>
 </x-app-layout>
-
