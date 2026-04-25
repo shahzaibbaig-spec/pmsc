@@ -41,6 +41,9 @@
                         <x-nav-link :href="route('admin.hostels.index')" :active="request()->routeIs('admin.hostels.*')">
                             {{ __('Hostels') }}
                         </x-nav-link>
+                        <x-nav-link :href="route('warden.hostel.allocations.index')" :active="request()->routeIs('warden.hostel.allocations.*') || request()->routeIs('warden.hostel.rooms.*')">
+                            {{ __('Hostel Allocations') }}
+                        </x-nav-link>
                         <x-nav-link :href="route('admin.students.index')" :active="request()->routeIs('admin.students.*')">
                             {{ __('Students') }}
                         </x-nav-link>
@@ -357,6 +360,9 @@
                 </x-responsive-nav-link>
                 <x-responsive-nav-link :href="route('admin.hostels.index')" :active="request()->routeIs('admin.hostels.*')">
                     {{ __('Hostels') }}
+                </x-responsive-nav-link>
+                <x-responsive-nav-link :href="route('warden.hostel.allocations.index')" :active="request()->routeIs('warden.hostel.allocations.*') || request()->routeIs('warden.hostel.rooms.*')">
+                    {{ __('Hostel Allocations') }}
                 </x-responsive-nav-link>
                 <x-responsive-nav-link :href="route('admin.students.index')" :active="request()->routeIs('admin.students.*')">
                     {{ __('Students') }}
