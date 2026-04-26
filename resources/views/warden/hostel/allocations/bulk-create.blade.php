@@ -3,7 +3,7 @@
         <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
                 <h2 class="text-xl font-semibold text-slate-900">Bulk Allocate Students</h2>
-                <p class="mt-1 text-sm text-slate-500">Assign multiple students to a hostel room in one action.</p>
+                <p class="mt-1 text-sm text-slate-500">Assign multiple students to a hostel. Room assignment can be done later.</p>
             </div>
             <a href="{{ route('warden.hostel.allocations.index') }}" class="inline-flex min-h-11 items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
                 Back to Allocations
@@ -36,12 +36,12 @@
                 <section class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                     <div class="grid grid-cols-1 gap-4 md:grid-cols-4">
                         <div class="md:col-span-2">
-                            <label for="hostel_room_id" class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Room</label>
-                            <select id="hostel_room_id" name="hostel_room_id" required class="mt-1 block min-h-11 w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-500">
-                                <option value="">Select room</option>
-                                @foreach ($rooms as $room)
-                                    <option value="{{ $room['id'] }}" @selected((int) old('hostel_room_id') === (int) $room['id'])>
-                                        {{ $room['name'] }} | Capacity: {{ $room['capacity'] }} | Occupied: {{ $room['occupied_beds'] }} | Available: {{ $room['available_beds'] }}
+                            <label for="hostel_id" class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Hostel</label>
+                            <select id="hostel_id" name="hostel_id" required class="mt-1 block min-h-11 w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-500">
+                                <option value="">Select hostel</option>
+                                @foreach ($hostels as $hostel)
+                                    <option value="{{ $hostel['id'] }}" @selected((int) old('hostel_id') === (int) $hostel['id'])>
+                                        {{ $hostel['name'] }}
                                     </option>
                                 @endforeach
                             </select>
@@ -108,7 +108,7 @@
 
                 <div class="flex justify-end">
                     <button type="submit" class="inline-flex min-h-11 items-center rounded-xl bg-slate-900 px-5 py-2 text-sm font-semibold text-white hover:bg-slate-800">
-                        Allocate Selected Students
+                        Assign Selected Students To Hostel
                     </button>
                 </div>
             </form>
@@ -148,4 +148,3 @@
         }
     </script>
 </x-app-layout>
-

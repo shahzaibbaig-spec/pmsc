@@ -78,9 +78,9 @@ class HostelRoomAllocationController extends Controller
         $validated = $request->validated();
 
         try {
-            $createdCount = $this->allocationService->allocateStudentsToRoomInBulk(
+            $createdCount = $this->allocationService->allocateStudentsToHostelInBulk(
                 array_map('intval', (array) ($validated['student_ids'] ?? [])),
-                (int) $validated['hostel_room_id'],
+                (int) $validated['hostel_id'],
                 $validated,
                 $request->user()
             );
@@ -92,7 +92,7 @@ class HostelRoomAllocationController extends Controller
 
         return redirect()
             ->route('warden.hostel.allocations.index')
-            ->with('success', $createdCount.' students allocated to hostel room successfully.');
+            ->with('success', $createdCount.' students assigned to hostel successfully. You can assign rooms later.');
     }
 
     public function editShift(Student $student, Request $request): View

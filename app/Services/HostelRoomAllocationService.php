@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\HostelRoom;
 use App\Models\HostelRoomAllocation;
+use App\Models\Hostel;
 use App\Models\SchoolClass;
 use App\Models\Student;
 use App\Models\User;
@@ -18,7 +19,7 @@ class HostelRoomAllocationService
     /**
      * @param array<int, int> $studentIds
      */
-    public function allocateStudentsToRoomInBulk(array $studentIds, int $roomId, array $data, ?User $user = null): int
+    public function allocateStudentsToHostelInBulk(array $studentIds, int $hostelId, array $data, ?User $user = null): int
     {
         $user = $this->resolveUser($user);
         $studentIds = collect($studentIds)
@@ -36,26 +37,9 @@ class HostelRoomAllocationService
         $session = $this->resolveSession($data['session'] ?? null, $allocatedFrom);
         $remarks = $this->nullableTrimmedString($data['remarks'] ?? null);
 
-        return DB::transaction(function () use ($studentIds, $roomId, $allocatedFrom, $session, $remarks, $user): int {
-            $room = HostelRoom::query()
-                ->lockForUpdate()
-                ->findOrFail($roomId);
-            $this->assertRoomBelongsToWarden($room, $user);
-
-            if (! (bool) $room->is_active) {
-                throw new RuntimeException('This room is not active for new allocations.');
-            }
-
-            $activeCount = HostelRoomAllocation::query()
-                ->where('hostel_room_id', (int) $room->id)
-                ->active()
-                ->lockForUpdate()
-                ->count();
-
-            $availableBeds = max(0, (int) $room->capacity - $activeCount);
-            if (count($studentIds) > $availableBeds) {
-                throw new RuntimeException('Selected room does not have enough available beds for all selected students.');
-            }
+        return DB::transaction(function () use ($studentIds, $hostelId, $allocatedFrom, $session, $remarks, $user): int {
+            $hostel = Hostel::query()->lockForUpdate()->findOrFail($hostelId);
+            $this->assertHostelBelongsToWarden($hostel, $user);
 
             $students = Student::query()
                 ->select('id', 'date_of_birth', 'age', 'gender')
@@ -89,11 +73,13 @@ class HostelRoomAllocationService
                 }
 
                 $this->assertStudentVisibleToWarden($student, $user);
-                $this->ensureStudentMatchesHostelPolicy($student, $room);
+                if (! $this->isStudentEligibleForHostelName($student, (string) $hostel->name)) {
+                    throw new RuntimeException('One or more selected students do not match the selected hostel policy.');
+                }
 
                 $rows[] = [
-                    'hostel_room_id' => (int) $room->id,
-                    'hostel_id' => (int) ($room->hostel_id ?? 0) ?: null,
+                    'hostel_room_id' => null,
+                    'hostel_id' => (int) $hostel->id,
                     'student_id' => (int) $student->id,
                     'allocated_from' => $allocatedFrom,
                     'allocated_to' => null,
@@ -286,12 +272,21 @@ class HostelRoomAllocationService
     public function getBulkCreateFormOptions(?User $user = null): array
     {
         $user = $this->resolveUser($user);
-        $students = $this->eligibleStudentsForAllocation($user);
-        $rooms = $this->activeRoomsWithOccupancy($user);
+        $students = $this->eligibleStudentsForHostelAssignment($user);
+        $hostels = Hostel::query()
+            ->when($user->isWarden(), fn (Builder $query) => $query->where('id', (int) ($user->hostel_id ?? 0)))
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->map(fn (Hostel $hostel): array => [
+                'id' => (int) $hostel->id,
+                'name' => (string) $hostel->name,
+            ])
+            ->values()
+            ->all();
 
         return [
             'students' => $students,
-            'rooms' => $rooms,
+            'hostels' => $hostels,
         ];
     }
 
@@ -351,6 +346,40 @@ class HostelRoomAllocationService
             ->all();
 
         return $students;
+    }
+
+    /**
+     * @return array<int, array{id:int,name:string,class_name:string,student_code:string}>
+     */
+    private function eligibleStudentsForHostelAssignment(User $user): array
+    {
+        $activeStudentIds = HostelRoomAllocation::query()
+            ->active()
+            ->pluck('student_id')
+            ->map(fn ($id): int => (int) $id)
+            ->values()
+            ->all();
+
+        $studentsQuery = Student::query()
+            ->with('classRoom:id,name,section')
+            ->orderBy('name')
+            ->orderBy('student_id');
+
+        if ($activeStudentIds !== []) {
+            $studentsQuery->whereNotIn('id', $activeStudentIds);
+        }
+
+        return $studentsQuery
+            ->limit(1500)
+            ->get(['id', 'name', 'student_id', 'class_id'])
+            ->map(fn (Student $student): array => [
+                'id' => (int) $student->id,
+                'name' => (string) $student->name,
+                'class_name' => trim((string) ($student->classRoom?->name ?? '').' '.(string) ($student->classRoom?->section ?? '')),
+                'student_code' => (string) ($student->student_id ?? '-'),
+            ])
+            ->values()
+            ->all();
     }
 
     /**
@@ -679,6 +708,18 @@ class HostelRoomAllocationService
         $hostelId = (int) ($user->hostel_id ?? 0);
         if ($hostelId <= 0 || (int) ($room->hostel_id ?? 0) !== $hostelId) {
             throw new RuntimeException('You are not allowed to manage this hostel room.');
+        }
+    }
+
+    private function assertHostelBelongsToWarden(Hostel $hostel, User $user): void
+    {
+        if (! $user->isWarden()) {
+            return;
+        }
+
+        $hostelId = (int) ($user->hostel_id ?? 0);
+        if ($hostelId <= 0 || (int) $hostel->id !== $hostelId) {
+            throw new RuntimeException('You are not allowed to assign students to this hostel.');
         }
     }
 

@@ -110,8 +110,8 @@
                                         <p class="text-xs text-slate-500">{{ $allocation->student?->student_id ?? '-' }}</p>
                                     </td>
                                     <td class="px-4 py-4 text-sm text-slate-700">{{ trim(($allocation->student?->classRoom?->name ?? '').' '.($allocation->student?->classRoom?->section ?? '')) }}</td>
-                                    <td class="px-4 py-4 text-sm text-slate-700">{{ $allocation->hostelRoom?->room_name ?? '-' }}</td>
-                                    <td class="px-4 py-4 text-sm text-slate-700">{{ (int) ($allocation->hostelRoom?->floor_number ?? 0) }}</td>
+                                    <td class="px-4 py-4 text-sm text-slate-700">{{ $allocation->hostelRoom?->room_name ?? 'Hostel Assigned (Room Pending)' }}</td>
+                                    <td class="px-4 py-4 text-sm text-slate-700">{{ $allocation->hostelRoom?->floor_number !== null ? (int) $allocation->hostelRoom?->floor_number : '-' }}</td>
                                     <td class="px-4 py-4 text-sm text-slate-700">{{ optional($allocation->allocated_from)->format('d M Y') }}</td>
                                     <td class="px-4 py-4 text-sm">
                                         @if ($allocation->status === 'active')

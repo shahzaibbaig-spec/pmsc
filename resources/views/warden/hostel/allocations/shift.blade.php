@@ -36,7 +36,14 @@
                     <p><span class="font-semibold text-slate-900">Student:</span> {{ $currentAllocation->student?->name ?? $student->name }}</p>
                     <p><span class="font-semibold text-slate-900">Admission No:</span> {{ $currentAllocation->student?->student_id ?? '-' }}</p>
                     <p><span class="font-semibold text-slate-900">Class:</span> {{ trim(($currentAllocation->student?->classRoom?->name ?? '').' '.($currentAllocation->student?->classRoom?->section ?? '')) }}</p>
-                    <p><span class="font-semibold text-slate-900">Current Room:</span> {{ $currentAllocation->hostelRoom?->room_name }} (Floor {{ $currentAllocation->hostelRoom?->floor_number }})</p>
+                    <p>
+                        <span class="font-semibold text-slate-900">Current Room:</span>
+                        @if ($currentAllocation->hostelRoom)
+                            {{ $currentAllocation->hostelRoom?->room_name }} (Floor {{ $currentAllocation->hostelRoom?->floor_number }})
+                        @else
+                            Hostel Assigned (Room Pending)
+                        @endif
+                    </p>
                     <p><span class="font-semibold text-slate-900">Allocated From:</span> {{ optional($currentAllocation->allocated_from)->format('d M Y') }}</p>
                 </div>
             </section>
@@ -79,4 +86,3 @@
         </div>
     </div>
 </x-app-layout>
-

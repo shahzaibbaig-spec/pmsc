@@ -19,10 +19,9 @@ class StoreHostelBulkAllocationRequest extends FormRequest
         return [
             'student_ids' => ['required', 'array', 'min:1'],
             'student_ids.*' => ['required', 'integer', 'exists:students,id', 'distinct'],
-            'hostel_room_id' => ['required', 'integer', 'exists:hostel_rooms,id'],
+            'hostel_id' => ['required', 'integer', 'exists:hostels,id'],
             'allocated_from' => ['required', 'date'],
             'remarks' => ['nullable', 'string', 'max:1000'],
         ];
     }
 }
-
