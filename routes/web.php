@@ -5,6 +5,11 @@ use App\Http\Controllers\DailyDiaryAttachmentController;
 use App\Http\Controllers\Inventory\DeviceDeclarationReviewController;
 use App\Http\Controllers\Inventory\InventoryDemandReviewController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\CareerCounselor\CareerProfileController as CareerCounselorCareerProfileController;
+use App\Http\Controllers\CareerCounselor\CounselingSessionController as CareerCounselorCounselingSessionController;
+use App\Http\Controllers\CareerCounselor\DashboardController as CareerCounselorDashboardController;
+use App\Http\Controllers\CareerCounselor\StudentSearchController as CareerCounselorStudentSearchController;
+use App\Http\Controllers\Principal\CareerCounselingController;
 use App\Http\Controllers\Principal\TeacherAcrController;
 use App\Http\Controllers\Principal\TeacherAttendanceController as PrincipalTeacherAttendanceController;
 use App\Http\Controllers\Principal\TeacherResultEntryController;
@@ -168,6 +173,57 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
     Route::get('/accountant/dashboard', AccountantDashboardController::class)
         ->middleware(['role:Admin,Accountant'])
         ->name('accountant.dashboard');
+
+    Route::prefix('career-counselor')
+        ->name('career-counselor.')
+        ->middleware(['role:Career Counselor', 'permission:view_career_counselor_panel'])
+        ->group(function (): void {
+            Route::get('/dashboard', CareerCounselorDashboardController::class)->name('dashboard');
+            Route::get('/students/search', CareerCounselorStudentSearchController::class)
+                ->middleware('permission:view_career_profile')
+                ->name('students.search');
+            Route::get('/profiles/create', [CareerCounselorCareerProfileController::class, 'create'])
+                ->middleware('permission:create_career_profile')
+                ->name('profiles.create');
+            Route::post('/profiles', [CareerCounselorCareerProfileController::class, 'store'])
+                ->middleware('permission:create_career_profile,update_career_profile')
+                ->name('profiles.store');
+            Route::get('/profiles/{profile}', [CareerCounselorCareerProfileController::class, 'show'])
+                ->middleware('permission:view_career_profile')
+                ->whereNumber('profile')
+                ->name('profiles.show');
+            Route::get('/sessions', [CareerCounselorCounselingSessionController::class, 'index'])
+                ->middleware('permission:view_counseling_sessions')
+                ->name('sessions.index');
+            Route::get('/sessions/create', [CareerCounselorCounselingSessionController::class, 'create'])
+                ->middleware('permission:create_counseling_session')
+                ->name('sessions.create');
+            Route::post('/sessions', [CareerCounselorCounselingSessionController::class, 'store'])
+                ->middleware('permission:create_counseling_session')
+                ->name('sessions.store');
+            Route::get('/sessions/{session}', [CareerCounselorCounselingSessionController::class, 'show'])
+                ->middleware('permission:view_counseling_sessions')
+                ->whereNumber('session')
+                ->name('sessions.show');
+        });
+
+    Route::prefix('principal')
+        ->name('principal.')
+        ->middleware(['role:Admin,Principal', 'permission:view_all_career_records'])
+        ->group(function (): void {
+            Route::get('/career-counseling', [CareerCounselingController::class, 'index'])
+                ->name('career-counseling.index');
+            Route::get('/career-profiles', [CareerCounselingController::class, 'profiles'])
+                ->name('career-profiles.index');
+            Route::get('/career-profiles/{profile}', [CareerCounselingController::class, 'profileShow'])
+                ->whereNumber('profile')
+                ->name('career-profiles.show');
+            Route::get('/counseling-sessions', [CareerCounselingController::class, 'sessions'])
+                ->name('counseling-sessions.index');
+            Route::get('/counseling-sessions/{session}', [CareerCounselingController::class, 'sessionShow'])
+                ->whereNumber('session')
+                ->name('counseling-sessions.show');
+        });
 
     Route::get('/admin/rbac-matrix', [RbacMatrixController::class, 'index'])
         ->middleware(['role:Admin', 'permission:assign_roles'])

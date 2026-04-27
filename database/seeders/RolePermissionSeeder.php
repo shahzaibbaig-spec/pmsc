@@ -90,6 +90,13 @@ class RolePermissionSeeder extends Seeder
             'manage_hostel_leave',
             'mark_night_attendance',
             'view_night_attendance',
+            'view_career_counselor_panel',
+            'create_career_profile',
+            'update_career_profile',
+            'view_career_profile',
+            'create_counseling_session',
+            'view_counseling_sessions',
+            'view_all_career_records',
         ];
 
         foreach ($permissions as $permission) {
@@ -103,6 +110,7 @@ class RolePermissionSeeder extends Seeder
         $student = Role::firstOrCreate(['name' => 'Student', 'guard_name' => 'web']);
         $accountant = Role::firstOrCreate(['name' => 'Accountant', 'guard_name' => 'web']);
         $warden = Role::firstOrCreate(['name' => 'Warden', 'guard_name' => 'web']);
+        $careerCounselor = Role::firstOrCreate(['name' => 'Career Counselor', 'guard_name' => 'web']);
 
         $admin->syncPermissions($permissions);
         $principal->syncPermissions([
@@ -136,6 +144,7 @@ class RolePermissionSeeder extends Seeder
             'view_student_discipline_reports',
             'view_student_academic_records',
             'view_student_profiles_basic',
+            'view_all_career_records',
         ]);
         $teacher->syncPermissions([
             'view_attendance',
@@ -191,6 +200,14 @@ class RolePermissionSeeder extends Seeder
             'mark_night_attendance',
             'view_night_attendance',
         ]);
+        $careerCounselor->syncPermissions([
+            'view_career_counselor_panel',
+            'create_career_profile',
+            'update_career_profile',
+            'view_career_profile',
+            'create_counseling_session',
+            'view_counseling_sessions',
+        ]);
 
         $this->createUserWithRole('System Admin', 'admin@pmsc.edu.pk', 'Admin');
         $this->createUserWithRole('School Principal', 'principal@pmsc.edu.pk', 'Principal');
@@ -199,6 +216,7 @@ class RolePermissionSeeder extends Seeder
         $this->createUserWithRole('Student User', 'student@pmsc.edu.pk', 'Student');
         $this->createUserWithRole('School Accountant', 'accountant@pmsc.edu.pk', 'Accountant');
         $this->createUserWithRole('School Warden', 'warden@pmsc.edu.pk', 'Warden');
+        $this->createUserWithRole('Career Counselor', 'career.counselor@pmsc.edu.pk', 'Career Counselor');
     }
 
     private function createUserWithRole(string $name, string $email, string $role): void

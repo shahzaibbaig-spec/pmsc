@@ -114,6 +114,9 @@
         if ($sidebarUser?->can('monitor_daily_diary')) {
             $menuItems[] = ['route' => 'principal.daily-diary.completion-report', 'label' => 'Diary Completion Report'];
         }
+        if ($sidebarUser?->can('view_all_career_records')) {
+            $menuItems[] = ['route' => 'principal.career-counseling.index', 'label' => 'Career Counselor'];
+        }
     } elseif ($sidebarUser?->hasRole('Principal')) {
         $menuItems = [
             ['route' => 'principal.dashboard', 'label' => 'Dashboard'],
@@ -174,6 +177,18 @@
         if ($sidebarUser?->can('monitor_daily_diary')) {
             $menuItems[] = ['route' => 'principal.daily-diary.completion-report', 'label' => 'Diary Completion Report'];
         }
+        if ($sidebarUser?->can('view_all_career_records')) {
+            $menuItems[] = ['route' => 'principal.career-counseling.index', 'label' => 'Career Counselor'];
+        }
+    } elseif ($sidebarUser?->hasRole('Career Counselor')) {
+        $menuItems = [
+            ['route' => 'career-counselor.dashboard', 'label' => 'Dashboard'],
+        ];
+
+        if ($sidebarUser?->can('view_counseling_sessions')) {
+            $menuItems[] = ['route' => 'career-counselor.sessions.index', 'label' => 'Counseling Sessions'];
+        }
+        $menuItems[] = ['route' => 'notifications.index', 'label' => 'Notifications'];
     } elseif ($sidebarUser?->hasRole('Accountant')) {
         $menuItems = [
             ['route' => 'accountant.dashboard', 'label' => 'Dashboard'],
