@@ -30,7 +30,7 @@ class StudentCustomFeeController extends Controller
         ]);
 
         $sessions = $this->availableSessions();
-        $selectedSession = (string) ($filters['session'] ?? ($sessions[1] ?? ($sessions[0] ?? now()->year.'-'.(now()->year + 1))));
+        $selectedSession = (string) ($filters['session'] ?? (in_array('2026-2027', $sessions, true) ? '2026-2027' : ($sessions[0] ?? now()->year.'-'.(now()->year + 1))));
 
         $classes = SchoolClass::query()
             ->orderBy('name')
@@ -209,7 +209,20 @@ class StudentCustomFeeController extends Controller
                 ->all();
         }
 
-        return empty($sessions) ? $this->service->sessionOptions() : $sessions;
+        $futureSessions = collect($this->service->sessionOptions(0, 5))
+            ->filter(static function (string $session): bool {
+                [$startYear] = array_pad(explode('-', $session, 2), 2, null);
+
+                return (int) $startYear >= 2026;
+            });
+
+        return collect($sessions)
+            ->merge($futureSessions)
+            ->filter(static fn ($session): bool => is_string($session) && trim($session) !== '')
+            ->unique()
+            ->sort()
+            ->values()
+            ->all();
     }
 
     /**
