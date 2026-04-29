@@ -7,6 +7,7 @@ use App\Models\CareerProfile;
 use App\Models\SchoolClass;
 use App\Models\Student;
 use App\Models\User;
+use App\Notifications\CareerCounselorPrincipalNotification;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -32,6 +33,8 @@ class CareerCounselorService
                 ->orderByDesc('id')
                 ->limit(5)
                 ->get(),
+            'urgent_cases' => $this->getUrgentCases()->take(5),
+            'missed_followups' => $this->getMissedFollowUps($counselor)->take(5),
         ];
     }
 
@@ -104,10 +107,89 @@ class CareerCounselorService
                 'counselor_id' => $counselor->id,
                 'session' => $session,
                 'status' => 'completed',
+                'visibility' => $data['visibility'] ?? 'private',
+                'public_summary' => $data['public_summary'] ?? null,
                 'created_by' => $counselor->id,
                 'updated_by' => $counselor->id,
             ])->fresh(['student.classRoom', 'careerProfile', 'counselor']);
         });
+    }
+
+    public function markUrgentGuidance(CareerCounselingSession $session, User $counselor, ?string $reason = null): CareerCounselingSession
+    {
+        return DB::transaction(function () use ($session, $counselor, $reason): CareerCounselingSession {
+            $session->forceFill([
+                'urgent_guidance_required' => true,
+                'urgent_reason' => $reason,
+                'urgent_marked_at' => now(),
+                'urgent_marked_by' => $counselor->id,
+                'updated_by' => $counselor->id,
+            ])->save();
+
+            $fresh = $session->fresh(['student.classRoom', 'counselor']);
+            $this->notifyPrincipals($fresh->student, $counselor, $reason ?: 'Urgent guidance required.', $fresh);
+
+            return $fresh;
+        });
+    }
+
+    public function unmarkUrgentGuidance(CareerCounselingSession $session, User $counselor): CareerCounselingSession
+    {
+        return DB::transaction(function () use ($session, $counselor): CareerCounselingSession {
+            $session->forceFill([
+                'urgent_guidance_required' => false,
+                'updated_by' => $counselor->id,
+            ])->save();
+
+            return $session->fresh(['student.classRoom', 'counselor']);
+        });
+    }
+
+    public function updateVisibility(CareerCounselingSession $session, array $data, User $counselor): CareerCounselingSession
+    {
+        return DB::transaction(function () use ($session, $data, $counselor): CareerCounselingSession {
+            $session->forceFill([
+                'visibility' => $data['visibility'] ?? 'private',
+                'public_summary' => $data['public_summary'] ?? null,
+                'updated_by' => $counselor->id,
+            ])->save();
+
+            if (($data['visibility'] ?? 'private') !== 'private' && trim((string) ($data['public_summary'] ?? '')) !== '') {
+                $this->notifyPrincipals($session->student, $counselor, 'New important career recommendation added.', $session);
+            }
+
+            return $session->fresh(['student.classRoom', 'counselor']);
+        });
+    }
+
+    public function notifyPrincipals(Student $student, User $counselor, string $reason, ?CareerCounselingSession $session = null): void
+    {
+        $student->loadMissing('classRoom');
+
+        User::role(['Principal', 'Admin'])
+            ->get()
+            ->each(fn (User $user) => $user->notify(new CareerCounselorPrincipalNotification($student, $counselor, $reason, $session)));
+    }
+
+    public function getUrgentCases(): Collection
+    {
+        return CareerCounselingSession::query()
+            ->with(['student.classRoom', 'counselor', 'urgentMarkedBy'])
+            ->where('urgent_guidance_required', true)
+            ->orderByDesc('urgent_marked_at')
+            ->get();
+    }
+
+    public function getMissedFollowUps(?User $counselor = null): Collection
+    {
+        return CareerCounselingSession::query()
+            ->with(['student.classRoom', 'counselor'])
+            ->where('follow_up_required', true)
+            ->where('status', 'completed')
+            ->whereDate('follow_up_date', '<', now()->toDateString())
+            ->when($counselor, fn (Builder $query) => $query->where('counselor_id', $counselor->id))
+            ->orderBy('follow_up_date')
+            ->get();
     }
 
     public function getPrincipalRecords(array $filters = []): array
@@ -179,6 +261,7 @@ class CareerCounselorService
             ->when($filters['class_id'] ?? null, fn (Builder $query, string $classId) => $query->whereHas('student', fn (Builder $studentQuery) => $studentQuery->where('class_id', $classId)))
             ->when($filters['counselor_id'] ?? null, fn (Builder $query, string $counselorId) => $query->where('counselor_id', $counselorId))
             ->when($filters['session'] ?? null, fn (Builder $query, string $session) => $query->where('session', $session))
+            ->when($filters['urgent'] ?? null, fn (Builder $query) => $query->where('urgent_guidance_required', true))
             ->orderByDesc('counseling_date')
             ->orderByDesc('id')
             ->paginate(20, ['*'], 'sessions_page')
@@ -220,6 +303,8 @@ class CareerCounselorService
             'recommended_career_path',
             'counselor_advice',
             'private_notes',
+            'visibility',
+            'public_summary',
         ])->all();
     }
 

@@ -6,10 +6,17 @@ use App\Http\Controllers\Inventory\DeviceDeclarationReviewController;
 use App\Http\Controllers\Inventory\InventoryDemandReviewController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\CareerCounselor\CareerProfileController as CareerCounselorCareerProfileController;
+use App\Http\Controllers\CareerCounselor\CareerAssessmentController as CareerCounselorCareerAssessmentController;
 use App\Http\Controllers\CareerCounselor\CounselingSessionController as CareerCounselorCounselingSessionController;
 use App\Http\Controllers\CareerCounselor\DashboardController as CareerCounselorDashboardController;
+use App\Http\Controllers\CareerCounselor\ParentMeetingController as CareerCounselorParentMeetingController;
 use App\Http\Controllers\CareerCounselor\StudentSearchController as CareerCounselorStudentSearchController;
+use App\Http\Controllers\CareerCounselor\UrgentGuidanceController as CareerCounselorUrgentGuidanceController;
+use App\Http\Controllers\Principal\CareerAssessmentController as PrincipalCareerAssessmentController;
 use App\Http\Controllers\Principal\CareerCounselingController;
+use App\Http\Controllers\Principal\CareerParentMeetingController as PrincipalCareerParentMeetingController;
+use App\Http\Controllers\Principal\CareerReportController as PrincipalCareerReportController;
+use App\Http\Controllers\Principal\CareerUrgentCaseController as PrincipalCareerUrgentCaseController;
 use App\Http\Controllers\Principal\TeacherAcrController;
 use App\Http\Controllers\Principal\TeacherAttendanceController as PrincipalTeacherAttendanceController;
 use App\Http\Controllers\Principal\TeacherResultEntryController;
@@ -205,6 +212,26 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
                 ->middleware('permission:view_counseling_sessions')
                 ->whereNumber('session')
                 ->name('sessions.show');
+            Route::prefix('assessments')->name('assessments.')->group(function (): void {
+                Route::get('/', [CareerCounselorCareerAssessmentController::class, 'index'])->middleware('permission:view_career_assessment')->name('index');
+                Route::get('/create', [CareerCounselorCareerAssessmentController::class, 'create'])->middleware('permission:create_career_assessment')->name('create');
+                Route::post('/', [CareerCounselorCareerAssessmentController::class, 'store'])->middleware('permission:create_career_assessment')->name('store');
+                Route::get('/{assessment}', [CareerCounselorCareerAssessmentController::class, 'show'])->middleware('permission:view_career_assessment')->whereNumber('assessment')->name('show');
+                Route::get('/{assessment}/print', [CareerCounselorCareerAssessmentController::class, 'print'])->middleware('permission:print_career_assessment')->whereNumber('assessment')->name('print');
+            });
+            Route::prefix('parent-meetings')->name('parent-meetings.')->group(function (): void {
+                Route::get('/', [CareerCounselorParentMeetingController::class, 'index'])->middleware('permission:view_parent_meetings')->name('index');
+                Route::get('/create', [CareerCounselorParentMeetingController::class, 'create'])->middleware('permission:manage_parent_meetings')->name('create');
+                Route::post('/', [CareerCounselorParentMeetingController::class, 'store'])->middleware('permission:manage_parent_meetings')->name('store');
+                Route::get('/{meeting}', [CareerCounselorParentMeetingController::class, 'show'])->middleware('permission:view_parent_meetings')->whereNumber('meeting')->name('show');
+                Route::put('/{meeting}', [CareerCounselorParentMeetingController::class, 'update'])->middleware('permission:manage_parent_meetings')->whereNumber('meeting')->name('update');
+                Route::post('/{meeting}/complete', [CareerCounselorParentMeetingController::class, 'complete'])->middleware('permission:manage_parent_meetings')->whereNumber('meeting')->name('complete');
+                Route::get('/{meeting}/print', [CareerCounselorParentMeetingController::class, 'print'])->middleware('permission:view_parent_meetings')->whereNumber('meeting')->name('print');
+            });
+            Route::get('/urgent-cases', [CareerCounselorUrgentGuidanceController::class, 'index'])->middleware('permission:mark_urgent_guidance')->name('urgent.index');
+            Route::post('/sessions/{session}/urgent', [CareerCounselorUrgentGuidanceController::class, 'mark'])->middleware('permission:mark_urgent_guidance')->whereNumber('session')->name('urgent.mark');
+            Route::delete('/sessions/{session}/urgent', [CareerCounselorUrgentGuidanceController::class, 'unmark'])->middleware('permission:mark_urgent_guidance')->whereNumber('session')->name('urgent.unmark');
+            Route::put('/sessions/{session}/visibility', [CareerCounselorUrgentGuidanceController::class, 'visibility'])->middleware('permission:manage_career_visibility')->whereNumber('session')->name('visibility.update');
         });
 
     Route::prefix('principal')
@@ -223,6 +250,16 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
             Route::get('/counseling-sessions/{session}', [CareerCounselingController::class, 'sessionShow'])
                 ->whereNumber('session')
                 ->name('counseling-sessions.show');
+            Route::get('/career-urgent-cases', [PrincipalCareerUrgentCaseController::class, 'index'])->middleware('permission:view_urgent_guidance_cases')->name('career-urgent-cases.index');
+            Route::get('/career-urgent-cases/{session}', [PrincipalCareerUrgentCaseController::class, 'show'])->middleware('permission:view_urgent_guidance_cases')->whereNumber('session')->name('career-urgent-cases.show');
+            Route::get('/career-assessments', [PrincipalCareerAssessmentController::class, 'index'])->middleware('permission:view_career_assessment')->name('career-assessments.index');
+            Route::get('/career-assessments/{assessment}', [PrincipalCareerAssessmentController::class, 'show'])->middleware('permission:view_career_assessment')->whereNumber('assessment')->name('career-assessments.show');
+            Route::get('/career-assessments/{assessment}/print', [PrincipalCareerAssessmentController::class, 'print'])->middleware('permission:print_career_assessment')->whereNumber('assessment')->name('career-assessments.print');
+            Route::get('/career-parent-meetings', [PrincipalCareerParentMeetingController::class, 'index'])->middleware('permission:view_parent_meetings')->name('career-parent-meetings.index');
+            Route::get('/career-parent-meetings/{meeting}', [PrincipalCareerParentMeetingController::class, 'show'])->middleware('permission:view_parent_meetings')->whereNumber('meeting')->name('career-parent-meetings.show');
+            Route::get('/career-parent-meetings/{meeting}/print', [PrincipalCareerParentMeetingController::class, 'print'])->middleware('permission:view_parent_meetings')->whereNumber('meeting')->name('career-parent-meetings.print');
+            Route::get('/career-reports', [PrincipalCareerReportController::class, 'index'])->middleware('permission:view_student_parent_career_summary')->name('career-reports.index');
+            Route::get('/career-reports/print', [PrincipalCareerReportController::class, 'print'])->middleware('permission:view_student_parent_career_summary')->name('career-reports.print');
         });
 
     Route::get('/admin/rbac-matrix', [RbacMatrixController::class, 'index'])

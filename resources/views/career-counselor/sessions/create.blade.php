@@ -36,6 +36,21 @@
                 @endforeach
             </div>
 
+            <div class="grid grid-cols-1 gap-4 rounded-xl bg-blue-50 p-4 md:grid-cols-2">
+                <div>
+                    <label class="block text-sm font-semibold text-slate-700" for="visibility">Visibility</label>
+                    <select id="visibility" name="visibility" class="mt-1 block w-full rounded-xl border-slate-300 text-sm">
+                        @foreach(['private' => 'Private', 'student' => 'Student', 'parent' => 'Parent', 'student_parent' => 'Student and Parent'] as $value => $label)
+                            <option value="{{ $value }}" @selected(old('visibility', 'private') === $value)>{{ $label }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-slate-700" for="public_summary">Public Summary</label>
+                    <textarea id="public_summary" name="public_summary" rows="3" class="mt-1 block w-full rounded-xl border-slate-300 text-sm">{{ old('public_summary') }}</textarea>
+                </div>
+            </div>
+
             <div class="flex justify-end gap-2">
                 <a href="{{ route('career-counselor.dashboard') }}" class="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700">Cancel</a>
                 <button class="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Save Session</button>

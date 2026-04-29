@@ -74,6 +74,8 @@
                         <div class="flex flex-wrap gap-2">
                             <a class="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white" href="${profileUrl}?student_id=${student.id}">Career Profile</a>
                             <a class="rounded-lg border border-blue-200 px-3 py-2 text-xs font-semibold text-blue-700" href="${sessionUrl}?student_id=${student.id}">New Session</a>
+                            <a class="rounded-lg border border-blue-200 px-3 py-2 text-xs font-semibold text-blue-700" href="{{ route('career-counselor.assessments.create') }}?student_id=${student.id}">Assessment</a>
+                            <a class="rounded-lg border border-blue-200 px-3 py-2 text-xs font-semibold text-blue-700" href="{{ route('career-counselor.parent-meetings.create') }}?student_id=${student.id}">Parent Meeting</a>
                         </div>
                     </div>
                 `).join('');

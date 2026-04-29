@@ -97,6 +97,15 @@ class RolePermissionSeeder extends Seeder
             'create_counseling_session',
             'view_counseling_sessions',
             'view_all_career_records',
+            'create_career_assessment',
+            'view_career_assessment',
+            'print_career_assessment',
+            'manage_parent_meetings',
+            'view_parent_meetings',
+            'mark_urgent_guidance',
+            'view_urgent_guidance_cases',
+            'manage_career_visibility',
+            'view_student_parent_career_summary',
         ];
 
         foreach ($permissions as $permission) {
@@ -145,6 +154,11 @@ class RolePermissionSeeder extends Seeder
             'view_student_academic_records',
             'view_student_profiles_basic',
             'view_all_career_records',
+            'view_career_assessment',
+            'print_career_assessment',
+            'view_parent_meetings',
+            'view_urgent_guidance_cases',
+            'view_student_parent_career_summary',
         ]);
         $teacher->syncPermissions([
             'view_attendance',
@@ -207,6 +221,13 @@ class RolePermissionSeeder extends Seeder
             'view_career_profile',
             'create_counseling_session',
             'view_counseling_sessions',
+            'create_career_assessment',
+            'view_career_assessment',
+            'print_career_assessment',
+            'manage_parent_meetings',
+            'view_parent_meetings',
+            'mark_urgent_guidance',
+            'manage_career_visibility',
         ]);
 
         $this->createUserWithRole('System Admin', 'admin@pmsc.edu.pk', 'Admin');

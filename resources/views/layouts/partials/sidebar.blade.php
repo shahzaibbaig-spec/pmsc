@@ -117,6 +117,18 @@
         if ($sidebarUser?->can('view_all_career_records')) {
             $menuItems[] = ['route' => 'principal.career-counseling.index', 'label' => 'Career Counselor'];
         }
+        if ($sidebarUser?->can('view_urgent_guidance_cases')) {
+            $menuItems[] = ['route' => 'principal.career-urgent-cases.index', 'label' => 'Urgent Career Cases'];
+        }
+        if ($sidebarUser?->can('view_career_assessment')) {
+            $menuItems[] = ['route' => 'principal.career-assessments.index', 'label' => 'Career Assessments'];
+        }
+        if ($sidebarUser?->can('view_parent_meetings')) {
+            $menuItems[] = ['route' => 'principal.career-parent-meetings.index', 'label' => 'Parent Meetings'];
+        }
+        if ($sidebarUser?->can('view_student_parent_career_summary')) {
+            $menuItems[] = ['route' => 'principal.career-reports.index', 'label' => 'Career Reports'];
+        }
     } elseif ($sidebarUser?->hasRole('Principal')) {
         $menuItems = [
             ['route' => 'principal.dashboard', 'label' => 'Dashboard'],
@@ -180,6 +192,18 @@
         if ($sidebarUser?->can('view_all_career_records')) {
             $menuItems[] = ['route' => 'principal.career-counseling.index', 'label' => 'Career Counselor'];
         }
+        if ($sidebarUser?->can('view_urgent_guidance_cases')) {
+            $menuItems[] = ['route' => 'principal.career-urgent-cases.index', 'label' => 'Urgent Career Cases'];
+        }
+        if ($sidebarUser?->can('view_career_assessment')) {
+            $menuItems[] = ['route' => 'principal.career-assessments.index', 'label' => 'Career Assessments'];
+        }
+        if ($sidebarUser?->can('view_parent_meetings')) {
+            $menuItems[] = ['route' => 'principal.career-parent-meetings.index', 'label' => 'Parent Meetings'];
+        }
+        if ($sidebarUser?->can('view_student_parent_career_summary')) {
+            $menuItems[] = ['route' => 'principal.career-reports.index', 'label' => 'Career Reports'];
+        }
     } elseif ($sidebarUser?->hasRole('Career Counselor')) {
         $menuItems = [
             ['route' => 'career-counselor.dashboard', 'label' => 'Dashboard'],
@@ -187,6 +211,15 @@
 
         if ($sidebarUser?->can('view_counseling_sessions')) {
             $menuItems[] = ['route' => 'career-counselor.sessions.index', 'label' => 'Counseling Sessions'];
+        }
+        if ($sidebarUser?->can('view_career_assessment')) {
+            $menuItems[] = ['route' => 'career-counselor.assessments.index', 'label' => 'Career Assessments'];
+        }
+        if ($sidebarUser?->can('view_parent_meetings')) {
+            $menuItems[] = ['route' => 'career-counselor.parent-meetings.index', 'label' => 'Parent Meetings'];
+        }
+        if ($sidebarUser?->can('mark_urgent_guidance')) {
+            $menuItems[] = ['route' => 'career-counselor.urgent.index', 'label' => 'Urgent Cases'];
         }
         $menuItems[] = ['route' => 'notifications.index', 'label' => 'Notifications'];
     } elseif ($sidebarUser?->hasRole('Accountant')) {

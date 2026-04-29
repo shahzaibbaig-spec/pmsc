@@ -1,0 +1,4 @@
+<x-app-layout>
+    <x-slot name="header"><h2 class="text-xl font-semibold text-slate-900">Urgent Career Guidance Cases</h2></x-slot>
+    <div class="mx-auto max-w-7xl py-8"><div class="rounded-2xl border border-slate-200 bg-white shadow-sm">@forelse($cases as $case)<div class="flex justify-between border-b border-slate-100 p-4"><div><p class="font-semibold">{{ $case->student?->name }}</p><p class="text-sm text-slate-500">{{ $case->urgent_reason ?: 'Urgent guidance required' }}</p></div><a class="text-sm font-semibold text-blue-700" href="{{ route('career-counselor.sessions.show', $case) }}">Open</a></div>@empty<p class="p-6 text-sm text-slate-500">No urgent cases.</p>@endforelse</div></div>
+</x-app-layout>

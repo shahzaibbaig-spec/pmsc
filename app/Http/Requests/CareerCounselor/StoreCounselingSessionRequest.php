@@ -23,6 +23,8 @@ class StoreCounselingSessionRequest extends FormRequest
             'recommended_career_path' => ['nullable', 'string'],
             'counselor_advice' => ['nullable', 'string'],
             'private_notes' => ['nullable', 'string'],
+            'visibility' => ['nullable', 'in:private,student,parent,student_parent'],
+            'public_summary' => ['nullable', 'string'],
         ];
     }
 }

@@ -30,5 +30,27 @@
                 </article>
             @endforeach
         </section>
+        @if(request()->routeIs('career-counselor.*'))
+            <section class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <form method="POST" action="{{ route('career-counselor.urgent.mark', $session) }}" class="rounded-2xl border border-rose-200 bg-white p-5 shadow-sm">
+                    @csrf
+                    <h3 class="font-semibold text-slate-900">Urgent Guidance</h3>
+                    <textarea name="urgent_reason" rows="3" placeholder="Urgent reason" class="mt-3 w-full rounded-xl border-slate-300 text-sm">{{ $session->urgent_reason }}</textarea>
+                    <button class="mt-3 rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white">Mark Urgent</button>
+                </form>
+                <form method="POST" action="{{ route('career-counselor.visibility.update', $session) }}" class="rounded-2xl border border-blue-200 bg-white p-5 shadow-sm">
+                    @csrf
+                    @method('PUT')
+                    <h3 class="font-semibold text-slate-900">Student/Parent Visibility</h3>
+                    <select name="visibility" class="mt-3 w-full rounded-xl border-slate-300 text-sm">
+                        @foreach(['private' => 'Private', 'student' => 'Student', 'parent' => 'Parent', 'student_parent' => 'Student and Parent'] as $value => $label)
+                            <option value="{{ $value }}" @selected($session->visibility === $value)>{{ $label }}</option>
+                        @endforeach
+                    </select>
+                    <textarea name="public_summary" rows="3" placeholder="Public summary" class="mt-3 w-full rounded-xl border-slate-300 text-sm">{{ $session->public_summary }}</textarea>
+                    <button class="mt-3 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white">Save Visibility</button>
+                </form>
+            </section>
+        @endif
     </div>
 </x-app-layout>

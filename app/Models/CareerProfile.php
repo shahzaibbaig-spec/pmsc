@@ -20,6 +20,8 @@ class CareerProfile extends Model
         'parent_expectations',
         'recommended_career_paths',
         'counselor_notes',
+        'visibility',
+        'public_summary',
         'created_by',
         'updated_by',
     ];
@@ -47,5 +49,10 @@ class CareerProfile extends Model
     public function counselingSessions(): HasMany
     {
         return $this->hasMany(CareerCounselingSession::class);
+    }
+
+    public function parentMeetings(): HasMany
+    {
+        return $this->hasMany(CareerParentMeeting::class);
     }
 }

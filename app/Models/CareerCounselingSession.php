@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class CareerCounselingSession extends Model
 {
@@ -23,6 +24,12 @@ class CareerCounselingSession extends Model
         'follow_up_required',
         'follow_up_date',
         'status',
+        'urgent_guidance_required',
+        'urgent_reason',
+        'urgent_marked_at',
+        'urgent_marked_by',
+        'visibility',
+        'public_summary',
         'created_by',
         'updated_by',
     ];
@@ -33,6 +40,8 @@ class CareerCounselingSession extends Model
             'counseling_date' => 'date',
             'follow_up_date' => 'date',
             'follow_up_required' => 'boolean',
+            'urgent_guidance_required' => 'boolean',
+            'urgent_marked_at' => 'datetime',
         ];
     }
 
@@ -59,5 +68,15 @@ class CareerCounselingSession extends Model
     public function updatedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'updated_by');
+    }
+
+    public function urgentMarkedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'urgent_marked_by');
+    }
+
+    public function parentMeetings(): HasMany
+    {
+        return $this->hasMany(CareerParentMeeting::class, 'counseling_session_id');
     }
 }

@@ -133,6 +133,16 @@ class Student extends Model
         return $this->hasMany(CareerCounselingSession::class);
     }
 
+    public function careerParentMeetings(): HasMany
+    {
+        return $this->hasMany(CareerParentMeeting::class);
+    }
+
+    public function careerAssessments(): HasMany
+    {
+        return $this->hasMany(CareerAssessment::class);
+    }
+
     public function latestCareerProfile(): HasOne
     {
         return $this->hasOne(CareerProfile::class)->latestOfMany();
