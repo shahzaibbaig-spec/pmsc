@@ -12,11 +12,19 @@ use App\Http\Controllers\CareerCounselor\DashboardController as CareerCounselorD
 use App\Http\Controllers\CareerCounselor\ParentMeetingController as CareerCounselorParentMeetingController;
 use App\Http\Controllers\CareerCounselor\StudentSearchController as CareerCounselorStudentSearchController;
 use App\Http\Controllers\CareerCounselor\UrgentGuidanceController as CareerCounselorUrgentGuidanceController;
+use App\Http\Controllers\CareerCounselor\Kcat\KcatAssignmentController;
+use App\Http\Controllers\CareerCounselor\Kcat\KcatAttemptController as CareerCounselorKcatAttemptController;
+use App\Http\Controllers\CareerCounselor\Kcat\KcatDashboardController;
+use App\Http\Controllers\CareerCounselor\Kcat\KcatQuestionController;
+use App\Http\Controllers\CareerCounselor\Kcat\KcatReportController as CareerCounselorKcatReportController;
+use App\Http\Controllers\CareerCounselor\Kcat\KcatTestController;
 use App\Http\Controllers\Principal\CareerAssessmentController as PrincipalCareerAssessmentController;
 use App\Http\Controllers\Principal\CareerCounselingController;
 use App\Http\Controllers\Principal\CareerParentMeetingController as PrincipalCareerParentMeetingController;
 use App\Http\Controllers\Principal\CareerReportController as PrincipalCareerReportController;
 use App\Http\Controllers\Principal\CareerUrgentCaseController as PrincipalCareerUrgentCaseController;
+use App\Http\Controllers\Principal\Kcat\KcatAnalyticsController as PrincipalKcatAnalyticsController;
+use App\Http\Controllers\Principal\Kcat\KcatReportController as PrincipalKcatReportController;
 use App\Http\Controllers\Principal\TeacherAcrController;
 use App\Http\Controllers\Principal\TeacherAttendanceController as PrincipalTeacherAttendanceController;
 use App\Http\Controllers\Principal\TeacherResultEntryController;
@@ -27,6 +35,7 @@ use App\Http\Controllers\Principal\ResultLockController;
 use App\Http\Controllers\Principal\AnalyticsExportController;
 use App\Http\Controllers\Principal\DailyDiaryMonitoringController;
 use App\Http\Controllers\Principal\PrincipalPromotionController;
+use App\Http\Controllers\Student\KcatAttemptController as StudentKcatAttemptController;
 use App\Http\Controllers\Student\StudentDailyDiaryController;
 use App\Http\Controllers\Teacher\DailyDiaryController;
 use App\Http\Controllers\Teacher\TeacherDeviceDeclarationController;
@@ -232,6 +241,37 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
             Route::post('/sessions/{session}/urgent', [CareerCounselorUrgentGuidanceController::class, 'mark'])->middleware('permission:mark_urgent_guidance')->whereNumber('session')->name('urgent.mark');
             Route::delete('/sessions/{session}/urgent', [CareerCounselorUrgentGuidanceController::class, 'unmark'])->middleware('permission:mark_urgent_guidance')->whereNumber('session')->name('urgent.unmark');
             Route::put('/sessions/{session}/visibility', [CareerCounselorUrgentGuidanceController::class, 'visibility'])->middleware('permission:manage_career_visibility')->whereNumber('session')->name('visibility.update');
+            Route::prefix('kcat')->name('kcat.')->middleware('permission:view_kcat_panel')->group(function (): void {
+                Route::get('/dashboard', KcatDashboardController::class)->name('dashboard');
+                Route::get('/tests', [KcatTestController::class, 'index'])->middleware('permission:manage_kcat_tests')->name('tests.index');
+                Route::get('/tests/create', [KcatTestController::class, 'create'])->middleware('permission:manage_kcat_tests')->name('tests.create');
+                Route::post('/tests', [KcatTestController::class, 'store'])->middleware('permission:manage_kcat_tests')->name('tests.store');
+                Route::get('/tests/{test}', [KcatTestController::class, 'show'])->middleware('permission:manage_kcat_tests')->whereNumber('test')->name('tests.show');
+                Route::get('/tests/{test}/edit', [KcatTestController::class, 'edit'])->middleware('permission:manage_kcat_tests')->whereNumber('test')->name('tests.edit');
+                Route::put('/tests/{test}', [KcatTestController::class, 'update'])->middleware('permission:manage_kcat_tests')->whereNumber('test')->name('tests.update');
+                Route::post('/tests/{test}/activate', [KcatTestController::class, 'activate'])->middleware('permission:manage_kcat_tests')->whereNumber('test')->name('tests.activate');
+                Route::post('/tests/{test}/archive', [KcatTestController::class, 'archive'])->middleware('permission:manage_kcat_tests')->whereNumber('test')->name('tests.archive');
+                Route::post('/tests/{test}/sections', [KcatTestController::class, 'storeSection'])->middleware('permission:manage_kcat_tests')->whereNumber('test')->name('sections.store');
+                Route::put('/sections/{section}', [KcatTestController::class, 'updateSection'])->middleware('permission:manage_kcat_tests')->whereNumber('section')->name('sections.update');
+                Route::delete('/sections/{section}', [KcatTestController::class, 'destroySection'])->middleware('permission:manage_kcat_tests')->whereNumber('section')->name('sections.destroy');
+                Route::get('/tests/{test}/questions/create', [KcatQuestionController::class, 'create'])->middleware('permission:manage_kcat_questions')->whereNumber('test')->name('questions.create');
+                Route::post('/questions', [KcatQuestionController::class, 'store'])->middleware('permission:manage_kcat_questions')->name('questions.store');
+                Route::get('/questions/{question}/edit', [KcatQuestionController::class, 'edit'])->middleware('permission:manage_kcat_questions')->whereNumber('question')->name('questions.edit');
+                Route::put('/questions/{question}', [KcatQuestionController::class, 'update'])->middleware('permission:manage_kcat_questions')->whereNumber('question')->name('questions.update');
+                Route::delete('/questions/{question}', [KcatQuestionController::class, 'destroy'])->middleware('permission:manage_kcat_questions')->whereNumber('question')->name('questions.destroy');
+                Route::get('/assignments', [KcatAssignmentController::class, 'index'])->middleware('permission:assign_kcat_tests')->name('assignments.index');
+                Route::get('/assignments/create', [KcatAssignmentController::class, 'create'])->middleware('permission:assign_kcat_tests')->name('assignments.create');
+                Route::post('/assignments', [KcatAssignmentController::class, 'store'])->middleware('permission:assign_kcat_tests')->name('assignments.store');
+                Route::get('/assignments/{assignment}', [KcatAssignmentController::class, 'show'])->middleware('permission:assign_kcat_tests')->whereNumber('assignment')->name('assignments.show');
+                Route::get('/attempts', [CareerCounselorKcatAttemptController::class, 'index'])->middleware('permission:view_kcat_reports')->name('attempts.index');
+                Route::get('/attempts/{attempt}', [CareerCounselorKcatAttemptController::class, 'show'])->middleware('permission:view_kcat_reports')->whereNumber('attempt')->name('attempts.show');
+                Route::get('/tests/{test}/manual-entry', [CareerCounselorKcatAttemptController::class, 'manualEntry'])->middleware('permission:manually_enter_kcat_attempt')->whereNumber('test')->name('attempts.manual-entry');
+                Route::post('/tests/{test}/manual-entry', [CareerCounselorKcatAttemptController::class, 'storeManualEntry'])->middleware('permission:manually_enter_kcat_attempt')->whereNumber('test')->name('attempts.manual-entry.store');
+                Route::get('/reports/{attempt}', [CareerCounselorKcatReportController::class, 'show'])->middleware('permission:view_kcat_reports')->whereNumber('attempt')->name('reports.show');
+                Route::get('/reports/{attempt}/print', [CareerCounselorKcatReportController::class, 'print'])->middleware('permission:print_kcat_reports')->whereNumber('attempt')->name('reports.print');
+                Route::post('/reports/{attempt}/notes', [CareerCounselorKcatReportController::class, 'notes'])->middleware('permission:manage_kcat_report_notes')->whereNumber('attempt')->name('reports.notes.store');
+                Route::post('/reports/{attempt}/career-profiles/{profile}/attach', [CareerCounselorKcatReportController::class, 'attach'])->middleware('permission:attach_kcat_to_career_profile')->whereNumber(['attempt', 'profile'])->name('reports.attach-profile');
+            });
         });
 
     Route::prefix('principal')
@@ -260,6 +300,14 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
             Route::get('/career-parent-meetings/{meeting}/print', [PrincipalCareerParentMeetingController::class, 'print'])->middleware('permission:view_parent_meetings')->whereNumber('meeting')->name('career-parent-meetings.print');
             Route::get('/career-reports', [PrincipalCareerReportController::class, 'index'])->middleware('permission:view_student_parent_career_summary')->name('career-reports.index');
             Route::get('/career-reports/print', [PrincipalCareerReportController::class, 'print'])->middleware('permission:view_student_parent_career_summary')->name('career-reports.print');
+            Route::prefix('kcat')->name('kcat.')->group(function (): void {
+                Route::get('/reports', [PrincipalKcatReportController::class, 'index'])->middleware('permission:view_all_kcat_reports')->name('reports.index');
+                Route::get('/reports/{attempt}', [PrincipalKcatReportController::class, 'show'])->middleware('permission:view_all_kcat_reports')->whereNumber('attempt')->name('reports.show');
+                Route::get('/reports/{attempt}/print', [PrincipalKcatReportController::class, 'print'])->middleware('permission:print_kcat_reports')->whereNumber('attempt')->name('reports.print');
+                Route::get('/students/{student}/reports', [PrincipalKcatReportController::class, 'studentReport'])->middleware('permission:view_all_kcat_reports')->whereNumber('student')->name('students.reports');
+                Route::get('/analytics', [PrincipalKcatAnalyticsController::class, 'index'])->middleware('permission:view_all_kcat_reports')->name('analytics.index');
+                Route::get('/grade-wise-summary', [PrincipalKcatAnalyticsController::class, 'gradeWiseSummary'])->middleware('permission:view_all_kcat_reports')->name('grade-wise-summary');
+            });
         });
 
     Route::get('/admin/rbac-matrix', [RbacMatrixController::class, 'index'])
@@ -1674,6 +1722,18 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
     Route::get('/student/daily-diary', [StudentDailyDiaryController::class, 'index'])
         ->middleware(['role:Student', 'permission:view_student_daily_diary'])
         ->name('student.daily-diary.index');
+
+    Route::prefix('student/kcat')
+        ->name('student.kcat.')
+        ->middleware(['role:Student', 'permission:attempt_kcat_test'])
+        ->group(function (): void {
+            Route::get('/assignments', [StudentKcatAttemptController::class, 'index'])->name('assignments.index');
+            Route::post('/assignments/{assignment}/start', [StudentKcatAttemptController::class, 'start'])->whereNumber('assignment')->name('assignments.start');
+            Route::get('/attempts/{attempt}/question/{index?}', [StudentKcatAttemptController::class, 'question'])->whereNumber(['attempt', 'index'])->name('attempts.question');
+            Route::post('/attempts/{attempt}/questions/{question}', [StudentKcatAttemptController::class, 'answer'])->whereNumber(['attempt', 'question'])->name('attempts.answer');
+            Route::post('/attempts/{attempt}/submit', [StudentKcatAttemptController::class, 'submit'])->whereNumber('attempt')->name('attempts.submit');
+            Route::get('/attempts/{attempt}/result', [StudentKcatAttemptController::class, 'result'])->whereNumber('attempt')->name('attempts.result');
+        });
 
     Route::prefix('student/assessments')
         ->name('student.assessments.')

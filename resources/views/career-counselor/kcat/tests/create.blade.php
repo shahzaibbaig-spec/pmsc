@@ -1,0 +1,31 @@
+<x-app-layout>
+    <x-slot name="header">
+        <h2 class="text-xl font-semibold text-slate-900">{{ $test ? 'Edit KCAT Test' : 'Create KCAT Test' }}</h2>
+    </x-slot>
+
+    <div class="mx-auto max-w-4xl py-8">
+        <form method="POST" action="{{ $test ? route('career-counselor.kcat.tests.update', $test) : route('career-counselor.kcat.tests.store') }}" class="space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            @csrf
+            @if ($test) @method('PUT') @endif
+            <div>
+                <label class="text-sm font-semibold text-slate-700">Title</label>
+                <input name="title" value="{{ old('title', $test?->title) }}" class="mt-1 block w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500" required>
+                @error('title') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+            </div>
+            <div>
+                <label class="text-sm font-semibold text-slate-700">Description</label>
+                <textarea name="description" rows="3" class="mt-1 block w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">{{ old('description', $test?->description) }}</textarea>
+            </div>
+            <div class="grid grid-cols-1 gap-4 md:grid-cols-4">
+                <div><label class="text-sm font-semibold text-slate-700">Grade From</label><input type="number" min="1" max="12" name="grade_from" value="{{ old('grade_from', $test?->grade_from ?? 7) }}" class="mt-1 block w-full rounded-xl border-slate-300 text-sm"></div>
+                <div><label class="text-sm font-semibold text-slate-700">Grade To</label><input type="number" min="1" max="12" name="grade_to" value="{{ old('grade_to', $test?->grade_to ?? 12) }}" class="mt-1 block w-full rounded-xl border-slate-300 text-sm"></div>
+                <div><label class="text-sm font-semibold text-slate-700">Duration</label><input type="number" min="1" name="duration_minutes" value="{{ old('duration_minutes', $test?->duration_minutes) }}" class="mt-1 block w-full rounded-xl border-slate-300 text-sm"></div>
+                <div><label class="text-sm font-semibold text-slate-700">Status</label><select name="status" class="mt-1 block w-full rounded-xl border-slate-300 text-sm"><option value="draft" @selected(old('status', $test?->status) === 'draft')>Draft</option><option value="active" @selected(old('status', $test?->status) === 'active')>Active</option><option value="archived" @selected(old('status', $test?->status) === 'archived')>Archived</option></select></div>
+            </div>
+            <div class="flex justify-end gap-2">
+                <a href="{{ route('career-counselor.kcat.tests.index') }}" class="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700">Cancel</a>
+                <button class="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white">Save</button>
+            </div>
+        </form>
+    </div>
+</x-app-layout>

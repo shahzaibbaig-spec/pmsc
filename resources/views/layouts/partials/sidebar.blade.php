@@ -129,6 +129,10 @@
         if ($sidebarUser?->can('view_student_parent_career_summary')) {
             $menuItems[] = ['route' => 'principal.career-reports.index', 'label' => 'Career Reports'];
         }
+        if ($sidebarUser?->can('view_all_kcat_reports')) {
+            $menuItems[] = ['route' => 'principal.kcat.reports.index', 'label' => 'KCAT Reports'];
+            $menuItems[] = ['route' => 'principal.kcat.analytics.index', 'label' => 'KCAT Analytics'];
+        }
     } elseif ($sidebarUser?->hasRole('Principal')) {
         $menuItems = [
             ['route' => 'principal.dashboard', 'label' => 'Dashboard'],
@@ -204,6 +208,10 @@
         if ($sidebarUser?->can('view_student_parent_career_summary')) {
             $menuItems[] = ['route' => 'principal.career-reports.index', 'label' => 'Career Reports'];
         }
+        if ($sidebarUser?->can('view_all_kcat_reports')) {
+            $menuItems[] = ['route' => 'principal.kcat.reports.index', 'label' => 'KCAT Reports'];
+            $menuItems[] = ['route' => 'principal.kcat.analytics.index', 'label' => 'KCAT Analytics'];
+        }
     } elseif ($sidebarUser?->hasRole('Career Counselor')) {
         $menuItems = [
             ['route' => 'career-counselor.dashboard', 'label' => 'Dashboard'],
@@ -220,6 +228,9 @@
         }
         if ($sidebarUser?->can('mark_urgent_guidance')) {
             $menuItems[] = ['route' => 'career-counselor.urgent.index', 'label' => 'Urgent Cases'];
+        }
+        if ($sidebarUser?->can('view_kcat_panel')) {
+            $menuItems[] = ['route' => 'career-counselor.kcat.dashboard', 'label' => 'KCAT'];
         }
         $menuItems[] = ['route' => 'notifications.index', 'label' => 'Notifications'];
     } elseif ($sidebarUser?->hasRole('Accountant')) {
@@ -353,6 +364,9 @@
                 'route' => 'student.assessments.index',
                 'label' => 'Assessments',
             ]]);
+        }
+        if ($sidebarUser?->can('attempt_kcat_test')) {
+            $menuItems[] = ['route' => 'student.kcat.assignments.index', 'label' => 'KCAT'];
         }
     }
 @endphp

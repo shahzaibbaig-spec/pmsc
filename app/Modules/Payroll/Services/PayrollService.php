@@ -12,6 +12,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 use RuntimeException;
 
 class PayrollService
@@ -51,6 +52,7 @@ class PayrollService
     public function createProfile(array $payload, array $allowanceItems, array $deductionItems): PayrollProfile
     {
         return DB::transaction(function () use ($payload, $allowanceItems, $deductionItems): PayrollProfile {
+            $this->assertValidPayrollUserId((int) ($payload['user_id'] ?? 0));
             $profile = PayrollProfile::query()->create($payload);
             $this->syncBreakdownRows($profile, $allowanceItems, $deductionItems);
 
@@ -61,6 +63,7 @@ class PayrollService
     public function updateProfile(PayrollProfile $profile, array $payload, array $allowanceItems, array $deductionItems): PayrollProfile
     {
         return DB::transaction(function () use ($profile, $payload, $allowanceItems, $deductionItems): PayrollProfile {
+            $this->assertValidPayrollUserId((int) ($payload['user_id'] ?? 0));
             $profile->forceFill($payload)->save();
             $this->syncBreakdownRows($profile, $allowanceItems, $deductionItems);
 
@@ -425,6 +428,22 @@ class PayrollService
         return User::query()->useWritePdo()->whereKey($userId)->exists()
             ? $userId
             : null;
+    }
+
+    private function assertValidPayrollUserId(int $userId): void
+    {
+        if ($userId <= 0) {
+            throw ValidationException::withMessages([
+                'user_id' => 'Please select a valid staff user.',
+            ]);
+        }
+
+        $exists = User::query()->useWritePdo()->whereKey($userId)->exists();
+        if (! $exists) {
+            throw ValidationException::withMessages([
+                'user_id' => 'The selected staff user no longer exists. Refresh and select again.',
+            ]);
+        }
     }
 
     private function syncBreakdownRows(PayrollProfile $profile, array $allowanceItems, array $deductionItems): void

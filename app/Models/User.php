@@ -257,4 +257,14 @@ class User extends Authenticatable
         return $this->hasMany(WardenDailyReport::class, 'created_by');
     }
 
+    public function kcatCreatedTests(): HasMany
+    {
+        return $this->hasMany(KcatTest::class, 'created_by');
+    }
+
+    public function kcatCounselorAttempts(): HasMany
+    {
+        return $this->hasMany(KcatAttempt::class, 'counselor_id');
+    }
+
 }

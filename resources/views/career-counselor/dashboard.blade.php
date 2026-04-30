@@ -30,6 +30,18 @@
             @endforeach
         </section>
 
+        @can('view_kcat_panel')
+            <section class="rounded-2xl border border-blue-100 bg-white p-5 shadow-sm">
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                        <h3 class="text-base font-semibold text-slate-900">KCAT - KORT Cognitive Assessment Test</h3>
+                        <p class="text-sm text-slate-500">Create templates, assign cognitive assessments, score attempts, and review KCAT reports.</p>
+                    </div>
+                    <a href="{{ route('career-counselor.kcat.dashboard') }}" class="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white">Open KCAT</a>
+                </div>
+            </section>
+        @endcan
+
         <section class="rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div class="border-b border-slate-200 px-5 py-4">
                 <h3 class="text-base font-semibold text-slate-900">Recent Career Counselor Sessions</h3>

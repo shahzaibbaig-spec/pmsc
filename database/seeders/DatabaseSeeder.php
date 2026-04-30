@@ -26,6 +26,7 @@ class DatabaseSeeder extends Seeder
             TimeSlotSeeder::class,
             CognitiveAssessmentSeeder::class,
             CognitiveSkillsAssessmentLevel4Seeder::class,
+            KcatDefaultSeeder::class,
         ]);
     }
 }

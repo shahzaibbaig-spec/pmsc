@@ -143,6 +143,16 @@ class Student extends Model
         return $this->hasMany(CareerAssessment::class);
     }
 
+    public function kcatAssignments(): HasMany
+    {
+        return $this->hasMany(KcatAssignment::class);
+    }
+
+    public function kcatAttempts(): HasMany
+    {
+        return $this->hasMany(KcatAttempt::class);
+    }
+
     public function latestCareerProfile(): HasOne
     {
         return $this->hasOne(CareerProfile::class)->latestOfMany();

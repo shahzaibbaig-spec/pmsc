@@ -106,6 +106,17 @@ class RolePermissionSeeder extends Seeder
             'view_urgent_guidance_cases',
             'manage_career_visibility',
             'view_student_parent_career_summary',
+            'view_kcat_panel',
+            'manage_kcat_tests',
+            'manage_kcat_questions',
+            'assign_kcat_tests',
+            'attempt_kcat_test',
+            'manually_enter_kcat_attempt',
+            'view_kcat_reports',
+            'print_kcat_reports',
+            'view_all_kcat_reports',
+            'manage_kcat_report_notes',
+            'attach_kcat_to_career_profile',
         ];
 
         foreach ($permissions as $permission) {
@@ -159,6 +170,8 @@ class RolePermissionSeeder extends Seeder
             'view_parent_meetings',
             'view_urgent_guidance_cases',
             'view_student_parent_career_summary',
+            'view_all_kcat_reports',
+            'print_kcat_reports',
         ]);
         $teacher->syncPermissions([
             'view_attendance',
@@ -186,6 +199,7 @@ class RolePermissionSeeder extends Seeder
             'view_student_daily_diary',
             'take_cognitive_assessment',
             'view_own_cognitive_results',
+            'attempt_kcat_test',
         ]);
         $accountant->syncPermissions([
             'view_fee_structure',
@@ -228,6 +242,15 @@ class RolePermissionSeeder extends Seeder
             'view_parent_meetings',
             'mark_urgent_guidance',
             'manage_career_visibility',
+            'view_kcat_panel',
+            'manage_kcat_tests',
+            'manage_kcat_questions',
+            'assign_kcat_tests',
+            'manually_enter_kcat_attempt',
+            'view_kcat_reports',
+            'print_kcat_reports',
+            'manage_kcat_report_notes',
+            'attach_kcat_to_career_profile',
         ]);
 
         $this->createUserWithRole('System Admin', 'admin@pmsc.edu.pk', 'Admin');
