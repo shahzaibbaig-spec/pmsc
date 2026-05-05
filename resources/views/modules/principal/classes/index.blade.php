@@ -39,6 +39,48 @@
 
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
                 <div class="p-6">
+                    <h3 class="text-lg font-medium text-gray-900">Copy Subject Assignments Between Sections</h3>
+                    <p class="text-sm text-gray-600 mt-1">
+                        Copy subjects from one section to another section of the same class (for example, 8 A to 8 B).
+                    </p>
+
+                    <div id="copyStatus" class="mt-4 hidden rounded-md p-3 text-sm"></div>
+                    <div id="copyErrors" class="mt-4 hidden rounded-md bg-red-50 p-3 text-sm text-red-700"></div>
+
+                    <form id="copySubjectsForm" class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-4">
+                        <div>
+                            <x-input-label for="copySourceClass" value="Source Section" />
+                            <select id="copySourceClass" class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500" required>
+                                <option value="">Select source section</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <x-input-label for="copyTargetClass" value="Target Section" />
+                            <select id="copyTargetClass" class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500" required>
+                                <option value="">Select target section</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <x-input-label for="copyMode" value="Copy Mode" />
+                            <select id="copyMode" class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                <option value="copy_missing_only">Copy missing only</option>
+                                <option value="replace_target_subjects">Replace target subjects</option>
+                            </select>
+                        </div>
+
+                        <div class="flex items-end">
+                            <button id="copySubjectsBtn" type="submit" class="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">
+                                Copy Subjects
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
+                <div class="p-6">
                     <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                         <h3 class="text-lg font-medium text-gray-900">Class List</h3>
                         <div class="flex items-center gap-2">
@@ -123,6 +165,13 @@
         const subjectCheckboxes = document.getElementById('subjectCheckboxes');
         const closeAssignModalButton = document.getElementById('closeAssignModal');
         const saveAssignmentsButton = document.getElementById('saveAssignments');
+        const copySubjectsForm = document.getElementById('copySubjectsForm');
+        const copySourceClass = document.getElementById('copySourceClass');
+        const copyTargetClass = document.getElementById('copyTargetClass');
+        const copyMode = document.getElementById('copyMode');
+        const copyStatus = document.getElementById('copyStatus');
+        const copyErrors = document.getElementById('copyErrors');
+        const copySubjectsBtn = document.getElementById('copySubjectsBtn');
 
         let state = {
             page: 1,
@@ -132,6 +181,7 @@
 
         let classesCache = [];
         let subjectsCache = [];
+        let classesOptions = [];
         let assignTargetClassId = null;
 
         function escapeHtml(value) {
@@ -167,6 +217,29 @@
             assignErrors.innerHTML = '';
         }
 
+        function showCopyStatus(message, type = 'success') {
+            copyStatus.classList.remove('hidden');
+            copyStatus.textContent = message;
+            copyStatus.className = type === 'error'
+                ? 'mt-4 rounded-md bg-red-50 p-3 text-sm text-red-700'
+                : 'mt-4 rounded-md bg-emerald-50 p-3 text-sm text-emerald-700';
+        }
+
+        function hideCopyStatus() {
+            copyStatus.classList.add('hidden');
+            copyStatus.textContent = '';
+        }
+
+        function showCopyErrors(messages) {
+            copyErrors.classList.remove('hidden');
+            copyErrors.innerHTML = '<ul class="list-disc ps-5">' + messages.map(m => `<li>${escapeHtml(m)}</li>`).join('') + '</ul>';
+        }
+
+        function hideCopyErrors() {
+            copyErrors.classList.add('hidden');
+            copyErrors.innerHTML = '';
+        }
+
         function resetForm() {
             classForm.reset();
             classIdInput.value = '';
@@ -183,6 +256,20 @@
             return subjects.map(subject => `<span class="inline-flex me-1 mb-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800">${escapeHtml(subject.name)}</span>`).join('');
         }
 
+        function renderCopyClassOptions() {
+            const defaultOption = '<option value="">Select section</option>';
+            const optionsHtml = classesOptions.map((classRoom) => {
+                const label = classRoom.status === 'active'
+                    ? classRoom.display_name
+                    : `${classRoom.display_name} (Inactive)`;
+
+                return `<option value="${classRoom.id}">${escapeHtml(label)}</option>`;
+            }).join('');
+
+            copySourceClass.innerHTML = defaultOption + optionsHtml;
+            copyTargetClass.innerHTML = defaultOption + optionsHtml;
+        }
+
         async function loadSubjectsOptions() {
             const response = await fetch(`{{ route('principal.classes.options') }}`, {
                 headers: { 'Accept': 'application/json' }
@@ -194,6 +281,8 @@
 
             const payload = await response.json();
             subjectsCache = payload.subjects || [];
+            classesOptions = Array.isArray(payload.classes) ? payload.classes : [];
+            renderCopyClassOptions();
         }
 
         async function loadClasses() {
@@ -376,6 +465,65 @@
                 await loadClasses();
             } catch (error) {
                 showAssignErrors(['Unexpected error occurred while saving class subjects.']);
+            }
+        });
+
+        copySubjectsForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            hideCopyErrors();
+            hideCopyStatus();
+
+            const sourceClassId = Number(copySourceClass.value);
+            const targetClassId = Number(copyTargetClass.value);
+            const mode = copyMode.value || 'copy_missing_only';
+
+            if (!sourceClassId || !targetClassId) {
+                showCopyErrors(['Please select both source and target sections.']);
+                return;
+            }
+
+            if (mode === 'replace_target_subjects') {
+                const proceed = window.confirm('Replace mode will remove existing target subjects before copying. Continue?');
+                if (!proceed) {
+                    return;
+                }
+            }
+
+            copySubjectsBtn.disabled = true;
+            copySubjectsBtn.textContent = 'Copying...';
+
+            try {
+                const response = await fetch(`{{ route('principal.classes.copy-subjects') }}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': csrfToken
+                    },
+                    body: JSON.stringify({
+                        source_class_id: sourceClassId,
+                        target_class_id: targetClassId,
+                        copy_mode: mode,
+                    })
+                });
+
+                const result = await response.json();
+                if (!response.ok) {
+                    if (result.errors) {
+                        showCopyErrors(Object.values(result.errors).flat());
+                    } else {
+                        showCopyErrors([result.message || 'Failed to copy subjects.']);
+                    }
+                    return;
+                }
+
+                showCopyStatus(result.message || 'Subjects copied successfully.');
+                await loadClasses();
+            } catch (error) {
+                showCopyErrors(['Unexpected error occurred while copying subjects.']);
+            } finally {
+                copySubjectsBtn.disabled = false;
+                copySubjectsBtn.textContent = 'Copy Subjects';
             }
         });
 

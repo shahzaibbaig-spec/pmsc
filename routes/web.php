@@ -544,6 +544,10 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
         ->middleware(['role:Principal', 'permission:assign_subjects'])
         ->name('principal.classes.assign-subjects');
 
+    Route::post('/principal/classes/copy-subjects', [ClassManagementController::class, 'copySubjects'])
+        ->middleware(['role:Principal', 'permission:assign_subjects'])
+        ->name('principal.classes.copy-subjects');
+
     Route::get('/principal/timetable/settings', [TimetableSettingsController::class, 'index'])
         ->middleware(['role:Principal'])
         ->name('principal.timetable.settings.index');
