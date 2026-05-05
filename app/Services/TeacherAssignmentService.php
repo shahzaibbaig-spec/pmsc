@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\SchoolClass;
 use App\Models\Teacher;
 use App\Models\TeacherAssignment;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -410,6 +411,127 @@ class TeacherAssignmentService
         });
     }
 
+    /**
+     * @return array{
+     *   total_source_allocations:int,
+     *   copied_count:int,
+     *   skipped_count:int,
+     *   replaced_count:int,
+     *   errors:array<int, string>
+     * }
+     */
+    public function copySectionAllocations(
+        SchoolClass $sourceClass,
+        SchoolClass $targetClass,
+        string $session,
+        string $copyMode,
+        User $user
+    ): array {
+        $resolvedSession = trim($session);
+        $resolvedCopyMode = trim($copyMode);
+
+        $this->validateSectionCopyRequest($sourceClass, $targetClass, $resolvedSession, $resolvedCopyMode);
+
+        return DB::transaction(function () use (
+            $sourceClass,
+            $targetClass,
+            $resolvedSession,
+            $resolvedCopyMode,
+            $user
+        ): array {
+            $sourceRows = TeacherAssignment::query()
+                ->where('class_id', (int) $sourceClass->id)
+                ->where('session', $resolvedSession)
+                ->orderByDesc('is_class_teacher')
+                ->orderBy('subject_id')
+                ->orderBy('id')
+                ->get(['id', 'teacher_id', 'class_id', 'subject_id', 'is_class_teacher', 'session']);
+
+            if ($sourceRows->isEmpty()) {
+                throw ValidationException::withMessages([
+                    'source_class_id' => 'The source section has no teacher assignments for the selected session.',
+                ]);
+            }
+
+            $summary = [
+                'total_source_allocations' => $sourceRows->count(),
+                'copied_count' => 0,
+                'skipped_count' => 0,
+                'replaced_count' => 0,
+                'errors' => [],
+            ];
+
+            if ($resolvedCopyMode === 'replace_target_allocations') {
+                $targetRows = TeacherAssignment::query()
+                    ->where('class_id', (int) $targetClass->id)
+                    ->where('session', $resolvedSession)
+                    ->lockForUpdate()
+                    ->get(['id', 'teacher_id', 'class_id', 'subject_id', 'is_class_teacher']);
+
+                $summary['replaced_count'] = $targetRows->count();
+
+                $targetClassTeacherIds = $targetRows
+                    ->where('is_class_teacher', true)
+                    ->pluck('teacher_id')
+                    ->map(static fn ($id): int => (int) $id)
+                    ->filter(static fn (int $id): bool => $id > 0)
+                    ->unique()
+                    ->values();
+
+                if ($targetRows->isNotEmpty()) {
+                    TeacherAssignment::query()
+                        ->whereIn('id', $targetRows->pluck('id')->all())
+                        ->delete();
+                }
+
+                if ($targetClassTeacherIds->isNotEmpty()) {
+                    SchoolClass::query()
+                        ->whereKey((int) $targetClass->id)
+                        ->whereIn('class_teacher_id', $targetClassTeacherIds->all())
+                        ->update(['class_teacher_id' => null]);
+                }
+            }
+
+            $targetRows = TeacherAssignment::query()
+                ->where('class_id', (int) $targetClass->id)
+                ->where('session', $resolvedSession)
+                ->lockForUpdate()
+                ->get(['id', 'teacher_id', 'class_id', 'subject_id', 'is_class_teacher']);
+
+            $targetState = $this->sectionAssignmentState($targetRows);
+            $copiedAt = now();
+
+            foreach ($sourceRows as $sourceRow) {
+                if ($this->shouldSkipSectionCopy($sourceRow, $targetState)) {
+                    $summary['skipped_count']++;
+                    continue;
+                }
+
+                TeacherAssignment::query()->create([
+                    'teacher_id' => (int) $sourceRow->teacher_id,
+                    'class_id' => (int) $targetClass->id,
+                    'subject_id' => $sourceRow->subject_id !== null ? (int) $sourceRow->subject_id : null,
+                    'is_class_teacher' => (bool) $sourceRow->is_class_teacher,
+                    'session' => $resolvedSession,
+                    'copied_from_assignment_id' => (int) $sourceRow->id,
+                    'copied_by' => (int) $user->id,
+                    'copied_at' => $copiedAt,
+                ]);
+
+                $this->rememberSectionAssignment($targetState, $sourceRow);
+                $summary['copied_count']++;
+
+                if ((bool) $sourceRow->is_class_teacher) {
+                    SchoolClass::query()
+                        ->whereKey((int) $targetClass->id)
+                        ->update(['class_teacher_id' => (int) $sourceRow->teacher_id]);
+                }
+            }
+
+            return $summary;
+        });
+    }
+
     public function ensureTeacherProfileForUser(int $userId, ?string $designation = 'Teacher'): Teacher
     {
         $existing = Teacher::query()->where('user_id', $userId)->first();
@@ -481,6 +603,109 @@ class TeacherAssignmentService
             ->unique()
             ->values()
             ->all();
+    }
+
+    private function validateSectionCopyRequest(
+        SchoolClass $sourceClass,
+        SchoolClass $targetClass,
+        string $session,
+        string $copyMode
+    ): void {
+        $errors = [];
+
+        if ($session === '') {
+            $errors['session'] = 'The session field is required.';
+        }
+
+        if (! in_array($copyMode, ['copy_missing_only', 'replace_target_allocations'], true)) {
+            $errors['copy_mode'] = 'The selected copy mode is invalid.';
+        }
+
+        if ((int) $sourceClass->id === (int) $targetClass->id) {
+            $errors['target_class_id'] = 'The source and target sections must be different.';
+        }
+
+        if ($this->normalizeClassName((string) $sourceClass->name) !== $this->normalizeClassName((string) $targetClass->name)) {
+            $errors['target_class_id'] = 'Allocations can only be copied between sections of the same class.';
+        }
+
+        if ($this->normalizeSectionName($sourceClass->section) === $this->normalizeSectionName($targetClass->section)) {
+            $errors['target_class_id'] = 'The source and target sections must be different.';
+        }
+
+        if (strtolower(trim((string) $targetClass->status)) !== 'active') {
+            $errors['target_class_id'] = 'The target section must be active.';
+        }
+
+        if ($errors !== []) {
+            throw ValidationException::withMessages($errors);
+        }
+    }
+
+    /**
+     * @param Collection<int, TeacherAssignment> $rows
+     * @return array{subject_ids:array<int, bool>, has_class_teacher:bool, assignment_keys:array<string, bool>}
+     */
+    private function sectionAssignmentState(Collection $rows): array
+    {
+        $state = [
+            'subject_ids' => [],
+            'has_class_teacher' => false,
+            'assignment_keys' => [],
+        ];
+
+        foreach ($rows as $row) {
+            $this->rememberSectionAssignment($state, $row);
+        }
+
+        return $state;
+    }
+
+    /**
+     * @param array{subject_ids:array<int, bool>, has_class_teacher:bool, assignment_keys:array<string, bool>} $state
+     */
+    private function shouldSkipSectionCopy(TeacherAssignment $sourceRow, array $state): bool
+    {
+        if ((bool) $sourceRow->is_class_teacher && (bool) $state['has_class_teacher']) {
+            return true;
+        }
+
+        if (! (bool) $sourceRow->is_class_teacher && $sourceRow->subject_id !== null) {
+            return isset($state['subject_ids'][(int) $sourceRow->subject_id]);
+        }
+
+        return isset($state['assignment_keys'][$this->sectionAssignmentKey($sourceRow)]);
+    }
+
+    /**
+     * @param array{subject_ids:array<int, bool>, has_class_teacher:bool, assignment_keys:array<string, bool>} $state
+     */
+    private function rememberSectionAssignment(array &$state, TeacherAssignment $row): void
+    {
+        if ((bool) $row->is_class_teacher) {
+            $state['has_class_teacher'] = true;
+        }
+
+        if (! (bool) $row->is_class_teacher && $row->subject_id !== null) {
+            $state['subject_ids'][(int) $row->subject_id] = true;
+        }
+
+        $state['assignment_keys'][$this->sectionAssignmentKey($row)] = true;
+    }
+
+    private function sectionAssignmentKey(TeacherAssignment $row): string
+    {
+        return (int) $row->teacher_id.'|'.($row->subject_id !== null ? (int) $row->subject_id : 0).'|'.((bool) $row->is_class_teacher ? 1 : 0);
+    }
+
+    private function normalizeClassName(string $name): string
+    {
+        return mb_strtolower(trim($name));
+    }
+
+    private function normalizeSectionName(?string $section): string
+    {
+        return mb_strtolower(trim((string) $section));
     }
 
     /**

@@ -4,6 +4,12 @@
             <h2 class="text-xl font-semibold text-slate-900">Teacher Assignments</h2>
             <div class="flex flex-wrap items-center gap-2">
                 <a
+                    href="#copyAllocationSection"
+                    class="inline-flex min-h-10 items-center justify-center rounded-md border border-emerald-300 bg-white px-4 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50"
+                >
+                    Copy Allocation to Section
+                </a>
+                <a
                     href="{{ route('principal.teacher-assignments.rollover.index') }}"
                     class="inline-flex min-h-10 items-center justify-center rounded-md border border-indigo-300 bg-white px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-50"
                 >
@@ -57,6 +63,114 @@
                 </div>
 
                 <div id="selectedTeacherPanel" class="mt-6"></div>
+            </div>
+
+            <div id="copyAllocationSection" class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                        <h3 class="text-base font-semibold text-slate-900">Copy Allocation to Section</h3>
+                        <p class="mt-1 text-sm text-slate-600">Copy subject and class-teacher allocations between sections of the same class.</p>
+                    </div>
+                    <span class="inline-flex w-fit rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                        Same class only
+                    </span>
+                </div>
+
+                <form
+                    method="POST"
+                    action="{{ route('principal.teacher-assignments.copy-section') }}"
+                    class="mt-5 space-y-5"
+                    onsubmit="return this.copy_mode.value !== 'replace_target_allocations' || confirm('Replace mode will archive current target allocations for the selected session before copying. Continue?');"
+                >
+                    @csrf
+                    <input type="hidden" id="copy_source_section" name="source_section" value="{{ old('source_section') }}">
+                    <input type="hidden" id="copy_target_section" name="target_section" value="{{ old('target_section') }}">
+
+                    <div class="grid grid-cols-1 gap-5 md:grid-cols-2">
+                        <div>
+                            <label for="copy_source_class_id" class="mb-1 block text-sm font-medium text-slate-700">Source Section</label>
+                            <select
+                                id="copy_source_class_id"
+                                name="source_class_id"
+                                required
+                                class="block w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-500"
+                            >
+                                <option value="">Select source section</option>
+                                @foreach ($classes as $class)
+                                    <option
+                                        value="{{ $class->id }}"
+                                        data-section="{{ $class->section }}"
+                                        @selected((string) old('source_class_id') === (string) $class->id)
+                                    >
+                                        {{ trim($class->name . ' ' . ($class->section ?? '')) }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        <div>
+                            <label for="copy_target_class_id" class="mb-1 block text-sm font-medium text-slate-700">Target Section</label>
+                            <select
+                                id="copy_target_class_id"
+                                name="target_class_id"
+                                required
+                                class="block w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-500"
+                            >
+                                <option value="">Select target section</option>
+                                @foreach ($classes as $class)
+                                    <option
+                                        value="{{ $class->id }}"
+                                        data-section="{{ $class->section }}"
+                                        @selected((string) old('target_class_id') === (string) $class->id)
+                                    >
+                                        {{ trim($class->name . ' ' . ($class->section ?? '')) }}
+                                        @if (($class->status ?? 'active') !== 'active')
+                                            (Inactive)
+                                        @endif
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 gap-5 md:grid-cols-2">
+                        <div>
+                            <label for="copy_session" class="mb-1 block text-sm font-medium text-slate-700">Session</label>
+                            <select
+                                id="copy_session"
+                                name="session"
+                                required
+                                class="block w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-500"
+                            >
+                                @foreach ($sessions as $session)
+                                    <option value="{{ $session }}" @selected(old('session', $selectedSession ?: $classTeacherSession) === $session)>{{ $session }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        <div>
+                            <label for="copy_mode" class="mb-1 block text-sm font-medium text-slate-700">Copy Mode</label>
+                            <select
+                                id="copy_mode"
+                                name="copy_mode"
+                                required
+                                class="block w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-500"
+                            >
+                                <option value="copy_missing_only" @selected(old('copy_mode', 'copy_missing_only') === 'copy_missing_only')>Copy missing only</option>
+                                <option value="replace_target_allocations" @selected(old('copy_mode') === 'replace_target_allocations')>Replace target allocations</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-3">
+                        <button
+                            type="submit"
+                            class="inline-flex min-h-10 items-center rounded-md bg-slate-900 px-5 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                        >
+                            Copy Allocation to Section
+                        </button>
+                    </div>
+                </form>
             </div>
 
             <div class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
@@ -340,6 +454,10 @@
             const sessionSelect = document.getElementById('session');
             const classTeacherSessionSelect = document.getElementById('classTeacherSessionSelect');
             const classTeacherMatrixContainer = document.getElementById('classTeacherMatrixContainer');
+            const copySourceClassSelect = document.getElementById('copy_source_class_id');
+            const copyTargetClassSelect = document.getElementById('copy_target_class_id');
+            const copySourceSectionInput = document.getElementById('copy_source_section');
+            const copyTargetSectionInput = document.getElementById('copy_target_section');
             const escapeHtml = (window.NSMS && typeof window.NSMS.escapeHtml === 'function')
                 ? window.NSMS.escapeHtml
                 : (value) => String(value)
@@ -364,6 +482,14 @@
 
             function showTeacherUrl(teacherId) {
                 return showUrlTemplate.replace('__TEACHER__', String(teacherId));
+            }
+
+            function syncSelectedSection(select, input) {
+                if (!select || !input) {
+                    return;
+                }
+
+                input.value = select.selectedOptions[0]?.dataset?.section || '';
             }
 
             function setResultsLoading() {
@@ -524,6 +650,11 @@
                     loadTeacherPanel(selectedTeacherId);
                 }
             });
+
+            copySourceClassSelect?.addEventListener('change', () => syncSelectedSection(copySourceClassSelect, copySourceSectionInput));
+            copyTargetClassSelect?.addEventListener('change', () => syncSelectedSection(copyTargetClassSelect, copyTargetSectionInput));
+            syncSelectedSection(copySourceClassSelect, copySourceSectionInput);
+            syncSelectedSection(copyTargetClassSelect, copyTargetSectionInput);
 
             if (focusTeacherId > 0) {
                 loadTeacherPanel(focusTeacherId);

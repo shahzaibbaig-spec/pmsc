@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Principal;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Principal\AssignClassTeacherRequest;
 use App\Http\Requests\Principal\BulkTeacherAssignmentRequest;
+use App\Http\Requests\Principal\CopySectionTeacherAssignmentsRequest;
 use App\Http\Requests\Principal\ReplaceTeacherSessionAssignmentsRequest;
 use App\Models\SchoolClass;
 use App\Models\Subject;
@@ -276,6 +277,28 @@ class TeacherAssignmentController extends Controller
             ->with('success', $message);
     }
 
+    public function copySectionAllocations(
+        CopySectionTeacherAssignmentsRequest $request,
+        TeacherAssignmentService $service
+    ): RedirectResponse {
+        $payload = $request->validated();
+        $user = $request->user();
+
+        abort_unless($user instanceof User, 403);
+
+        $summary = $service->copySectionAllocations(
+            SchoolClass::query()->findOrFail((int) $payload['source_class_id']),
+            SchoolClass::query()->findOrFail((int) $payload['target_class_id']),
+            (string) $payload['session'],
+            (string) $payload['copy_mode'],
+            $user
+        );
+
+        return redirect()
+            ->route('principal.teacher-assignments.index', ['session' => (string) $payload['session']])
+            ->with('success', $this->copySectionAllocationMessage($summary));
+    }
+
     public function destroy(int $assignmentId, TeacherAssignmentService $service): RedirectResponse
     {
         $service->removeAssignment($assignmentId);
@@ -306,7 +329,7 @@ class TeacherAssignmentController extends Controller
         return SchoolClass::query()
             ->orderBy('name')
             ->orderBy('section')
-            ->get(['id', 'name', 'section']);
+            ->get(['id', 'name', 'section', 'status']);
     }
 
     private function subjects(): Collection
@@ -386,6 +409,21 @@ class TeacherAssignmentController extends Controller
 
         if ((bool) ($summary['class_teacher_assigned'] ?? false)) {
             $message .= ' Class teacher assignment created.';
+        }
+
+        return $message;
+    }
+
+    /**
+     * @param array<string, mixed> $summary
+     */
+    private function copySectionAllocationMessage(array $summary): string
+    {
+        $message = 'Copied '.(int) ($summary['copied_count'] ?? 0).' allocation(s), skipped '
+            .(int) ($summary['skipped_count'] ?? 0).' existing allocation(s).';
+
+        if ((int) ($summary['replaced_count'] ?? 0) > 0) {
+            $message .= ' Replaced '.(int) $summary['replaced_count'].' target allocation(s).';
         }
 
         return $message;

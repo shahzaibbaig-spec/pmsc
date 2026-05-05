@@ -32,6 +32,8 @@ class RbacMatrixController extends Controller
         'assign_subjects',
         'manage_subject_assignments',
         'assign_teachers',
+        'manage_teacher_assignments',
+        'copy_teacher_assignments',
         'view_attendance',
         'mark_attendance',
         'enter_marks',

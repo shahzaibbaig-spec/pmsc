@@ -656,6 +656,10 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
         ->middleware(['role:Principal|Admin', 'permission:assign_teachers'])
         ->name('principal.teacher-assignments.class-teachers.assign');
 
+    Route::post('/principal/teacher-assignments/copy-section', [PrincipalTeacherAssignmentController::class, 'copySectionAllocations'])
+        ->middleware(['role:Principal|Admin', 'permission:copy_teacher_assignments|manage_teacher_assignments|assign_teachers'])
+        ->name('principal.teacher-assignments.copy-section');
+
     Route::get('/principal/teacher-assignments/teacher/{teacher}', [PrincipalTeacherAssignmentController::class, 'showTeacher'])
         ->middleware(['role:Principal|Admin', 'permission:assign_teachers'])
         ->whereNumber('teacher')
