@@ -14,11 +14,17 @@ class PermissionMiddleware
             abort(401);
         }
 
-        if (! $request->user()->hasAnyPermission($permissions)) {
+        $normalizedPermissions = collect($permissions)
+            ->flatMap(static fn (string $permission): array => preg_split('/[|,]/', $permission) ?: [])
+            ->map(static fn (string $permission): string => trim($permission))
+            ->filter(static fn (string $permission): bool => $permission !== '')
+            ->values()
+            ->all();
+
+        if (! $request->user()->hasAnyPermission($normalizedPermissions)) {
             abort(403, 'You do not have the required permission.');
         }
 
         return $next($request);
     }
 }
-
