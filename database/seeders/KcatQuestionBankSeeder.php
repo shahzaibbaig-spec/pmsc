@@ -110,9 +110,26 @@ class KcatQuestionBankSeeder extends Seeder
                         continue;
                     }
 
-                    $generated = $this->generateForSection($generator, $sectionCode, $needed, $difficulty);
-                    if (count($generated) !== $needed) {
-                        throw new RuntimeException('Generation count mismatch for '.$sectionCode.' '.$difficulty.'.');
+                    $generationResult = $this->generateWithBestEffort(
+                        $generator,
+                        $sectionCode,
+                        $difficulty,
+                        $needed,
+                        $label,
+                        $progress
+                    );
+                    $generated = $generationResult['questions'];
+                    $generatedCount = (int) $generationResult['generated'];
+
+                    if ($generatedCount <= 0) {
+                        $sectionSummary['difficulties'][$difficulty] = [
+                            'target' => $targetCount,
+                            'existing' => $existingCount,
+                            'generated' => 0,
+                            'inserted' => 0,
+                        ];
+                        $this->emit($progress, 'Skipped '.$label.' '.ucfirst($difficulty).' (no additional unique questions available).');
+                        continue;
                     }
 
                     $insertCounts = ['questions' => 0, 'options' => 0];
@@ -130,7 +147,7 @@ class KcatQuestionBankSeeder extends Seeder
                     $sectionSummary['difficulties'][$difficulty] = [
                         'target' => $targetCount,
                         'existing' => $existingCount,
-                        'generated' => count($generated),
+                        'generated' => $generatedCount,
                         'inserted' => $insertCounts['questions'],
                     ];
 
@@ -226,6 +243,87 @@ class KcatQuestionBankSeeder extends Seeder
             'spatial_reasoning' => $generator->generateSpatialQuestions($count, $difficulty),
             default => throw new RuntimeException('Unsupported section code: '.$sectionCode),
         };
+    }
+
+    /**
+     * @param callable(string):void|null $progress
+     * @return array{questions:array<int,array<string,mixed>>,generated:int}
+     */
+    private function generateWithBestEffort(
+        KcatQuestionGeneratorService $generator,
+        string $sectionCode,
+        string $difficulty,
+        int $requestedCount,
+        string $sectionLabel,
+        ?callable $progress = null
+    ): array {
+        try {
+            $questions = $this->generateForSection($generator, $sectionCode, $requestedCount, $difficulty);
+
+            return ['questions' => $questions, 'generated' => count($questions)];
+        } catch (RuntimeException $exception) {
+            if (! $this->isUniqueLimitFailure($exception)) {
+                throw $exception;
+            }
+        }
+
+        $maxGeneratable = $this->findMaxGeneratableCount($generator, $sectionCode, $difficulty, $requestedCount);
+        if ($maxGeneratable <= 0) {
+            return ['questions' => [], 'generated' => 0];
+        }
+
+        $this->emit(
+            $progress,
+            'Unique-cap reached for '.$sectionLabel.' '.ucfirst($difficulty)
+            .': requested '.$requestedCount.', generating '.$maxGeneratable.' instead.'
+        );
+
+        $questions = $this->generateForSection($generator, $sectionCode, $maxGeneratable, $difficulty);
+
+        return ['questions' => $questions, 'generated' => count($questions)];
+    }
+
+    private function findMaxGeneratableCount(
+        KcatQuestionGeneratorService $generator,
+        string $sectionCode,
+        string $difficulty,
+        int $requestedCount
+    ): int {
+        $low = 1;
+        $high = $requestedCount;
+        $best = 0;
+
+        while ($low <= $high) {
+            $mid = intdiv($low + $high, 2);
+            $snapshot = $generator->snapshotUsedSignatures();
+
+            try {
+                $questions = $this->generateForSection($generator, $sectionCode, $mid, $difficulty);
+                $ok = count($questions) === $mid;
+            } catch (RuntimeException $exception) {
+                if (! $this->isUniqueLimitFailure($exception)) {
+                    throw $exception;
+                }
+
+                $ok = false;
+            }
+
+            $generator->restoreUsedSignatures($snapshot);
+
+            if ($ok) {
+                $best = $mid;
+                $low = $mid + 1;
+            } else {
+                $high = $mid - 1;
+            }
+        }
+
+        return $best;
+    }
+
+    private function isUniqueLimitFailure(RuntimeException $exception): bool
+    {
+        return str_contains($exception->getMessage(), 'Unable to generate enough unique questions for section ');
     }
 
     /**

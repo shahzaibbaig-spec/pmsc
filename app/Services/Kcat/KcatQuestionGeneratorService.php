@@ -106,12 +106,14 @@ class KcatQuestionGeneratorService
         callable $builder
     ): array {
         $resolvedDifficulty = $this->resolveDifficulty($difficulty);
+        $initialSectionSignatures = $this->usedSignatures[$sectionCode] ?? [];
         $questions = [];
         $attempts = 0;
         $maxAttempts = max($count * 80, 200);
 
         while (count($questions) < $count && $attempts < $maxAttempts) {
-            $questionType = $questionTypes[count($questions) % count($questionTypes)];
+            // Rotate by attempt count so we don't get stuck on a single exhausted type.
+            $questionType = $questionTypes[$attempts % count($questionTypes)];
             $question = $builder($questionType, $attempts, $resolvedDifficulty);
             $attempts++;
 
@@ -128,10 +130,28 @@ class KcatQuestionGeneratorService
         }
 
         if (count($questions) < $count) {
+            // Roll back partial signature reservations so callers can retry with a smaller target.
+            $this->usedSignatures[$sectionCode] = $initialSectionSignatures;
             throw new RuntimeException('Unable to generate enough unique questions for section '.$sectionCode.' ('.$difficulty.').');
         }
 
         return $questions;
+    }
+
+    /**
+     * @return array<string, array<string, bool>>
+     */
+    public function snapshotUsedSignatures(): array
+    {
+        return $this->usedSignatures;
+    }
+
+    /**
+     * @param array<string, array<string, bool>> $snapshot
+     */
+    public function restoreUsedSignatures(array $snapshot): void
+    {
+        $this->usedSignatures = $snapshot;
     }
 
     /**
