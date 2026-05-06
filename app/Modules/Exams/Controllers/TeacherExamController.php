@@ -48,7 +48,8 @@ class TeacherExamController extends Controller
                 $request->string('exam_type')->toString(),
                 $request->filled('exam_id') ? (int) $request->input('exam_id') : null,
                 $request->filled('topic') ? $request->string('topic')->toString() : null,
-                $request->filled('sequence_number') ? (int) $request->input('sequence_number') : null
+                $request->filled('sequence_number') ? (int) $request->input('sequence_number') : null,
+                $request->filled('exam_date') ? $request->string('exam_date')->toString() : null
             );
         } catch (ValidationException $exception) {
             return response()->json([
@@ -113,7 +114,8 @@ class TeacherExamController extends Controller
                 $request->input('records', []),
                 $request->filled('exam_id') ? (int) $request->input('exam_id') : null,
                 $request->filled('topic') ? $request->string('topic')->toString() : null,
-                $request->filled('sequence_number') ? (int) $request->input('sequence_number') : null
+                $request->filled('sequence_number') ? (int) $request->input('sequence_number') : null,
+                $request->filled('exam_date') ? $request->string('exam_date')->toString() : null
             );
         } catch (ValidationException $exception) {
             return response()->json([

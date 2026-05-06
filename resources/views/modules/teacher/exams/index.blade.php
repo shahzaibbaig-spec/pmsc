@@ -53,11 +53,11 @@
                         </div>
                     </div>
 
-                    <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
+                    <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-4">
                         <div>
                             <x-input-label for="exam_id" value="Existing Exam" />
                             <select id="exam_id" class="mt-1 block min-h-11 w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                                <option value="">Create New / Load by Topic-Number</option>
+                                <option value="">Create New / Load by Details</option>
                             </select>
                         </div>
 
@@ -80,6 +80,15 @@
                                 <option value="3">3rd Bimonthly</option>
                                 <option value="4">4th Bimonthly</option>
                             </select>
+                        </div>
+
+                        <div id="examDateWrapper" class="hidden">
+                            <x-input-label for="exam_date" value="Exam Date" />
+                            <x-text-input
+                                id="exam_date"
+                                type="date"
+                                class="mt-1 block min-h-11 w-full"
+                            />
                         </div>
                     </div>
 
@@ -162,6 +171,8 @@
         const classTestTopicInput = document.getElementById('class_test_topic');
         const bimonthlySequenceWrapper = document.getElementById('bimonthlySequenceWrapper');
         const sequenceNumberInput = document.getElementById('sequence_number');
+        const examDateWrapper = document.getElementById('examDateWrapper');
+        const examDateInput = document.getElementById('exam_date');
         const totalMarksInput = document.getElementById('total_marks');
         const totalMarksWrapper = document.getElementById('totalMarksWrapper');
         const assessmentModeBadge = document.getElementById('assessmentModeBadge');
@@ -269,6 +280,7 @@
         function updateExamTypeScopedFields() {
             classTestTopicWrapper.classList.toggle('hidden', !isClassTestType());
             bimonthlySequenceWrapper.classList.toggle('hidden', !isBimonthlyType());
+            examDateWrapper.classList.toggle('hidden', !(isClassTestType() || isBimonthlyType()));
 
             if (!isClassTestType()) {
                 classTestTopicInput.value = '';
@@ -277,10 +289,14 @@
             if (!isBimonthlyType()) {
                 sequenceNumberInput.value = '';
             }
+
+            if (!isClassTestType() && !isBimonthlyType()) {
+                examDateInput.value = '';
+            }
         }
 
         function setExamSelectOptions(exams) {
-            const options = ['<option value="">Create New / Load by Topic-Number</option>'];
+            const options = ['<option value="">Create New / Load by Details</option>'];
 
             (exams || []).forEach((exam) => {
                 options.push(
@@ -330,6 +346,10 @@
 
             if (isBimonthlyType()) {
                 sequenceNumberInput.value = selectedExam.sequence_number ? String(selectedExam.sequence_number) : '';
+            }
+
+            if (isClassTestType() || isBimonthlyType()) {
+                examDateInput.value = selectedExam.exam_date || '';
             }
         }
 
@@ -611,6 +631,7 @@
                 exam_id: examIdInput.value ? Number(examIdInput.value) : null,
                 topic: classTestTopicInput.value.trim(),
                 sequence_number: sequenceNumberInput.value ? Number(sequenceNumberInput.value) : null,
+                exam_date: examDateInput.value || null,
             };
 
             if (!payload.session || !payload.class_id || !payload.subject_id || !payload.exam_type) {
@@ -625,6 +646,11 @@
 
             if (isBimonthlyType() && !payload.exam_id && !payload.sequence_number) {
                 showMessage('Select bimonthly number to load sheet.', 'error');
+                return;
+            }
+
+            if ((isClassTestType() || isBimonthlyType()) && !payload.exam_id && !payload.exam_date) {
+                showMessage('Exam Date is required to load this exam sheet.', 'error');
                 return;
             }
 
@@ -646,6 +672,9 @@
             }
             if (payload.sequence_number) {
                 params.set('sequence_number', String(payload.sequence_number));
+            }
+            if (payload.exam_date) {
+                params.set('exam_date', String(payload.exam_date));
             }
             try {
                 const response = await fetch(`{{ route('teacher.exams.sheet') }}?${params.toString()}`, {
@@ -703,6 +732,9 @@
                 }
                 if (isBimonthlyType()) {
                     sequenceNumberInput.value = result.exam?.sequence_number ? String(result.exam.sequence_number) : sequenceNumberInput.value;
+                }
+                if (isClassTestType() || isBimonthlyType()) {
+                    examDateInput.value = result.exam?.exam_date || examDateInput.value;
                 }
 
                 if (!state.usesGradeSystem && result.exam?.total_marks) {
@@ -767,6 +799,7 @@
                     exam_id: examIdInput.value ? Number(examIdInput.value) : null,
                     topic: classTestTopicInput.value.trim() || null,
                     sequence_number: sequenceNumberInput.value ? Number(sequenceNumberInput.value) : null,
+                    exam_date: examDateInput.value || null,
                     total_marks: null,
                     records,
                 };
@@ -798,6 +831,7 @@
                     exam_id: examIdInput.value ? Number(examIdInput.value) : null,
                     topic: classTestTopicInput.value.trim() || null,
                     sequence_number: sequenceNumberInput.value ? Number(sequenceNumberInput.value) : null,
+                    exam_date: examDateInput.value || null,
                     total_marks: totalMarks,
                     records,
                 };
@@ -810,6 +844,11 @@
 
             if (isBimonthlyType() && !payload.exam_id && !payload.sequence_number) {
                 showMessage('Select bimonthly number before saving.', 'error');
+                return;
+            }
+
+            if ((isClassTestType() || isBimonthlyType()) && !payload.exam_id && !payload.exam_date) {
+                showMessage('Exam Date is required before saving.', 'error');
                 return;
             }
 
@@ -934,6 +973,12 @@
         });
 
         sequenceNumberInput.addEventListener('change', () => {
+            if (examIdInput.value) {
+                examIdInput.value = '';
+            }
+        });
+
+        examDateInput.addEventListener('change', () => {
             if (examIdInput.value) {
                 examIdInput.value = '';
             }

@@ -17,6 +17,7 @@ class Exam extends Model
         'exam_label',
         'topic',
         'sequence_number',
+        'exam_date',
         'session',
         'marking_mode',
         'total_marks',
@@ -29,6 +30,7 @@ class Exam extends Model
         return [
             'exam_type' => ExamType::class,
             'sequence_number' => 'integer',
+            'exam_date' => 'date',
             'total_marks' => 'integer',
             'locked_at' => 'datetime',
         ];

@@ -24,6 +24,10 @@ class ExamSheetRequest extends FormRequest
             $normalized['topic'] = null;
         }
 
+        if ($this->input('exam_date') === '') {
+            $normalized['exam_date'] = null;
+        }
+
         if ($normalized !== []) {
             $this->merge($normalized);
         }
@@ -44,6 +48,8 @@ class ExamSheetRequest extends FormRequest
             'exam_id' => ['nullable', 'integer', Rule::exists('exams', 'id')],
             'topic' => ['nullable', 'string', 'max:255'],
             'sequence_number' => ['nullable', 'integer', Rule::in([1, 2, 3, 4])],
+            'exam_date' => ['nullable', 'date'],
         ];
     }
+
 }

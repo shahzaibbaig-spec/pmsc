@@ -36,6 +36,10 @@ class SaveMarksRequest extends FormRequest
             $normalized['topic'] = null;
         }
 
+        if ($this->input('exam_date') === '') {
+            $normalized['exam_date'] = null;
+        }
+
         if ($normalized !== []) {
             $this->merge($normalized);
         }
@@ -55,6 +59,7 @@ class SaveMarksRequest extends FormRequest
             'exam_id' => ['nullable', 'integer', Rule::exists('exams', 'id')],
             'topic' => ['nullable', 'string', 'max:255'],
             'sequence_number' => ['nullable', 'integer', Rule::in([1, 2, 3, 4])],
+            'exam_date' => ['nullable', 'date'],
             'total_marks' => $usesGradeSystem
                 ? ['nullable']
                 : ['required', 'integer', 'min:1', 'max:1000'],
@@ -88,6 +93,14 @@ class SaveMarksRequest extends FormRequest
                 if (! in_array((int) $sequence, [1, 2, 3, 4], true)) {
                     $validator->errors()->add('sequence_number', 'Select bimonthly number from 1st to 4th.');
                 }
+            }
+
+            if (
+                ! $hasExamId
+                && in_array($examType, [ExamType::ClassTest->value, ExamType::BimonthlyTest->value], true)
+                && trim((string) $this->input('exam_date')) === ''
+            ) {
+                $validator->errors()->add('exam_date', 'Exam Date is required for Class Test and Bimonthly.');
             }
 
             foreach ((array) $this->input('records', []) as $index => $row) {

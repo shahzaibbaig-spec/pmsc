@@ -98,7 +98,7 @@ class ExamService
 
     /**
      * @return array{
-     *   exams:array<int, array{id:int,display_name:string,topic:?string,sequence_number:?int,total_marks:?int,marking_mode:?string}>,
+     *   exams:array<int, array{id:int,display_name:string,topic:?string,sequence_number:?int,exam_date:?string,total_marks:?int,marking_mode:?string}>,
      *   available_bimonthly_options:array<int, array{value:int,label:string,available:bool}>
      * }
      */
@@ -123,6 +123,7 @@ class ExamService
             ->where('teacher_id', (int) $teacher->id)
             ->where('session', $session)
             ->where('exam_type', $examType)
+            ->orderByDesc('exam_date')
             ->orderByRaw('CASE WHEN sequence_number IS NULL THEN 999 ELSE sequence_number END')
             ->orderBy('exam_label')
             ->orderByDesc('id')
@@ -132,17 +133,34 @@ class ExamService
                 'exam_label',
                 'topic',
                 'sequence_number',
+                'exam_date',
                 'total_marks',
                 'marking_mode',
             ])
-            ->map(fn (Exam $exam): array => [
-                'id' => (int) $exam->id,
-                'display_name' => $this->getExamDisplayName($exam),
-                'topic' => $exam->topic ? (string) $exam->topic : null,
-                'sequence_number' => $exam->sequence_number !== null ? (int) $exam->sequence_number : null,
-                'total_marks' => $exam->total_marks !== null ? (int) $exam->total_marks : null,
-                'marking_mode' => $exam->marking_mode ? (string) $exam->marking_mode : null,
-            ])
+            ->map(function (Exam $exam): array {
+                $displayName = $this->getExamDisplayName($exam);
+                $examDate = $exam->exam_date?->toDateString();
+                $examTypeValue = $exam->exam_type instanceof ExamType
+                    ? $exam->exam_type->value
+                    : (string) $exam->exam_type;
+                if (
+                    $examDate !== null
+                    && $examTypeValue === ExamType::BimonthlyTest->value
+                    && ! str_contains($displayName, $examDate)
+                ) {
+                    $displayName .= ' - '.$examDate;
+                }
+
+                return [
+                    'id' => (int) $exam->id,
+                    'display_name' => $displayName,
+                    'topic' => $exam->topic ? (string) $exam->topic : null,
+                    'sequence_number' => $exam->sequence_number !== null ? (int) $exam->sequence_number : null,
+                    'exam_date' => $examDate,
+                    'total_marks' => $exam->total_marks !== null ? (int) $exam->total_marks : null,
+                    'marking_mode' => $exam->marking_mode ? (string) $exam->marking_mode : null,
+                ];
+            })
             ->values()
             ->all();
 
@@ -237,7 +255,7 @@ class ExamService
 
         $type = ExamType::tryFrom($examType);
         $errorMessage = match ($type) {
-            ExamType::ClassTest => 'A class test with this topic already exists for the selected class/subject/session.',
+            ExamType::ClassTest => 'A class test with this topic and date already exists for the selected class/subject/session.',
             ExamType::BimonthlyTest => 'The selected bimonthly number already exists for the selected class/subject/session.',
             ExamType::FirstTerm => 'Midterm already exists for the selected class/subject/session.',
             ExamType::FinalTerm => 'Final Term already exists for the selected class/subject/session.',
@@ -261,10 +279,15 @@ class ExamService
         $totalMarks = isset($data['total_marks']) ? (int) $data['total_marks'] : null;
         $topic = $this->normalizeTopic(isset($data['topic']) ? (string) $data['topic'] : null);
         $sequenceNumber = isset($data['sequence_number']) ? (int) $data['sequence_number'] : null;
+        $examDate = $this->normalizeExamDate(
+            isset($data['exam_date']) ? (string) $data['exam_date'] : null,
+            $this->examTypeRequiresDate($examType)
+        );
         $label = $this->buildExamLabel([
             'exam_type' => $examType,
             'topic' => $topic,
             'sequence_number' => $sequenceNumber,
+            'exam_date' => $examDate,
         ]);
         $group = $this->resolveExamGroup($examType);
 
@@ -278,6 +301,7 @@ class ExamService
             'exam_label' => $label,
             'topic' => $topic !== '' ? $topic : null,
             'sequence_number' => $sequenceNumber,
+            'exam_date' => $examDate,
             'marking_mode' => $markingMode !== '' ? $markingMode : null,
             'total_marks' => $totalMarks,
         ];
@@ -309,6 +333,7 @@ class ExamService
                 'exam_label' => (string) $payload['exam_label'],
                 'topic' => $payload['topic'],
                 'sequence_number' => $payload['sequence_number'],
+                'exam_date' => $payload['exam_date'],
                 'marking_mode' => $payload['marking_mode'],
                 'total_marks' => $payload['total_marks'],
             ]);
@@ -323,7 +348,8 @@ class ExamService
         string $examType,
         ?int $examId = null,
         ?string $topic = null,
-        ?int $sequenceNumber = null
+        ?int $sequenceNumber = null,
+        ?string $examDate = null
     ): array {
         $teacher = $this->resolveTeacherOrFail($userId);
         $this->ensureTeacherAssignment((int) $teacher->id, $classId, $subjectId, $session);
@@ -336,7 +362,8 @@ class ExamService
             $examType,
             $examId,
             $topic,
-            $sequenceNumber
+            $sequenceNumber,
+            $examDate
         );
 
         $students = $this->studentsForExam((int) $teacher->id, $classId, $subjectId, $session);
@@ -368,6 +395,7 @@ class ExamService
                 'exam_type' => $examType,
                 'topic' => $exam?->topic,
                 'sequence_number' => $exam?->sequence_number !== null ? (int) $exam->sequence_number : null,
+                'exam_date' => $exam?->exam_date?->toDateString(),
                 'total_marks' => $usesGradeSystem ? null : $exam?->total_marks,
                 'marking_mode' => $markingMode,
                 'locked' => $lockedByResultLock || $lockedByEditWindow,
@@ -407,7 +435,8 @@ class ExamService
         array $records,
         ?int $examId = null,
         ?string $topic = null,
-        ?int $sequenceNumber = null
+        ?int $sequenceNumber = null,
+        ?string $examDate = null
     ): void {
         $teacher = $this->resolveTeacherOrFail($userId);
         $this->ensureTeacherAssignment((int) $teacher->id, $classId, $subjectId, $session);
@@ -452,7 +481,8 @@ class ExamService
             $user,
             $examId,
             $topic,
-            $sequenceNumber
+            $sequenceNumber,
+            $examDate
         ): void {
             $exam = $this->resolveExamFromContext(
                 (int) $teacher->id,
@@ -463,6 +493,7 @@ class ExamService
                 $examId,
                 $topic,
                 $sequenceNumber,
+                $examDate,
                 true
             );
 
@@ -482,6 +513,7 @@ class ExamService
                     'exam_type' => $examType,
                     'topic' => $topic,
                     'sequence_number' => $sequenceNumber,
+                    'exam_date' => $examDate,
                     'marking_mode' => $markingMode,
                     'total_marks' => $usesGradeSystem ? null : $totalMarks,
                 ], $user);
@@ -768,6 +800,7 @@ class ExamService
         ?int $examId,
         ?string $topic,
         ?int $sequenceNumber,
+        ?string $examDate,
         bool $forUpdate = false
     ): ?Exam {
         $query = Exam::query()
@@ -803,9 +836,12 @@ class ExamService
                 ]);
             }
 
+            $normalizedExamDate = $this->normalizeExamDate($examDate, true);
+
             $label = $this->buildExamLabel([
                 'exam_type' => $examType,
                 'topic' => $normalizedTopic,
+                'exam_date' => $normalizedExamDate,
             ]);
 
             return (clone $query)
@@ -820,6 +856,8 @@ class ExamService
                     'sequence_number' => 'Select bimonthly number from 1st to 4th.',
                 ]);
             }
+
+            $this->normalizeExamDate($examDate, true);
 
             return (clone $query)
                 ->where('sequence_number', $sequenceNumber)
@@ -841,7 +879,9 @@ class ExamService
             ]);
         }
 
-        return 'Class Test - '.$topic;
+        $examDate = $this->normalizeExamDate(isset($data['exam_date']) ? (string) $data['exam_date'] : null, true);
+
+        return 'Class Test - '.$topic.' ('.$this->formatExamDateLabel((string) $examDate).')';
     }
 
     private function buildBimonthlyLabel(array $data): string
@@ -864,6 +904,33 @@ class ExamService
         return trim($value);
     }
 
+    private function normalizeExamDate(?string $examDate, bool $required = false): ?string
+    {
+        $value = trim((string) $examDate);
+        if ($value === '') {
+            if ($required) {
+                throw ValidationException::withMessages([
+                    'exam_date' => 'Exam Date is required for Class Test and Bimonthly.',
+                ]);
+            }
+
+            return null;
+        }
+
+        try {
+            return Carbon::parse($value)->toDateString();
+        } catch (\Throwable) {
+            throw ValidationException::withMessages([
+                'exam_date' => 'Exam Date is invalid.',
+            ]);
+        }
+    }
+
+    private function formatExamDateLabel(string $examDate): string
+    {
+        return Carbon::parse($examDate)->format('d M Y');
+    }
+
     private function bimonthlyLabel(int $sequenceNumber): string
     {
         return match ($sequenceNumber) {
@@ -875,6 +942,14 @@ class ExamService
         };
     }
 
+    private function examTypeRequiresDate(string $examType): bool
+    {
+        return in_array($examType, [
+            ExamType::ClassTest->value,
+            ExamType::BimonthlyTest->value,
+        ], true);
+    }
+
     private function resolveExamGroup(string $examType): string
     {
         return match ($examType) {
@@ -884,4 +959,3 @@ class ExamService
         };
     }
 }
-
