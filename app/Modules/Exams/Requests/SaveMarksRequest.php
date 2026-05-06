@@ -18,8 +18,26 @@ class SaveMarksRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
+        $normalized = [];
+
         if ($this->input('total_marks') === '') {
-            $this->merge(['total_marks' => null]);
+            $normalized['total_marks'] = null;
+        }
+
+        if ($this->input('exam_id') === '') {
+            $normalized['exam_id'] = null;
+        }
+
+        if ($this->input('sequence_number') === '') {
+            $normalized['sequence_number'] = null;
+        }
+
+        if (trim((string) $this->input('topic')) === '') {
+            $normalized['topic'] = null;
+        }
+
+        if ($normalized !== []) {
+            $this->merge($normalized);
         }
     }
 
@@ -34,6 +52,9 @@ class SaveMarksRequest extends FormRequest
             'class_id' => ['required', Rule::exists('school_classes', 'id')],
             'subject_id' => ['required', Rule::exists('subjects', 'id')],
             'exam_type' => ['required', Rule::in(array_column(ExamType::options(), 'value'))],
+            'exam_id' => ['nullable', 'integer', Rule::exists('exams', 'id')],
+            'topic' => ['nullable', 'string', 'max:255'],
+            'sequence_number' => ['nullable', 'integer', Rule::in([1, 2, 3, 4])],
             'total_marks' => $usesGradeSystem
                 ? ['nullable']
                 : ['required', 'integer', 'min:1', 'max:1000'],
@@ -55,6 +76,19 @@ class SaveMarksRequest extends FormRequest
             $assessmentModeService = app(ClassAssessmentModeService::class);
             $usesGradeSystem = $this->usesGradeSystem($markingModeService);
             $totalMarks = is_numeric($this->input('total_marks')) ? (float) $this->input('total_marks') : null;
+            $examType = trim((string) $this->input('exam_type'));
+            $hasExamId = $this->filled('exam_id');
+
+            if (! $hasExamId && $examType === ExamType::ClassTest->value && trim((string) $this->input('topic')) === '') {
+                $validator->errors()->add('topic', 'Class Test Topic is required.');
+            }
+
+            if (! $hasExamId && $examType === ExamType::BimonthlyTest->value) {
+                $sequence = $this->input('sequence_number');
+                if (! in_array((int) $sequence, [1, 2, 3, 4], true)) {
+                    $validator->errors()->add('sequence_number', 'Select bimonthly number from 1st to 4th.');
+                }
+            }
 
             foreach ((array) $this->input('records', []) as $index => $row) {
                 $grade = $assessmentModeService->normalizeGrade(is_string($row['grade'] ?? null) ? $row['grade'] : null);

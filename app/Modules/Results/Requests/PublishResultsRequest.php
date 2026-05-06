@@ -19,7 +19,7 @@ class PublishResultsRequest extends FormRequest
             'class_id' => ['required', 'integer', Rule::exists('school_classes', 'id')],
             'session' => ['required', 'string', 'max:20'],
             'exam_type' => ['required', Rule::in(array_column(ExamType::options(), 'value'))],
+            'exam_label' => ['nullable', 'string', 'max:255'],
         ];
     }
 }
-

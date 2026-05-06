@@ -945,6 +945,10 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
         ->middleware(['role:Admin|Principal', 'permission:generate_results'])
         ->name('principal.results.students');
 
+    Route::get('/principal/results/exam-scopes', [PrincipalResultController::class, 'examScopes'])
+        ->middleware(['role:Admin|Principal', 'permission:generate_results'])
+        ->name('principal.results.exam-scopes');
+
     Route::get('/principal/results/preview', [PrincipalResultController::class, 'preview'])
         ->middleware(['role:Admin|Principal', 'permission:generate_results'])
         ->name('principal.results.preview');
@@ -1495,6 +1499,10 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
     Route::get('/teacher/exams/sheet', [TeacherExamController::class, 'sheet'])
         ->middleware(['role:Teacher', 'permission:enter_marks'])
         ->name('teacher.exams.sheet');
+
+    Route::get('/teacher/exams/bimonthly-options', [TeacherExamController::class, 'bimonthlyOptions'])
+        ->middleware(['role:Teacher', 'permission:enter_marks'])
+        ->name('teacher.exams.bimonthly-options');
 
     Route::post('/teacher/exams/save', [TeacherExamController::class, 'save'])
         ->middleware(['role:Teacher', 'permission:enter_marks'])

@@ -14,6 +14,7 @@
             defaultClassId: @js($defaultClassId),
             defaultStudentId: @js($defaultStudentId),
             studentsUrl: @js(route('principal.results.students')),
+            examScopesUrl: @js(route('principal.results.exam-scopes')),
             previewUrl: @js(route('principal.results.preview')),
             cardPreviewUrl: @js(route('principal.results.card')),
             studentPdfUrl: @js(route('reports.pdf.student-result-card')),
@@ -73,6 +74,23 @@
                                     <option value="{{ $examType['value'] }}">{{ $examType['label'] }}</option>
                                 @endforeach
                             </select>
+                        </div>
+
+                        <div x-show="requiresExamScopeSelection()" x-cloak>
+                            <label for="exam_scope_filter" class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Exam Scope</label>
+                            <select
+                                id="exam_scope_filter"
+                                x-model="examLabel"
+                                @change="onExamScopeChanged()"
+                                class="mt-1 block min-h-11 w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                :disabled="loadingExamScopes || examScopes.length === 0"
+                            >
+                                <option value="">Select exam scope</option>
+                                <template x-for="scope in examScopes" :key="`scope-${scope.value}`">
+                                    <option :value="scope.value" x-text="scope.label"></option>
+                                </template>
+                            </select>
+                            <p class="mt-1 text-xs text-slate-500" x-text="loadingExamScopes ? 'Loading exam scopes...' : `${examScopes.length} scope(s)`"></p>
                         </div>
 
                         <div>
@@ -394,10 +412,13 @@
             return {
                 session: config.defaultSession || '',
                 examType: config.defaultExamType || '',
+                examLabel: '',
                 classId: config.defaultClassId ? Number(config.defaultClassId) : null,
                 studentId: config.defaultStudentId ? Number(config.defaultStudentId) : null,
                 students: [],
+                examScopes: [],
                 loadingStudents: false,
+                loadingExamScopes: false,
                 previewLoading: false,
                 generatingClassCards: false,
                 publishing: false,
@@ -419,6 +440,7 @@
                 async init() {
                     if (this.classId) {
                         await this.loadMarkingModeContext();
+                        await this.loadExamScopes();
                         await this.loadStudents();
                         if (this.studentId) {
                             await this.previewResult();
@@ -459,8 +481,24 @@
                     this.markingMode = 'numeric';
                 },
 
+                requiresExamScopeSelection() {
+                    return ['class_test', 'bimonthly_test'].includes(String(this.examType || ''));
+                },
+
+                hasRequiredExamScope() {
+                    if (!this.requiresExamScopeSelection()) {
+                        return true;
+                    }
+
+                    if (!Array.isArray(this.examScopes) || this.examScopes.length === 0) {
+                        return false;
+                    }
+
+                    return String(this.examLabel || '').trim() !== '';
+                },
+
                 canRunClassAction() {
-                    return Boolean(this.classId && this.session && this.examType);
+                    return Boolean(this.classId && this.session && this.examType && this.hasRequiredExamScope());
                 },
 
                 canRunStudentAction() {
@@ -468,7 +506,7 @@
                     const wholeClassSelected = String(selectedStudent) === '0';
                     const singleStudentSelected = Number(selectedStudent) > 0;
                     const hasSelection = wholeClassSelected || singleStudentSelected;
-                    return Boolean(this.classId && this.session && this.examType && hasSelection);
+                    return Boolean(this.classId && this.session && this.examType && this.hasRequiredExamScope() && hasSelection);
                 },
 
                 isWholeClassSelected() {
@@ -482,9 +520,12 @@
                     this.studentPdfUrl = '';
                     if (this.classId) {
                         this.loadMarkingModeContext();
+                        this.loadExamScopes();
                         this.loadStudents();
                     } else {
                         this.students = [];
+                        this.examScopes = [];
+                        this.examLabel = '';
                         this.resetMarkingModeContext();
                     }
                 },
@@ -493,12 +534,21 @@
                     this.result = null;
                     this.previewCardUrl = '';
                     this.studentPdfUrl = '';
+                    this.examLabel = '';
 
                     if (this.classId) {
                         this.loadMarkingModeContext();
+                        this.loadExamScopes();
                     } else {
+                        this.examScopes = [];
                         this.resetMarkingModeContext();
                     }
+                },
+
+                onExamScopeChanged() {
+                    this.result = null;
+                    this.previewCardUrl = '';
+                    this.studentPdfUrl = '';
                 },
 
                 onStudentChanged() {
@@ -584,6 +634,47 @@
                     }
                 },
 
+                async loadExamScopes() {
+                    this.examScopes = [];
+                    this.examLabel = '';
+
+                    if (!this.classId || !this.session || !this.examType) {
+                        return;
+                    }
+
+                    if (!this.requiresExamScopeSelection()) {
+                        return;
+                    }
+
+                    this.loadingExamScopes = true;
+                    try {
+                        const params = new URLSearchParams({
+                            class_id: String(this.classId),
+                            session: String(this.session),
+                            exam_type: String(this.examType),
+                        });
+
+                        const response = await fetch(`${config.examScopesUrl}?${params.toString()}`, {
+                            headers: { Accept: 'application/json' },
+                        });
+
+                        const result = await response.json();
+                        if (!response.ok) {
+                            this.setStatus(result.message || 'Failed to load exam scopes.', 'error');
+                            return;
+                        }
+
+                        this.examScopes = Array.isArray(result.scopes) ? result.scopes : [];
+                        if (this.examScopes.length > 0) {
+                            this.examLabel = String(this.examScopes[0].value || '');
+                        }
+                    } catch (error) {
+                        this.setStatus('Unexpected error while loading exam scopes.', 'error');
+                    } finally {
+                        this.loadingExamScopes = false;
+                    }
+                },
+
                 async loadStudents() {
                     this.clearStatus();
                     if (!this.classId || !this.session) {
@@ -637,19 +728,31 @@
                 },
 
                 queryParamsForStudent() {
-                    return new URLSearchParams({
+                    const params = new URLSearchParams({
                         student_id: String(this.studentId),
                         session: String(this.session),
                         exam_type: String(this.examType),
                     });
+
+                    if (String(this.examLabel || '').trim() !== '') {
+                        params.set('exam_label', String(this.examLabel));
+                    }
+
+                    return params;
                 },
 
                 queryParamsForClass() {
-                    return new URLSearchParams({
+                    const params = new URLSearchParams({
                         class_id: String(this.classId),
                         session: String(this.session),
                         exam_type: String(this.examType),
                     });
+
+                    if (String(this.examLabel || '').trim() !== '') {
+                        params.set('exam_label', String(this.examLabel));
+                    }
+
+                    return params;
                 },
 
                 async previewResult() {
@@ -773,6 +876,7 @@
                                 class_id: Number(this.classId),
                                 session: this.session,
                                 exam_type: this.examType,
+                                exam_label: String(this.examLabel || ''),
                             }),
                         });
 

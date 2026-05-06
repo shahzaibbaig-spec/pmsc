@@ -122,7 +122,10 @@
                                 @php
                                     $examTypeRaw = $mark->exam?->exam_type;
                                     $examTypeValue = $examTypeRaw instanceof \BackedEnum ? $examTypeRaw->value : (string) $examTypeRaw;
-                                    $examLabel = $examTypeLabels[$examTypeValue] ?? str_replace('_', ' ', ucfirst($examTypeValue));
+                                    $examLabel = trim((string) ($mark->exam?->display_name ?? ''));
+                                    if ($examLabel === '') {
+                                        $examLabel = $examTypeLabels[$examTypeValue] ?? str_replace('_', ' ', ucfirst($examTypeValue));
+                                    }
                                     $classLabel = trim(($mark->exam?->classRoom?->name ?? 'Class').' '.($mark->exam?->classRoom?->section ?? ''));
                                     $canEdit = (bool) $mark->getAttribute('can_edit');
                                     $resultLocked = (bool) $mark->getAttribute('result_locked');

@@ -3,6 +3,7 @@
 namespace App\Modules\Results\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Models\Exam;
 use App\Models\FeeBlockOverride;
 use App\Models\Mark;
 use App\Models\SchoolClass;
@@ -115,6 +116,40 @@ class PrincipalResultController extends Controller
         ]);
     }
 
+    public function examScopes(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'class_id' => ['required', 'integer', 'exists:school_classes,id'],
+            'session' => ['required', 'string', 'max:20'],
+            'exam_type' => ['required', 'string', 'in:'.implode(',', array_column(ExamType::options(), 'value'))],
+        ]);
+
+        $labels = Exam::query()
+            ->where('class_id', (int) $validated['class_id'])
+            ->where('session', (string) $validated['session'])
+            ->where('exam_type', (string) $validated['exam_type'])
+            ->select('exam_label')
+            ->whereNotNull('exam_label')
+            ->distinct()
+            ->orderBy('exam_label')
+            ->get()
+            ->map(function (Exam $exam): array {
+                $label = trim((string) $exam->exam_label);
+
+                return [
+                    'value' => $label,
+                    'label' => $label,
+                ];
+            })
+            ->filter(fn (array $row): bool => $row['value'] !== '')
+            ->values()
+            ->all();
+
+        return response()->json([
+            'scopes' => $labels,
+        ]);
+    }
+
     public function preview(StudentResultPreviewRequest $request): JsonResponse
     {
         try {
@@ -122,6 +157,7 @@ class PrincipalResultController extends Controller
                 (int) $request->input('student_id'),
                 $request->string('session')->toString(),
                 $request->string('exam_type')->toString(),
+                $request->filled('exam_label') ? $request->string('exam_label')->toString() : null,
             );
         } catch (ValidationException $exception) {
             return response()->json([
@@ -155,6 +191,7 @@ class PrincipalResultController extends Controller
                 $studentId,
                 $session,
                 $request->string('exam_type')->toString(),
+                $request->filled('exam_label') ? $request->string('exam_label')->toString() : null,
             );
         } catch (RuntimeException $exception) {
             return response($exception->getMessage(), 422);
@@ -173,6 +210,7 @@ class PrincipalResultController extends Controller
                 (int) $request->input('class_id'),
                 $request->string('session')->toString(),
                 $request->string('exam_type')->toString(),
+                $request->filled('exam_label') ? $request->string('exam_label')->toString() : null,
             );
         } catch (RuntimeException $exception) {
             return response()->json(['message' => $exception->getMessage()], 422);

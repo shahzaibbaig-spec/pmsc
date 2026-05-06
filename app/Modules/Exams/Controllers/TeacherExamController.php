@@ -45,8 +45,16 @@ class TeacherExamController extends Controller
                 (int) $request->input('class_id'),
                 (int) $request->input('subject_id'),
                 $request->string('session')->toString(),
-                $request->string('exam_type')->toString()
+                $request->string('exam_type')->toString(),
+                $request->filled('exam_id') ? (int) $request->input('exam_id') : null,
+                $request->filled('topic') ? $request->string('topic')->toString() : null,
+                $request->filled('sequence_number') ? (int) $request->input('sequence_number') : null
             );
+        } catch (ValidationException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+                'errors' => $exception->errors(),
+            ], 422);
         } catch (RuntimeException $exception) {
             return response()->json(['message' => $exception->getMessage()], 422);
         } catch (Throwable $exception) {
@@ -62,6 +70,36 @@ class TeacherExamController extends Controller
         return response()->json($sheet);
     }
 
+    public function bimonthlyOptions(ExamSheetRequest $request): JsonResponse
+    {
+        try {
+            $payload = $this->service->contextOptionsForTeacher(
+                (int) auth()->id(),
+                (int) $request->input('class_id'),
+                (int) $request->input('subject_id'),
+                $request->string('session')->toString(),
+                $request->string('exam_type')->toString()
+            );
+        } catch (ValidationException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+                'errors' => $exception->errors(),
+            ], 422);
+        } catch (RuntimeException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 422);
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return response()->json([
+                'message' => config('app.debug')
+                    ? $exception->getMessage()
+                    : 'Unexpected error while loading exam options.',
+            ], 500);
+        }
+
+        return response()->json($payload);
+    }
+
     public function save(SaveMarksRequest $request): JsonResponse
     {
         try {
@@ -72,7 +110,10 @@ class TeacherExamController extends Controller
                 $request->string('session')->toString(),
                 $request->string('exam_type')->toString(),
                 $request->filled('total_marks') ? (int) $request->input('total_marks') : null,
-                $request->input('records', [])
+                $request->input('records', []),
+                $request->filled('exam_id') ? (int) $request->input('exam_id') : null,
+                $request->filled('topic') ? $request->string('topic')->toString() : null,
+                $request->filled('sequence_number') ? (int) $request->input('sequence_number') : null
             );
         } catch (ValidationException $exception) {
             return response()->json([

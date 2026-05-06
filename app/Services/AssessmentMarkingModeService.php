@@ -256,10 +256,14 @@ class AssessmentMarkingModeService
                 $exam = $existingExams->get($subjectId);
 
                 if (! $exam) {
+                    $defaults = $this->defaultExamMetadata($examType);
+
                     Exam::query()->create([
                         'class_id' => $classId,
                         'subject_id' => $subjectId,
                         'exam_type' => $examType,
+                        'exam_group' => $defaults['exam_group'],
+                        'exam_label' => $defaults['exam_label'],
                         'session' => $session,
                         'marking_mode' => $resolvedMode,
                         'total_marks' => null,
@@ -392,6 +396,8 @@ class AssessmentMarkingModeService
                 'class_id' => $classId,
                 'subject_id' => $subjectId,
                 'exam_type' => $examType,
+                'exam_group' => $this->defaultExamMetadata($examType)['exam_group'],
+                'exam_label' => $this->defaultExamMetadata($examType)['exam_label'],
                 'session' => $session,
                 'marking_mode' => $resolvedMode,
                 'total_marks' => null,
@@ -429,5 +435,19 @@ class AssessmentMarkingModeService
         return in_array($candidate, [self::MODE_NUMERIC, self::MODE_GRADE], true)
             ? $candidate
             : null;
+    }
+
+    /**
+     * @return array{exam_group:string,exam_label:string}
+     */
+    private function defaultExamMetadata(string $examType): array
+    {
+        return match ($examType) {
+            'class_test' => ['exam_group' => 'class_test', 'exam_label' => 'Class Test'],
+            'bimonthly_test' => ['exam_group' => 'bimonthly', 'exam_label' => '1st Bimonthly'],
+            'first_term' => ['exam_group' => 'terminal', 'exam_label' => 'Midterm'],
+            'final_term' => ['exam_group' => 'terminal', 'exam_label' => 'Final Term'],
+            default => ['exam_group' => 'terminal', 'exam_label' => str_replace('_', ' ', ucfirst($examType))],
+        };
     }
 }

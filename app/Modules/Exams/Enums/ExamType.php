@@ -13,8 +13,8 @@ enum ExamType: string
     {
         return match ($this) {
             self::ClassTest => 'Class Test',
-            self::BimonthlyTest => 'Bimonthly Test',
-            self::FirstTerm => '1st Term',
+            self::BimonthlyTest => 'Bimonthly',
+            self::FirstTerm => 'Midterm',
             self::FinalTerm => 'Final Term',
         };
     }
@@ -30,4 +30,3 @@ enum ExamType: string
         );
     }
 }
-

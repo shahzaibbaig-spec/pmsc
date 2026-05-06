@@ -57,7 +57,8 @@ class ReportPdfController extends Controller
             $result = $this->resultService->generateStudentResult(
                 $studentId,
                 $session,
-                $request->string('exam_type')->toString()
+                $request->string('exam_type')->toString(),
+                $request->filled('exam_label') ? $request->string('exam_label')->toString() : null
             );
         } catch (RuntimeException $exception) {
             return response($exception->getMessage(), 422);
@@ -81,7 +82,8 @@ class ReportPdfController extends Controller
             $payload = $this->reportService->classResultData(
                 (int) $request->input('class_id'),
                 $request->string('session')->toString(),
-                $request->string('exam_type')->toString()
+                $request->string('exam_type')->toString(),
+                $request->filled('exam_label') ? $request->string('exam_label')->toString() : null
             );
         } catch (RuntimeException $exception) {
             return response($exception->getMessage(), 422);
@@ -126,7 +128,8 @@ class ReportPdfController extends Controller
             $payload = $this->resultService->generateClassResultCards(
                 $classId,
                 $session,
-                $request->string('exam_type')->toString()
+                $request->string('exam_type')->toString(),
+                $request->filled('exam_label') ? $request->string('exam_label')->toString() : null
             );
         } catch (RuntimeException $exception) {
             return response($exception->getMessage(), 422);

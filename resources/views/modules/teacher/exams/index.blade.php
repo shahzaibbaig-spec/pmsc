@@ -18,7 +18,7 @@
                         </div>
                     @endif
 
-                    <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-5">
+                    <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-6">
                         <div>
                             <x-input-label for="session" value="Session" />
                             <select id="session" class="mt-1 block min-h-11 w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
@@ -50,6 +50,36 @@
                         <div id="totalMarksWrapper">
                             <x-input-label for="total_marks" value="Total Marks" />
                             <x-text-input id="total_marks" type="number" min="1" class="mt-1 block min-h-11 w-full" placeholder="100" />
+                        </div>
+                    </div>
+
+                    <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
+                        <div>
+                            <x-input-label for="exam_id" value="Existing Exam" />
+                            <select id="exam_id" class="mt-1 block min-h-11 w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                <option value="">Create New / Load by Topic-Number</option>
+                            </select>
+                        </div>
+
+                        <div id="classTestTopicWrapper" class="hidden">
+                            <x-input-label for="class_test_topic" value="Class Test Topic" />
+                            <x-text-input
+                                id="class_test_topic"
+                                type="text"
+                                class="mt-1 block min-h-11 w-full"
+                                placeholder="e.g. Fractions, Chapter 2, Grammar Test"
+                            />
+                        </div>
+
+                        <div id="bimonthlySequenceWrapper" class="hidden">
+                            <x-input-label for="sequence_number" value="Bimonthly Number" />
+                            <select id="sequence_number" class="mt-1 block min-h-11 w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                <option value="">Select bimonthly</option>
+                                <option value="1">1st Bimonthly</option>
+                                <option value="2">2nd Bimonthly</option>
+                                <option value="3">3rd Bimonthly</option>
+                                <option value="4">4th Bimonthly</option>
+                            </select>
                         </div>
                     </div>
 
@@ -127,6 +157,11 @@
         const classInput = document.getElementById('class_id');
         const subjectInput = document.getElementById('subject_id');
         const examTypeInput = document.getElementById('exam_type');
+        const examIdInput = document.getElementById('exam_id');
+        const classTestTopicWrapper = document.getElementById('classTestTopicWrapper');
+        const classTestTopicInput = document.getElementById('class_test_topic');
+        const bimonthlySequenceWrapper = document.getElementById('bimonthlySequenceWrapper');
+        const sequenceNumberInput = document.getElementById('sequence_number');
         const totalMarksInput = document.getElementById('total_marks');
         const totalMarksWrapper = document.getElementById('totalMarksWrapper');
         const assessmentModeBadge = document.getElementById('assessmentModeBadge');
@@ -141,6 +176,7 @@
         const prevPageBtn = document.getElementById('prevPageBtn');
         const nextPageBtn = document.getElementById('nextPageBtn');
         const lockBanner = document.getElementById('lockBanner');
+        const examContextOptionsUrl = @json(route('teacher.exams.bimonthly-options'));
 
         let state = {
             students: [],
@@ -153,6 +189,8 @@
             usesGradeSystem: false,
             supportsGradeMode: false,
             gradeOptions: [],
+            contextExams: [],
+            bimonthlyOptions: [],
         };
 
         function showMessage(message, type = 'success') {
@@ -210,6 +248,89 @@
                 Number(item.class_id) === classId &&
                 Number(item.subject_id) === subjectId
             ) || null;
+        }
+
+        function selectedExamType() {
+            return String(examTypeInput.value || '');
+        }
+
+        function isClassTestType() {
+            return selectedExamType() === 'class_test';
+        }
+
+        function isBimonthlyType() {
+            return selectedExamType() === 'bimonthly_test';
+        }
+
+        function selectedExamContext() {
+            return state.contextExams.find((exam) => String(exam.id) === String(examIdInput.value || '')) || null;
+        }
+
+        function updateExamTypeScopedFields() {
+            classTestTopicWrapper.classList.toggle('hidden', !isClassTestType());
+            bimonthlySequenceWrapper.classList.toggle('hidden', !isBimonthlyType());
+
+            if (!isClassTestType()) {
+                classTestTopicInput.value = '';
+            }
+
+            if (!isBimonthlyType()) {
+                sequenceNumberInput.value = '';
+            }
+        }
+
+        function setExamSelectOptions(exams) {
+            const options = ['<option value="">Create New / Load by Topic-Number</option>'];
+
+            (exams || []).forEach((exam) => {
+                options.push(
+                    `<option value="${exam.id}">${window.NSMS.escapeHtml(exam.display_name || 'Exam')}</option>`
+                );
+            });
+
+            examIdInput.innerHTML = options.join('');
+        }
+
+        function setBimonthlyOptions(options) {
+            const currentValue = String(sequenceNumberInput.value || '');
+            const rows = Array.isArray(options) ? options : [];
+            const nextOptions = ['<option value="">Select bimonthly</option>'];
+
+            rows.forEach((row) => {
+                const value = Number(row.value || 0);
+                if (!value) {
+                    return;
+                }
+
+                const isAvailable = Boolean(row.available);
+                const isSelected = currentValue !== '' && Number(currentValue) === value;
+                const shouldDisable = !isAvailable && !isSelected;
+                const label = `${row.label}${isAvailable ? '' : ' (already created)'}`;
+
+                nextOptions.push(
+                    `<option value="${value}" ${shouldDisable ? 'disabled' : ''}>${window.NSMS.escapeHtml(label)}</option>`
+                );
+            });
+
+            sequenceNumberInput.innerHTML = nextOptions.join('');
+            if (currentValue !== '' && sequenceNumberInput.querySelector(`option[value="${currentValue}"]`)) {
+                sequenceNumberInput.value = currentValue;
+            }
+        }
+
+        function syncVariantFieldsFromSelectedExam() {
+            const selectedExam = selectedExamContext();
+            if (!selectedExam) {
+                return;
+            }
+
+            if (isClassTestType()) {
+                classTestTopicInput.value = selectedExam.topic || '';
+            }
+
+            if (isBimonthlyType()) {
+                sequenceNumberInput.value = selectedExam.sequence_number ? String(selectedExam.sequence_number) : '';
+            }
         }
 
         function updateAssessmentModeUi() {
@@ -274,6 +395,8 @@
             if (classMap.size === 0) {
                 classInput.innerHTML = '<option value="">No class assigned</option>';
                 subjectInput.innerHTML = '<option value="">No subject assigned</option>';
+                setExamSelectOptions([]);
+                setBimonthlyOptions([]);
                 loadSheetBtn.disabled = true;
                 saveMarksBtn.disabled = true;
                 return;
@@ -304,6 +427,8 @@
             const rows = assignments.filter(item => item.session === session && Number(item.class_id) === classId);
             if (rows.length === 0) {
                 subjectInput.innerHTML = '<option value="">No subject assigned</option>';
+                setExamSelectOptions([]);
+                setBimonthlyOptions([]);
                 loadSheetBtn.disabled = true;
                 saveMarksBtn.disabled = true;
                 return;
@@ -337,6 +462,51 @@
             loadSheetBtn.disabled = false;
             saveMarksBtn.disabled = false;
             applyAssessmentModeFromAssignment();
+            loadExamContextOptions();
+        }
+
+        async function loadExamContextOptions() {
+            state.contextExams = [];
+            state.bimonthlyOptions = [];
+            setExamSelectOptions([]);
+            setBimonthlyOptions([]);
+
+            const payload = {
+                session: sessionInput.value,
+                class_id: Number(classInput.value),
+                subject_id: Number(subjectInput.value),
+                exam_type: selectedExamType(),
+            };
+
+            if (!payload.session || !payload.class_id || !payload.subject_id || !payload.exam_type) {
+                return;
+            }
+
+            try {
+                const params = new URLSearchParams(payload);
+                const response = await fetch(`${examContextOptionsUrl}?${params.toString()}`, {
+                    headers: { Accept: 'application/json' },
+                });
+
+                if (!response.ok) {
+                    return;
+                }
+
+                const result = await response.json();
+                state.contextExams = Array.isArray(result.exams) ? result.exams : [];
+                state.bimonthlyOptions = Array.isArray(result.available_bimonthly_options)
+                    ? result.available_bimonthly_options
+                    : [];
+
+                setExamSelectOptions(state.contextExams);
+                if (isBimonthlyType()) {
+                    setBimonthlyOptions(state.bimonthlyOptions);
+                }
+            } catch (error) {
+                // Best-effort helper endpoint; ignore network errors and continue.
+            }
+
+            syncVariantFieldsFromSelectedExam();
         }
 
         function gradeOptionsHtml(selectedGrade) {
@@ -437,7 +607,10 @@
                 session: sessionInput.value,
                 class_id: Number(classInput.value),
                 subject_id: Number(subjectInput.value),
-                exam_type: examTypeInput.value
+                exam_type: examTypeInput.value,
+                exam_id: examIdInput.value ? Number(examIdInput.value) : null,
+                topic: classTestTopicInput.value.trim(),
+                sequence_number: sequenceNumberInput.value ? Number(sequenceNumberInput.value) : null,
             };
 
             if (!payload.session || !payload.class_id || !payload.subject_id || !payload.exam_type) {
@@ -445,11 +618,35 @@
                 return;
             }
 
+            if (isClassTestType() && !payload.exam_id && !payload.topic) {
+                showMessage('Class Test Topic is required to load class test sheet.', 'error');
+                return;
+            }
+
+            if (isBimonthlyType() && !payload.exam_id && !payload.sequence_number) {
+                showMessage('Select bimonthly number to load sheet.', 'error');
+                return;
+            }
+
             loadSheetBtn.disabled = true;
             loadSheetBtn.textContent = 'Loading...';
             marksBody.innerHTML = '<tr><td colspan="3" class="px-4 py-8 text-center text-sm text-gray-500">Loading students...</td></tr>';
 
-            const params = new URLSearchParams(payload);
+            const params = new URLSearchParams({
+                session: String(payload.session),
+                class_id: String(payload.class_id),
+                subject_id: String(payload.subject_id),
+                exam_type: String(payload.exam_type),
+            });
+            if (payload.exam_id) {
+                params.set('exam_id', String(payload.exam_id));
+            }
+            if (payload.topic) {
+                params.set('topic', String(payload.topic));
+            }
+            if (payload.sequence_number) {
+                params.set('sequence_number', String(payload.sequence_number));
+            }
             try {
                 const response = await fetch(`{{ route('teacher.exams.sheet') }}?${params.toString()}`, {
                     headers: { Accept: 'application/json' }
@@ -497,6 +694,16 @@
                 state.gradeOptions = Array.isArray(result.grade_options) && result.grade_options.length
                     ? result.grade_options
                     : state.gradeOptions;
+
+                if (result.exam?.id) {
+                    examIdInput.value = String(result.exam.id);
+                }
+                if (isClassTestType()) {
+                    classTestTopicInput.value = result.exam?.topic || classTestTopicInput.value;
+                }
+                if (isBimonthlyType()) {
+                    sequenceNumberInput.value = result.exam?.sequence_number ? String(result.exam.sequence_number) : sequenceNumberInput.value;
+                }
 
                 if (!state.usesGradeSystem && result.exam?.total_marks) {
                     totalMarksInput.value = result.exam.total_marks;
@@ -557,6 +764,9 @@
                     class_id: Number(classInput.value),
                     subject_id: Number(subjectInput.value),
                     exam_type: examTypeInput.value,
+                    exam_id: examIdInput.value ? Number(examIdInput.value) : null,
+                    topic: classTestTopicInput.value.trim() || null,
+                    sequence_number: sequenceNumberInput.value ? Number(sequenceNumberInput.value) : null,
                     total_marks: null,
                     records,
                 };
@@ -585,9 +795,22 @@
                     class_id: Number(classInput.value),
                     subject_id: Number(subjectInput.value),
                     exam_type: examTypeInput.value,
+                    exam_id: examIdInput.value ? Number(examIdInput.value) : null,
+                    topic: classTestTopicInput.value.trim() || null,
+                    sequence_number: sequenceNumberInput.value ? Number(sequenceNumberInput.value) : null,
                     total_marks: totalMarks,
                     records,
                 };
+            }
+
+            if (isClassTestType() && !payload.exam_id && !payload.topic) {
+                showMessage('Class Test Topic is required before saving.', 'error');
+                return;
+            }
+
+            if (isBimonthlyType() && !payload.exam_id && !payload.sequence_number) {
+                showMessage('Select bimonthly number before saving.', 'error');
+                return;
             }
 
             saveMarksBtn.disabled = true;
@@ -688,12 +911,32 @@
 
         subjectInput.addEventListener('change', () => {
             applyAssessmentModeFromAssignment();
+            loadExamContextOptions();
             resetSheet();
         });
 
         examTypeInput.addEventListener('change', () => {
+            updateExamTypeScopedFields();
             applyAssessmentModeFromAssignment();
+            loadExamContextOptions();
             resetSheet();
+        });
+
+        examIdInput.addEventListener('change', () => {
+            syncVariantFieldsFromSelectedExam();
+            resetSheet();
+        });
+
+        classTestTopicInput.addEventListener('input', () => {
+            if (examIdInput.value) {
+                examIdInput.value = '';
+            }
+        });
+
+        sequenceNumberInput.addEventListener('change', () => {
+            if (examIdInput.value) {
+                examIdInput.value = '';
+            }
         });
 
         perPageInput.addEventListener('change', () => {
@@ -721,7 +964,9 @@
         saveMarksBtn.addEventListener('click', saveMarks);
 
         buildClassOptions();
+        updateExamTypeScopedFields();
         applyAssessmentModeFromAssignment();
+        loadExamContextOptions();
         renderStudents();
     </script>
 </x-app-layout>

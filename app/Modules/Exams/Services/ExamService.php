@@ -96,19 +96,250 @@ class ExamService
         ];
     }
 
-    public function sheet(int $userId, int $classId, int $subjectId, string $session, string $examType): array
-    {
+    /**
+     * @return array{
+     *   exams:array<int, array{id:int,display_name:string,topic:?string,sequence_number:?int,total_marks:?int,marking_mode:?string}>,
+     *   available_bimonthly_options:array<int, array{value:int,label:string,available:bool}>
+     * }
+     */
+    public function contextOptionsForTeacher(
+        int $userId,
+        int $classId,
+        int $subjectId,
+        string $session,
+        string $examType
+    ): array {
         $teacher = $this->resolveTeacherOrFail($userId);
-        $this->ensureTeacherAssignment($teacher->id, $classId, $subjectId, $session);
+        $this->ensureTeacherAssignment((int) $teacher->id, $classId, $subjectId, $session);
 
-        $exam = Exam::query()
+        $type = ExamType::tryFrom($examType);
+        if (! $type) {
+            throw new RuntimeException('Invalid exam type selected.');
+        }
+
+        $exams = Exam::query()
             ->where('class_id', $classId)
             ->where('subject_id', $subjectId)
+            ->where('teacher_id', (int) $teacher->id)
             ->where('session', $session)
             ->where('exam_type', $examType)
-            ->first();
+            ->orderByRaw('CASE WHEN sequence_number IS NULL THEN 999 ELSE sequence_number END')
+            ->orderBy('exam_label')
+            ->orderByDesc('id')
+            ->get([
+                'id',
+                'exam_type',
+                'exam_label',
+                'topic',
+                'sequence_number',
+                'total_marks',
+                'marking_mode',
+            ])
+            ->map(fn (Exam $exam): array => [
+                'id' => (int) $exam->id,
+                'display_name' => $this->getExamDisplayName($exam),
+                'topic' => $exam->topic ? (string) $exam->topic : null,
+                'sequence_number' => $exam->sequence_number !== null ? (int) $exam->sequence_number : null,
+                'total_marks' => $exam->total_marks !== null ? (int) $exam->total_marks : null,
+                'marking_mode' => $exam->marking_mode ? (string) $exam->marking_mode : null,
+            ])
+            ->values()
+            ->all();
 
-        $students = $this->studentsForExam($teacher->id, $classId, $subjectId, $session);
+        return [
+            'exams' => $exams,
+            'available_bimonthly_options' => $type === ExamType::BimonthlyTest
+                ? $this->getAvailableBimonthlyOptions($classId, $subjectId, (int) $teacher->id, $session)
+                : [],
+        ];
+    }
+
+    /**
+     * @return array<int, array{value:int,label:string,available:bool}>
+     */
+    public function getAvailableBimonthlyOptions(int $classId, int $subjectId, int $teacherId, string $session): array
+    {
+        $used = Exam::query()
+            ->where('class_id', $classId)
+            ->where('subject_id', $subjectId)
+            ->where('teacher_id', $teacherId)
+            ->where('session', $session)
+            ->where('exam_type', ExamType::BimonthlyTest->value)
+            ->whereNotNull('sequence_number')
+            ->pluck('sequence_number')
+            ->map(fn ($value): int => (int) $value)
+            ->filter(fn (int $value): bool => $value >= 1 && $value <= 4)
+            ->unique()
+            ->values()
+            ->all();
+        $usedMap = array_flip($used);
+
+        $options = [];
+        foreach ([1, 2, 3, 4] as $sequence) {
+            $options[] = [
+                'value' => $sequence,
+                'label' => $this->bimonthlyLabel($sequence),
+                'available' => ! isset($usedMap[$sequence]),
+            ];
+        }
+
+        return $options;
+    }
+
+    public function buildExamLabel(array $data): string
+    {
+        $examType = (string) ($data['exam_type'] ?? '');
+        $type = ExamType::tryFrom($examType);
+        if (! $type) {
+            throw new RuntimeException('Invalid exam type selected.');
+        }
+
+        return match ($type) {
+            ExamType::ClassTest => $this->buildClassTestLabel($data),
+            ExamType::BimonthlyTest => $this->buildBimonthlyLabel($data),
+            ExamType::FirstTerm => 'Midterm',
+            ExamType::FinalTerm => 'Final Term',
+        };
+    }
+
+    public function getExamDisplayName(Exam $exam): string
+    {
+        return trim((string) $exam->display_name);
+    }
+
+    public function validateExamUniqueness(array $data): void
+    {
+        $classId = (int) ($data['class_id'] ?? 0);
+        $subjectId = (int) ($data['subject_id'] ?? 0);
+        $teacherId = (int) ($data['teacher_id'] ?? 0);
+        $session = trim((string) ($data['session'] ?? ''));
+        $examType = trim((string) ($data['exam_type'] ?? ''));
+        $label = trim((string) ($data['exam_label'] ?? ''));
+        $ignoreExamId = isset($data['ignore_exam_id']) ? (int) $data['ignore_exam_id'] : null;
+
+        if ($classId <= 0 || $subjectId <= 0 || $teacherId <= 0 || $session === '' || $examType === '' || $label === '') {
+            throw new RuntimeException('Incomplete exam scope for uniqueness validation.');
+        }
+
+        $duplicate = Exam::query()
+            ->where('class_id', $classId)
+            ->where('subject_id', $subjectId)
+            ->where('teacher_id', $teacherId)
+            ->where('session', $session)
+            ->where('exam_type', $examType)
+            ->whereRaw('LOWER(exam_label) = ?', [mb_strtolower($label)])
+            ->when($ignoreExamId !== null && $ignoreExamId > 0, fn ($query) => $query->where('id', '!=', $ignoreExamId))
+            ->exists();
+
+        if (! $duplicate) {
+            return;
+        }
+
+        $type = ExamType::tryFrom($examType);
+        $errorMessage = match ($type) {
+            ExamType::ClassTest => 'A class test with this topic already exists for the selected class/subject/session.',
+            ExamType::BimonthlyTest => 'The selected bimonthly number already exists for the selected class/subject/session.',
+            ExamType::FirstTerm => 'Midterm already exists for the selected class/subject/session.',
+            ExamType::FinalTerm => 'Final Term already exists for the selected class/subject/session.',
+            default => 'An exam with this scope already exists.',
+        };
+
+        throw ValidationException::withMessages([
+            'exam_type' => $errorMessage,
+        ]);
+    }
+
+    public function createExam(array $data, User $user): Exam
+    {
+        $teacher = $this->resolveTeacherOrFail((int) $user->id);
+
+        $classId = (int) ($data['class_id'] ?? 0);
+        $subjectId = (int) ($data['subject_id'] ?? 0);
+        $session = trim((string) ($data['session'] ?? ''));
+        $examType = trim((string) ($data['exam_type'] ?? ''));
+        $markingMode = trim((string) ($data['marking_mode'] ?? ''));
+        $totalMarks = isset($data['total_marks']) ? (int) $data['total_marks'] : null;
+        $topic = $this->normalizeTopic(isset($data['topic']) ? (string) $data['topic'] : null);
+        $sequenceNumber = isset($data['sequence_number']) ? (int) $data['sequence_number'] : null;
+        $label = $this->buildExamLabel([
+            'exam_type' => $examType,
+            'topic' => $topic,
+            'sequence_number' => $sequenceNumber,
+        ]);
+        $group = $this->resolveExamGroup($examType);
+
+        $payload = [
+            'class_id' => $classId,
+            'subject_id' => $subjectId,
+            'teacher_id' => (int) $teacher->id,
+            'session' => $session,
+            'exam_type' => $examType,
+            'exam_group' => $group,
+            'exam_label' => $label,
+            'topic' => $topic !== '' ? $topic : null,
+            'sequence_number' => $sequenceNumber,
+            'marking_mode' => $markingMode !== '' ? $markingMode : null,
+            'total_marks' => $totalMarks,
+        ];
+
+        return DB::transaction(function () use ($payload): Exam {
+            $existing = Exam::query()
+                ->where('class_id', (int) $payload['class_id'])
+                ->where('subject_id', (int) $payload['subject_id'])
+                ->where('teacher_id', (int) $payload['teacher_id'])
+                ->where('session', (string) $payload['session'])
+                ->where('exam_type', (string) $payload['exam_type'])
+                ->where('exam_label', (string) $payload['exam_label'])
+                ->lockForUpdate()
+                ->first();
+
+            if ($existing) {
+                return $existing;
+            }
+
+            $this->validateExamUniqueness($payload);
+
+            return Exam::query()->create([
+                'class_id' => (int) $payload['class_id'],
+                'subject_id' => (int) $payload['subject_id'],
+                'teacher_id' => (int) $payload['teacher_id'],
+                'session' => (string) $payload['session'],
+                'exam_type' => (string) $payload['exam_type'],
+                'exam_group' => (string) $payload['exam_group'],
+                'exam_label' => (string) $payload['exam_label'],
+                'topic' => $payload['topic'],
+                'sequence_number' => $payload['sequence_number'],
+                'marking_mode' => $payload['marking_mode'],
+                'total_marks' => $payload['total_marks'],
+            ]);
+        });
+    }
+
+    public function sheet(
+        int $userId,
+        int $classId,
+        int $subjectId,
+        string $session,
+        string $examType,
+        ?int $examId = null,
+        ?string $topic = null,
+        ?int $sequenceNumber = null
+    ): array {
+        $teacher = $this->resolveTeacherOrFail($userId);
+        $this->ensureTeacherAssignment((int) $teacher->id, $classId, $subjectId, $session);
+
+        $exam = $this->resolveExamFromContext(
+            (int) $teacher->id,
+            $classId,
+            $subjectId,
+            $session,
+            $examType,
+            $examId,
+            $topic,
+            $sequenceNumber
+        );
+
+        $students = $this->studentsForExam((int) $teacher->id, $classId, $subjectId, $session);
         $studentIds = $students->pluck('id');
         $requiresSubjectFiltering = $this->visibilityService->classRequiresSubjectFiltering($classId);
         $markingMode = $this->markingModeService->resolveMarkingMode($exam, $classId);
@@ -133,6 +364,10 @@ class ExamService
         return [
             'exam' => [
                 'id' => $exam?->id,
+                'display_name' => $exam ? $this->getExamDisplayName($exam) : null,
+                'exam_type' => $examType,
+                'topic' => $exam?->topic,
+                'sequence_number' => $exam?->sequence_number !== null ? (int) $exam->sequence_number : null,
                 'total_marks' => $usesGradeSystem ? null : $exam?->total_marks,
                 'marking_mode' => $markingMode,
                 'locked' => $lockedByResultLock || $lockedByEditWindow,
@@ -169,21 +404,15 @@ class ExamService
         string $session,
         string $examType,
         ?int $totalMarks,
-        array $records
+        array $records,
+        ?int $examId = null,
+        ?string $topic = null,
+        ?int $sequenceNumber = null
     ): void {
         $teacher = $this->resolveTeacherOrFail($userId);
-        $this->ensureTeacherAssignment($teacher->id, $classId, $subjectId, $session);
+        $this->ensureTeacherAssignment((int) $teacher->id, $classId, $subjectId, $session);
 
-        $existingExam = Exam::query()
-            ->where('class_id', $classId)
-            ->where('subject_id', $subjectId)
-            ->where('session', $session)
-            ->where('exam_type', $examType)
-            ->first();
-        $initialMarkingMode = $this->markingModeService->resolveMarkingMode($existingExam, $classId);
-        $usesGradeSystem = $initialMarkingMode === AssessmentMarkingModeService::MODE_GRADE;
-
-        $allowedStudents = $this->studentsForExam($teacher->id, $classId, $subjectId, $session)->keyBy('id');
+        $allowedStudents = $this->studentsForExam((int) $teacher->id, $classId, $subjectId, $session)->keyBy('id');
         if ($allowedStudents->isEmpty()) {
             $message = $this->visibilityService->classRequiresSubjectFiltering($classId)
                 ? 'No students are currently assigned to this subject in the selected class.'
@@ -197,30 +426,68 @@ class ExamService
             throw new RuntimeException('Invalid student records submitted for this exam sheet.');
         }
 
-        if (! $usesGradeSystem && ($totalMarks === null || $totalMarks <= 0)) {
+        $provisionalMode = $this->markingModeService->resolveMarkingModeForExamContext($classId, $session, $examType, $subjectId);
+        $provisionalGradeMode = $provisionalMode === AssessmentMarkingModeService::MODE_GRADE;
+
+        if (! $provisionalGradeMode && ($totalMarks === null || $totalMarks <= 0)) {
             throw new RuntimeException('Total marks are required and must be greater than 0.');
         }
 
         $user = User::query()->findOrFail($userId);
-        $existingExamId = $existingExam?->id ? (int) $existingExam->id : null;
-        if (! $this->resultLockService->canEditResult($user, $session, $classId, $existingExamId)) {
+        if (! $this->resultLockService->canEditResult($user, $session, $classId, $examId)) {
             throw ValidationException::withMessages([
                 'error' => 'Results are locked and cannot be modified.',
             ]);
         }
 
-        DB::transaction(function () use ($teacher, $classId, $subjectId, $session, $examType, $totalMarks, $records, $userId): void {
-            $exam = Exam::query()
-                ->where('class_id', $classId)
-                ->where('subject_id', $subjectId)
-                ->where('session', $session)
-                ->where('exam_type', $examType)
-                ->lockForUpdate()
-                ->first();
+        DB::transaction(function () use (
+            $teacher,
+            $classId,
+            $subjectId,
+            $session,
+            $examType,
+            $totalMarks,
+            $records,
+            $userId,
+            $user,
+            $examId,
+            $topic,
+            $sequenceNumber
+        ): void {
+            $exam = $this->resolveExamFromContext(
+                (int) $teacher->id,
+                $classId,
+                $subjectId,
+                $session,
+                $examType,
+                $examId,
+                $topic,
+                $sequenceNumber,
+                true
+            );
 
-            $user = User::query()->findOrFail($userId);
-            $lockedExamId = $exam?->id ? (int) $exam->id : null;
-            if (! $this->resultLockService->canEditResult($user, $session, $classId, $lockedExamId)) {
+            if (! $exam) {
+                $markingMode = $this->markingModeService->resolveMarkingModeForExamContext(
+                    $classId,
+                    $session,
+                    $examType,
+                    $subjectId
+                );
+                $usesGradeSystem = $markingMode === AssessmentMarkingModeService::MODE_GRADE;
+
+                $exam = $this->createExam([
+                    'class_id' => $classId,
+                    'subject_id' => $subjectId,
+                    'session' => $session,
+                    'exam_type' => $examType,
+                    'topic' => $topic,
+                    'sequence_number' => $sequenceNumber,
+                    'marking_mode' => $markingMode,
+                    'total_marks' => $usesGradeSystem ? null : $totalMarks,
+                ], $user);
+            }
+
+            if (! $this->resultLockService->canEditResult($user, $session, $classId, (int) $exam->id)) {
                 throw ValidationException::withMessages([
                     'error' => 'Results are locked and cannot be modified.',
                 ]);
@@ -229,45 +496,33 @@ class ExamService
             $markingMode = $this->markingModeService->resolveMarkingMode($exam, $classId);
             $usesGradeSystem = $markingMode === AssessmentMarkingModeService::MODE_GRADE;
 
-            if (! $exam) {
-                $exam = Exam::query()->create([
-                    'class_id' => $classId,
-                    'subject_id' => $subjectId,
-                    'exam_type' => $examType,
-                    'session' => $session,
-                    'marking_mode' => $markingMode,
-                    'total_marks' => $usesGradeSystem ? null : $totalMarks,
-                    'teacher_id' => $teacher->id,
-                ]);
+            if ($this->isExamLocked($exam)) {
+                throw new RuntimeException('Exam is locked after 7 days. You cannot edit marks.');
+            }
+
+            $examUpdates = [];
+            if ((string) $exam->marking_mode !== $markingMode) {
+                $examUpdates['marking_mode'] = $markingMode;
+            }
+
+            if ($usesGradeSystem) {
+                if ($exam->total_marks !== null) {
+                    $examUpdates['total_marks'] = null;
+                }
             } else {
-                if ($this->isExamLocked($exam)) {
-                    throw new RuntimeException('Exam is locked after 7 days. You cannot edit marks.');
+                if ($totalMarks === null || $totalMarks <= 0) {
+                    throw new RuntimeException('Total marks are required and must be greater than 0.');
                 }
 
-                $examUpdates = [];
-                if ((string) $exam->marking_mode !== $markingMode) {
-                    $examUpdates['marking_mode'] = $markingMode;
+                if ($exam->total_marks === null) {
+                    $examUpdates['total_marks'] = $totalMarks;
+                } elseif ((int) $exam->total_marks !== $totalMarks) {
+                    throw new RuntimeException('Total marks are already set for this exam and cannot be changed.');
                 }
+            }
 
-                if ($usesGradeSystem) {
-                    if ($exam->total_marks !== null) {
-                        $examUpdates['total_marks'] = null;
-                    }
-                } else {
-                    if ($totalMarks === null || $totalMarks <= 0) {
-                        throw new RuntimeException('Total marks are required and must be greater than 0.');
-                    }
-
-                    if ($exam->total_marks === null) {
-                        $examUpdates['total_marks'] = $totalMarks;
-                    } elseif ((int) $exam->total_marks !== $totalMarks) {
-                        throw new RuntimeException('Total marks are already set for this exam and cannot be changed.');
-                    }
-                }
-
-                if ($examUpdates !== []) {
-                    $exam->forceFill($examUpdates)->save();
-                }
+            if ($examUpdates !== []) {
+                $exam->forceFill($examUpdates)->save();
             }
 
             $effectiveTotalMarks = ! $usesGradeSystem
@@ -503,6 +758,130 @@ class ExamService
     {
         TeacherResultEntryLog::query()->create($payload);
     }
-}
 
+    private function resolveExamFromContext(
+        int $teacherId,
+        int $classId,
+        int $subjectId,
+        string $session,
+        string $examType,
+        ?int $examId,
+        ?string $topic,
+        ?int $sequenceNumber,
+        bool $forUpdate = false
+    ): ?Exam {
+        $query = Exam::query()
+            ->where('class_id', $classId)
+            ->where('subject_id', $subjectId)
+            ->where('teacher_id', $teacherId)
+            ->where('session', $session)
+            ->where('exam_type', $examType);
+
+        if ($forUpdate) {
+            $query->lockForUpdate();
+        }
+
+        if ($examId !== null && $examId > 0) {
+            $exam = (clone $query)->where('id', $examId)->first();
+            if (! $exam) {
+                throw new RuntimeException('Selected exam record was not found for this class/subject/session.');
+            }
+
+            return $exam;
+        }
+
+        $type = ExamType::tryFrom($examType);
+        if (! $type) {
+            throw new RuntimeException('Invalid exam type selected.');
+        }
+
+        if ($type === ExamType::ClassTest) {
+            $normalizedTopic = $this->normalizeTopic($topic);
+            if ($normalizedTopic === '') {
+                throw ValidationException::withMessages([
+                    'topic' => 'Class Test Topic is required.',
+                ]);
+            }
+
+            $label = $this->buildExamLabel([
+                'exam_type' => $examType,
+                'topic' => $normalizedTopic,
+            ]);
+
+            return (clone $query)
+                ->whereRaw('LOWER(exam_label) = ?', [mb_strtolower($label)])
+                ->orderByDesc('id')
+                ->first();
+        }
+
+        if ($type === ExamType::BimonthlyTest) {
+            if ($sequenceNumber === null || ! in_array($sequenceNumber, [1, 2, 3, 4], true)) {
+                throw ValidationException::withMessages([
+                    'sequence_number' => 'Select bimonthly number from 1st to 4th.',
+                ]);
+            }
+
+            return (clone $query)
+                ->where('sequence_number', $sequenceNumber)
+                ->orderByDesc('id')
+                ->first();
+        }
+
+        return (clone $query)
+            ->orderByDesc('id')
+            ->first();
+    }
+
+    private function buildClassTestLabel(array $data): string
+    {
+        $topic = $this->normalizeTopic(isset($data['topic']) ? (string) $data['topic'] : null);
+        if ($topic === '') {
+            throw ValidationException::withMessages([
+                'topic' => 'Class Test Topic is required.',
+            ]);
+        }
+
+        return 'Class Test - '.$topic;
+    }
+
+    private function buildBimonthlyLabel(array $data): string
+    {
+        $sequenceNumber = isset($data['sequence_number']) ? (int) $data['sequence_number'] : null;
+        if (! in_array($sequenceNumber, [1, 2, 3, 4], true)) {
+            throw ValidationException::withMessages([
+                'sequence_number' => 'Bimonthly must be 1st, 2nd, 3rd, or 4th.',
+            ]);
+        }
+
+        return $this->bimonthlyLabel($sequenceNumber);
+    }
+
+    private function normalizeTopic(?string $topic): string
+    {
+        $value = trim((string) $topic);
+        $value = preg_replace('/\s+/', ' ', $value) ?? '';
+
+        return trim($value);
+    }
+
+    private function bimonthlyLabel(int $sequenceNumber): string
+    {
+        return match ($sequenceNumber) {
+            1 => '1st Bimonthly',
+            2 => '2nd Bimonthly',
+            3 => '3rd Bimonthly',
+            4 => '4th Bimonthly',
+            default => 'Bimonthly',
+        };
+    }
+
+    private function resolveExamGroup(string $examType): string
+    {
+        return match ($examType) {
+            ExamType::ClassTest->value => 'class_test',
+            ExamType::BimonthlyTest->value => 'bimonthly',
+            default => 'terminal',
+        };
+    }
+}
 

@@ -59,7 +59,7 @@ class TeacherMarkEntryController extends Controller
         $entriesQuery = Mark::query()
             ->with([
                 'student:id,student_id,name',
-                'exam:id,class_id,subject_id,exam_type,marking_mode',
+                'exam:id,class_id,subject_id,exam_type,exam_label,topic,sequence_number,marking_mode',
                 'exam.classRoom:id,name,section',
                 'exam.subject:id,name',
             ])
@@ -173,7 +173,7 @@ class TeacherMarkEntryController extends Controller
         $lockState = $this->auditService->lockStateForMark($mark, auth()->user());
         $mark->load([
             'student:id,student_id,name',
-            'exam:id,class_id,subject_id,exam_type,total_marks,marking_mode',
+            'exam:id,class_id,subject_id,exam_type,exam_label,topic,sequence_number,total_marks,marking_mode',
             'exam.classRoom:id,name,section',
             'exam.subject:id,name',
         ]);
@@ -186,7 +186,7 @@ class TeacherMarkEntryController extends Controller
 
         return view('modules.teacher.marks.edit', [
             'mark' => $mark,
-            'examTypeLabel' => $this->examTypeLabel($mark->exam?->exam_type),
+            'examTypeLabel' => trim((string) ($mark->exam?->display_name ?? $this->examTypeLabel($mark->exam?->exam_type))),
             'usesGradeSystem' => $usesGradeSystem,
             'gradeOptions' => $this->assessmentModeService->gradeScale(),
             'gradeLabel' => $usesGradeSystem ? $this->assessmentModeService->gradeLabel($mark->grade) : null,

@@ -50,15 +50,21 @@ class ResultSheetService
             throw new RuntimeException('Class not found.');
         }
 
-        $resolvedExamType = $this->resolveExamType($classId, $session);
+        $examScope = $this->resolveExamScope($classId, $session);
+        $resolvedExamType = $examScope['exam_type'];
+        $resolvedExamLabel = $examScope['exam_label'];
 
         $exams = Exam::query()
             ->with('subject:id,name')
             ->where('class_id', $classId)
             ->where('session', $session)
             ->where('exam_type', $resolvedExamType)
+            ->when(
+                $resolvedExamLabel !== null && trim($resolvedExamLabel) !== '',
+                fn ($builder) => $builder->where('exam_label', (string) $resolvedExamLabel)
+            )
             ->orderBy('subject_id')
-            ->get(['id', 'subject_id', 'exam_type', 'session', 'total_marks', 'marking_mode']);
+            ->get(['id', 'subject_id', 'exam_type', 'exam_label', 'session', 'total_marks', 'marking_mode']);
 
         if ($exams->isEmpty()) {
             throw new RuntimeException('No exams found for selected class and session.');
@@ -182,7 +188,10 @@ class ResultSheetService
             'exam' => [
                 'session' => $session,
                 'exam_type' => $resolvedExamType,
-                'exam_type_label' => $this->examTypeLabel($resolvedExamType),
+                'exam_type_label' => $resolvedExamLabel !== null && trim($resolvedExamLabel) !== ''
+                    ? (string) $resolvedExamLabel
+                    : $this->examTypeLabel($resolvedExamType),
+                'exam_label' => $resolvedExamLabel,
                 'generated_at' => now()->toDateString(),
             ],
             'marking_mode' => $markingMode,
@@ -200,7 +209,10 @@ class ResultSheetService
         ];
     }
 
-    private function resolveExamType(int $classId, string $session): string
+    /**
+     * @return array{exam_type:string,exam_label:?string}
+     */
+    private function resolveExamScope(int $classId, string $session): array
     {
         $availableTypes = Exam::query()
             ->where('class_id', $classId)
@@ -221,11 +233,35 @@ class ResultSheetService
             ExamType::ClassTest->value => 1,
         ];
 
-        $best = $availableTypes
+        $examType = (string) $availableTypes
             ->sortByDesc(fn (string $type): int => $priority[$type] ?? 0)
             ->first();
 
-        return (string) $best;
+        $examLabel = null;
+        if (in_array($examType, [ExamType::ClassTest->value, ExamType::BimonthlyTest->value], true)) {
+            $labelQuery = Exam::query()
+                ->where('class_id', $classId)
+                ->where('session', $session)
+                ->where('exam_type', $examType);
+
+            if ($examType === ExamType::BimonthlyTest->value) {
+                $labelQuery->orderByDesc('sequence_number');
+            }
+
+            $examLabel = $labelQuery
+                ->orderByDesc('id')
+                ->value('exam_label');
+
+            $examLabel = $examLabel !== null ? trim((string) $examLabel) : null;
+            if ($examLabel === '') {
+                $examLabel = null;
+            }
+        }
+
+        return [
+            'exam_type' => $examType,
+            'exam_label' => $examLabel,
+        ];
     }
 
     private function normalizeExamType(mixed $type): string

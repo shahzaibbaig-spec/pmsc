@@ -214,7 +214,7 @@ class ResultLockService
         $baseQuery = ResultLock::query()
             ->with([
                 'classRoom:id,name,section',
-                'exam:id,class_id,subject_id,exam_type,session',
+                'exam:id,class_id,subject_id,exam_type,exam_label,topic,sequence_number,session',
                 'exam.subject:id,name',
                 'locker:id,name',
             ])
@@ -268,7 +268,7 @@ class ResultLockService
         return ResultLock::query()
             ->with([
                 'classRoom:id,name,section',
-                'exam:id,class_id,subject_id,exam_type,session',
+                'exam:id,class_id,subject_id,exam_type,exam_label,topic,sequence_number,session',
                 'exam.subject:id,name',
                 'locker:id,name',
             ])
@@ -288,7 +288,7 @@ class ResultLockService
         return ResultLockLog::query()
             ->with([
                 'classRoom:id,name,section',
-                'exam:id,class_id,subject_id,exam_type,session',
+                'exam:id,class_id,subject_id,exam_type,exam_label,topic,sequence_number,session',
                 'exam.subject:id,name',
                 'performer:id,name',
             ])
@@ -310,8 +310,10 @@ class ResultLockService
             ->where('session', $session)
             ->when($classId !== null, fn ($query) => $query->where('class_id', $classId))
             ->orderBy('exam_type')
+            ->orderBy('sequence_number')
+            ->orderBy('exam_label')
             ->orderBy('subject_id')
-            ->get(['id', 'class_id', 'subject_id', 'exam_type', 'session']);
+            ->get(['id', 'class_id', 'subject_id', 'exam_type', 'exam_label', 'topic', 'sequence_number', 'session']);
     }
 
     /**
@@ -331,11 +333,15 @@ class ResultLockService
             return 'Whole class result scope';
         }
 
-        $examType = $exam->exam_type instanceof ExamType
-            ? $exam->exam_type->label()
-            : str_replace('_', ' ', ucfirst((string) $exam->exam_type));
+        $label = trim((string) $exam->display_name);
+        if ($label === '') {
+            $examType = $exam->exam_type instanceof ExamType
+                ? $exam->exam_type->label()
+                : str_replace('_', ' ', ucfirst((string) $exam->exam_type));
+            $label = $examType;
+        }
 
-        return trim(($exam->subject?->name ?? 'Subject').' | '.$examType);
+        return trim(($exam->subject?->name ?? 'Subject').' | '.$label);
     }
 
     private function assertValidLockType(string $type): void

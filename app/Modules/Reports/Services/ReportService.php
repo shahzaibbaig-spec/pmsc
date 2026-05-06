@@ -70,23 +70,49 @@ class ReportService
         ];
     }
 
-    public function classResultData(int $classId, string $session, string $examType): array
+    public function classResultData(int $classId, string $session, string $examType, ?string $examLabel = null): array
     {
         $classRoom = SchoolClass::query()->find($classId);
         if (! $classRoom) {
             throw new RuntimeException('Class not found.');
         }
 
+        $resolvedExamLabel = trim((string) $examLabel);
+        if ($resolvedExamLabel === '' && $this->requiresLabelDisambiguation($examType)) {
+            $labels = \App\Models\Exam::query()
+                ->where('class_id', $classId)
+                ->where('session', $session)
+                ->where('exam_type', $examType)
+                ->whereNotNull('exam_label')
+                ->pluck('exam_label')
+                ->map(fn ($label): string => trim((string) $label))
+                ->filter(fn (string $label): bool => $label !== '')
+                ->unique()
+                ->values();
+
+            if ($labels->count() > 1) {
+                throw new RuntimeException('Multiple exam scopes were found for this exam type. Please select exam scope first.');
+            }
+
+            if ($labels->count() === 1) {
+                $resolvedExamLabel = (string) $labels->first();
+            }
+        }
+
         $marks = Mark::query()
             ->with([
                 'student:id,name,student_id',
-                'exam:id,class_id,subject_id,exam_type,session,marking_mode',
+                'exam:id,class_id,subject_id,exam_type,exam_label,session,marking_mode',
             ])
             ->where('session', $session)
-            ->whereHas('exam', function ($query) use ($classId, $examType, $session): void {
+            ->whereHas('exam', function ($query) use ($classId, $examType, $session, $resolvedExamLabel): void {
                 $query->where('class_id', $classId)
                     ->where('exam_type', $examType)
-                    ->where('session', $session);
+                    ->where('session', $session)
+                    ->when(
+                        $resolvedExamLabel !== '',
+                        fn ($builder) => $builder->where('exam_label', $resolvedExamLabel)
+                    );
             })
             ->get();
 
@@ -149,7 +175,8 @@ class ReportService
             'exam' => [
                 'session' => $session,
                 'exam_type' => $examType,
-                'exam_type_label' => $this->examTypeLabel($examType),
+                'exam_type_label' => $resolvedExamLabel !== '' ? $resolvedExamLabel : $this->examTypeLabel($examType),
+                'exam_label' => $resolvedExamLabel !== '' ? $resolvedExamLabel : null,
                 'generated_at' => now()->toDateString(),
             ],
             'marking_mode' => $markingMode,
@@ -228,5 +255,10 @@ class ReportService
         $type = ExamType::tryFrom($examType);
 
         return $type?->label() ?? str_replace('_', ' ', ucfirst($examType));
+    }
+
+    private function requiresLabelDisambiguation(string $examType): bool
+    {
+        return in_array($examType, [ExamType::ClassTest->value, ExamType::BimonthlyTest->value], true);
     }
 }

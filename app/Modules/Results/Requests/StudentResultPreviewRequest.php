@@ -19,7 +19,7 @@ class StudentResultPreviewRequest extends FormRequest
             'student_id' => ['required', Rule::exists('students', 'id')],
             'session' => ['required', 'string', 'max:20'],
             'exam_type' => ['required', Rule::in(array_column(ExamType::options(), 'value'))],
+            'exam_label' => ['nullable', 'string', 'max:255'],
         ];
     }
 }
-

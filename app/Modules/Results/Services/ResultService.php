@@ -25,7 +25,7 @@ class ResultService
         private readonly AssessmentMarkingModeService $markingModeService
     ) {}
 
-    public function generateStudentResult(int $studentId, string $session, string $examType): array
+    public function generateStudentResult(int $studentId, string $session, string $examType, ?string $examLabel = null): array
     {
         $student = Student::query()
             ->with('classRoom:id,name,section')
@@ -37,20 +37,39 @@ class ResultService
 
         $marks = Mark::query()
             ->with([
-                'exam:id,class_id,subject_id,exam_type,session,marking_mode',
+                'exam:id,class_id,subject_id,exam_type,exam_label,topic,sequence_number,session,marking_mode',
                 'exam.classRoom:id,name,section',
                 'exam.subject:id,name',
             ])
             ->where('student_id', $studentId)
             ->where('session', $session)
-            ->whereHas('exam', function ($query) use ($examType, $session): void {
+            ->whereHas('exam', function ($query) use ($examType, $session, $examLabel): void {
                 $query->where('exam_type', $examType)
-                    ->where('session', $session);
+                    ->where('session', $session)
+                    ->when(
+                        $examLabel !== null && trim($examLabel) !== '',
+                        fn ($builder) => $builder->where('exam_label', trim($examLabel))
+                    );
             })
             ->get();
 
         if ($marks->isEmpty()) {
             throw new RuntimeException('No marks found for selected student, session, and exam type.');
+        }
+
+        $resolvedExamLabel = trim((string) $examLabel);
+        $availableLabels = $marks
+            ->map(fn (Mark $mark): string => trim((string) ($mark->exam?->exam_label ?? $mark->exam?->display_name ?? '')))
+            ->filter(fn (string $label): bool => $label !== '')
+            ->unique()
+            ->values();
+
+        if ($resolvedExamLabel === '' && $this->requiresLabelDisambiguation($examType) && $availableLabels->count() > 1) {
+            throw new RuntimeException('Multiple exam scopes were found for this exam type. Please select exam scope first.');
+        }
+
+        if ($resolvedExamLabel === '' && $availableLabels->count() === 1) {
+            $resolvedExamLabel = (string) $availableLabels->first();
         }
 
         $resultClass = $this->resolveResultClass($student, $session, $marks);
@@ -115,7 +134,8 @@ class ResultService
             'exam' => [
                 'session' => $session,
                 'exam_type' => $examType,
-                'exam_type_label' => $this->examTypeLabel($examType),
+                'exam_type_label' => $resolvedExamLabel !== '' ? $resolvedExamLabel : $this->examTypeLabel($examType),
+                'exam_label' => $resolvedExamLabel !== '' ? $resolvedExamLabel : null,
                 'generated_at' => now()->toDateString(),
             ],
             'uses_grade_system' => $usesGradeSystem,
@@ -129,7 +149,7 @@ class ResultService
         ];
     }
 
-    public function generateClassResultCards(int $classId, string $session, string $examType): array
+    public function generateClassResultCards(int $classId, string $session, string $examType, ?string $examLabel = null): array
     {
         $classRoom = SchoolClass::query()
             ->find($classId, ['id', 'name', 'section']);
@@ -144,10 +164,32 @@ class ResultService
             throw new RuntimeException('No active students found for selected class.');
         }
 
+        $resolvedExamLabel = trim((string) $examLabel);
+        if ($resolvedExamLabel === '' && $this->requiresLabelDisambiguation($examType)) {
+            $labels = \App\Models\Exam::query()
+                ->where('class_id', $classId)
+                ->where('session', $session)
+                ->where('exam_type', $examType)
+                ->whereNotNull('exam_label')
+                ->pluck('exam_label')
+                ->map(fn ($label): string => trim((string) $label))
+                ->filter(fn (string $label): bool => $label !== '')
+                ->unique()
+                ->values();
+
+            if ($labels->count() > 1) {
+                throw new RuntimeException('Multiple exam scopes were found for this exam type. Please select exam scope first.');
+            }
+
+            if ($labels->count() === 1) {
+                $resolvedExamLabel = (string) $labels->first();
+            }
+        }
+
         $cards = [];
         foreach ($students as $student) {
             try {
-                $cards[] = $this->generateStudentResult((int) $student->id, $session, $examType);
+                $cards[] = $this->generateStudentResult((int) $student->id, $session, $examType, $resolvedExamLabel !== '' ? $resolvedExamLabel : null);
             } catch (RuntimeException) {
                 // Skip students without marks for selected session/exam.
             }
@@ -172,7 +214,8 @@ class ResultService
             'exam' => [
                 'session' => $session,
                 'exam_type' => $examType,
-                'exam_type_label' => $this->examTypeLabel($examType),
+                'exam_type_label' => $resolvedExamLabel !== '' ? $resolvedExamLabel : $this->examTypeLabel($examType),
+                'exam_label' => $resolvedExamLabel !== '' ? $resolvedExamLabel : null,
                 'generated_at' => now()->toDateString(),
             ],
             'uses_grade_system' => $markingMode === AssessmentMarkingModeService::MODE_GRADE,
@@ -206,18 +249,44 @@ class ResultService
         return 'Fail';
     }
 
-    public function publishResults(int $publisherUserId, int $classId, string $session, string $examType): array
+    public function publishResults(int $publisherUserId, int $classId, string $session, string $examType, ?string $examLabel = null): array
     {
         $classRoom = SchoolClass::query()->find($classId, ['id', 'name', 'section']);
         if (! $classRoom) {
             throw new RuntimeException('Class not found.');
         }
 
+        $resolvedExamLabel = trim((string) $examLabel);
+        if ($resolvedExamLabel === '' && $this->requiresLabelDisambiguation($examType)) {
+            $labels = \App\Models\Exam::query()
+                ->where('class_id', $classId)
+                ->where('session', $session)
+                ->where('exam_type', $examType)
+                ->whereNotNull('exam_label')
+                ->pluck('exam_label')
+                ->map(fn ($label): string => trim((string) $label))
+                ->filter(fn (string $label): bool => $label !== '')
+                ->unique()
+                ->values();
+
+            if ($labels->count() > 1) {
+                throw new RuntimeException('Multiple exam scopes were found for this exam type. Please select exam scope first.');
+            }
+
+            if ($labels->count() === 1) {
+                $resolvedExamLabel = (string) $labels->first();
+            }
+        }
+
         $marksCount = Mark::query()
-            ->whereHas('exam', function ($query) use ($classId, $session, $examType): void {
+            ->whereHas('exam', function ($query) use ($classId, $session, $examType, $resolvedExamLabel): void {
                 $query->where('class_id', $classId)
                     ->where('session', $session)
-                    ->where('exam_type', $examType);
+                    ->where('exam_type', $examType)
+                    ->when(
+                        $resolvedExamLabel !== '',
+                        fn ($builder) => $builder->where('exam_label', $resolvedExamLabel)
+                    );
             })
             ->count();
 
@@ -247,7 +316,8 @@ class ResultService
                 'class_name' => trim($classRoom->name.' '.($classRoom->section ?? '')),
                 'session' => $session,
                 'exam_type' => $examType,
-                'exam_type_label' => $this->examTypeLabel($examType),
+                'exam_type_label' => $resolvedExamLabel !== '' ? $resolvedExamLabel : $this->examTypeLabel($examType),
+                'exam_label' => $resolvedExamLabel !== '' ? $resolvedExamLabel : null,
             ];
         }
 
@@ -265,7 +335,8 @@ class ResultService
                 'class_name' => trim($classRoom->name.' '.($classRoom->section ?? '')),
                 'session' => $session,
                 'exam_type' => $examType,
-                'exam_type_label' => $this->examTypeLabel($examType),
+                'exam_type_label' => $resolvedExamLabel !== '' ? $resolvedExamLabel : $this->examTypeLabel($examType),
+                'exam_label' => $resolvedExamLabel !== '' ? $resolvedExamLabel : null,
             ];
         }
 
@@ -275,7 +346,8 @@ class ResultService
             'class_name' => trim($classRoom->name.' '.($classRoom->section ?? '')),
             'session' => $session,
             'exam_type' => $examType,
-            'exam_type_label' => $this->examTypeLabel($examType),
+            'exam_type_label' => $resolvedExamLabel !== '' ? $resolvedExamLabel : $this->examTypeLabel($examType),
+            'exam_label' => $resolvedExamLabel !== '' ? $resolvedExamLabel : null,
             'published_by' => $publisher?->name ?? 'Principal',
             'published_at' => now()->toDateTimeString(),
             'url' => route('dashboard'),
@@ -289,6 +361,7 @@ class ResultService
             'session' => $session,
             'exam_type' => $examType,
             'exam_type_label' => $notificationPayload['exam_type_label'],
+            'exam_label' => $notificationPayload['exam_label'],
         ];
     }
 
@@ -399,5 +472,10 @@ class ResultService
             'grade_label' => $this->assessmentModeService->gradeLabel($dominantGrade),
             'overall_performance' => $this->assessmentModeService->overallPerformanceLabel($rows->pluck('grade')->all()),
         ];
+    }
+
+    private function requiresLabelDisambiguation(string $examType): bool
+    {
+        return in_array($examType, [ExamType::ClassTest->value, ExamType::BimonthlyTest->value], true);
     }
 }

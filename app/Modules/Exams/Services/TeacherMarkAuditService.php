@@ -109,7 +109,7 @@ class TeacherMarkAuditService
         $mark->loadMissing([
             'teacher.user:id,name',
             'student:id,name',
-            'exam:id,class_id,subject_id,exam_type,total_marks,marking_mode',
+            'exam:id,class_id,subject_id,exam_type,exam_label,topic,sequence_number,total_marks,marking_mode',
             'exam.classRoom:id,name,section',
             'exam.subject:id,name',
         ]);
@@ -242,7 +242,7 @@ class TeacherMarkAuditService
         $mark->loadMissing([
             'teacher.user:id,name',
             'student:id,name',
-            'exam:id,class_id,subject_id,exam_type,total_marks,marking_mode',
+            'exam:id,class_id,subject_id,exam_type,exam_label,topic,sequence_number,total_marks,marking_mode',
             'exam.classRoom:id,name,section',
             'exam.subject:id,name',
         ]);
@@ -320,7 +320,7 @@ class TeacherMarkAuditService
         $mark->refresh()->loadMissing([
             'teacher.user:id,name',
             'student:id,name',
-            'exam:id,class_id,subject_id,exam_type,total_marks,marking_mode',
+            'exam:id,class_id,subject_id,exam_type,exam_label,topic,sequence_number,total_marks,marking_mode',
             'exam.classRoom:id,name,section',
             'exam.subject:id,name',
         ]);
@@ -386,7 +386,7 @@ class TeacherMarkAuditService
             'student_name' => (string) ($mark->student?->name ?? 'Student'),
             'class_name' => trim((string) (($mark->exam?->classRoom?->name ?? 'Class').' '.($mark->exam?->classRoom?->section ?? ''))),
             'subject_name' => (string) ($mark->exam?->subject?->name ?? 'Subject'),
-            'exam_type' => $this->examTypeLabel($mark->exam?->exam_type),
+            'exam_type' => trim((string) ($mark->exam?->display_name ?? $this->examTypeLabel($mark->exam?->exam_type))),
             'old_marks' => $oldMarks,
             'new_marks' => $newMarks,
             'old_grade' => $oldGrade,
