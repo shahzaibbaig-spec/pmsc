@@ -6,6 +6,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class KcatQuestion extends Model
 {
@@ -29,6 +31,10 @@ class KcatQuestion extends Model
         ];
     }
 
+    protected $appends = [
+        'question_image_url',
+    ];
+
     public function test(): BelongsTo { return $this->belongsTo(KcatTest::class, 'kcat_test_id'); }
     public function section(): BelongsTo { return $this->belongsTo(KcatSection::class, 'kcat_section_id'); }
     public function options(): HasMany { return $this->hasMany(KcatQuestionOption::class)->orderBy('sort_order')->orderBy('id'); }
@@ -38,4 +44,26 @@ class KcatQuestion extends Model
     public function retiredBy(): BelongsTo { return $this->belongsTo(User::class, 'retired_by'); }
     public function createdBy(): BelongsTo { return $this->belongsTo(User::class, 'created_by'); }
     public function updatedBy(): BelongsTo { return $this->belongsTo(User::class, 'updated_by'); }
+
+    public function getQuestionImageUrlAttribute(): ?string
+    {
+        $path = trim((string) $this->question_image);
+        if ($path === '') {
+            return null;
+        }
+
+        if (Str::startsWith($path, ['http://', 'https://', '/', 'data:image/'])) {
+            return $path;
+        }
+
+        if (Storage::disk('public')->exists($path)) {
+            return Storage::disk('public')->url($path);
+        }
+
+        if (file_exists(public_path($path))) {
+            return asset($path);
+        }
+
+        return null;
+    }
 }

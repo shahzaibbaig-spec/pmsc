@@ -13,7 +13,8 @@
 
         <section class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <p class="text-xs font-semibold uppercase tracking-wide text-blue-700">{{ $question->section?->name }} | {{ ucfirst($question->difficulty) }}</p>
-            <h3 class="mt-2 text-lg font-semibold text-slate-900">{{ $question->question_text }}</h3>
+            <h3 class="mt-2 whitespace-pre-line text-lg font-semibold text-slate-900">{{ $question->question_text }}</h3>
+            @include('kcat.partials.question-visual', ['question' => $question])
             <div class="mt-4 grid grid-cols-1 gap-3 md:grid-cols-4">
                 <div class="rounded-xl border border-slate-200 p-3"><p class="text-xs uppercase text-slate-500">Correct Rate</p><p class="mt-1 font-semibold">{{ $analysis['correct_rate'] }}%</p></div>
                 <div class="rounded-xl border border-slate-200 p-3"><p class="text-xs uppercase text-slate-500">Attempts</p><p class="mt-1 font-semibold">{{ $analysis['times_attempted'] }}</p></div>
@@ -23,8 +24,8 @@
 
             <div class="mt-4 space-y-2">
                 @foreach ($question->options as $option)
-                    <div class="rounded-xl border px-3 py-2 text-sm {{ $option->is_correct ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-slate-200' }}">
-                        {{ $option->option_text }}
+                    <div class="flex items-start gap-2 rounded-xl border px-3 py-2 text-sm {{ $option->is_correct ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-slate-200' }}">
+                        @include('kcat.partials.option-visual', ['option' => $option, 'questionType' => $question->question_type])
                     </div>
                 @endforeach
             </div>
@@ -94,4 +95,3 @@
         </section>
     </div>
 </x-app-layout>
-

@@ -15,12 +15,13 @@
                     <div class="mt-4 space-y-4">
                         @foreach ($section->questions as $question)
                             <div>
-                                <p class="text-sm font-semibold text-slate-800">{{ $question->question_text }}</p>
+                                <p class="whitespace-pre-line text-sm font-semibold text-slate-800">{{ $question->question_text }}</p>
+                                @include('kcat.partials.question-visual', ['question' => $question])
                                 <div class="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
                                     @foreach ($question->options as $option)
-                                        <label class="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm">
+                                        <label class="flex items-start gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm">
                                             <input type="radio" name="answers[{{ $question->id }}][selected_option_id]" value="{{ $option->id }}" class="text-blue-600">
-                                            <span>{{ $option->option_text }}</span>
+                                            @include('kcat.partials.option-visual', ['option' => $option, 'questionType' => $question->question_type])
                                         </label>
                                     @endforeach
                                 </div>

@@ -39,6 +39,7 @@ class KcatAdaptiveAttemptController extends Controller
             'question' => [
                 'id' => $question->id,
                 'question_text' => $question->question_text,
+                'question_image_url' => $question->question_image_url,
                 'question_type' => $question->question_type,
                 'difficulty' => $question->difficulty,
                 'section' => $question->section?->code,
@@ -46,6 +47,7 @@ class KcatAdaptiveAttemptController extends Controller
                     'id' => $option->id,
                     'option_text' => $option->option_text,
                     'option_image' => $option->option_image,
+                    'option_image_url' => $option->option_image_url,
                 ])->values(),
             ],
         ]);

@@ -24,12 +24,13 @@
 
         <form method="POST" action="{{ route('student.kcat.attempts.adaptive.answer', $attempt) }}" class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             @csrf
-            <h3 class="text-lg font-semibold text-slate-900">{{ $question->question_text }}</h3>
+            <h3 class="whitespace-pre-line text-lg font-semibold text-slate-900">{{ $question->question_text }}</h3>
+            @include('kcat.partials.question-visual', ['question' => $question])
             <div class="mt-5 space-y-3">
                 @foreach ($question->options as $option)
-                    <label class="flex items-center gap-3 rounded-xl border border-slate-200 px-4 py-3 text-sm">
+                    <label class="flex items-start gap-3 rounded-xl border border-slate-200 px-4 py-3 text-sm">
                         <input type="radio" name="selected_option_id" value="{{ $option->id }}" class="text-blue-600">
-                        <span>{{ $option->option_text }}</span>
+                        @include('kcat.partials.option-visual', ['option' => $option, 'questionType' => $question->question_type])
                     </label>
                 @endforeach
             </div>
@@ -53,4 +54,3 @@
         })();
     </script>
 </x-app-layout>
-

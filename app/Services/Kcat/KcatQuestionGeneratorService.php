@@ -16,8 +16,6 @@ class KcatQuestionGeneratorService
         'spatial_reasoning' => [],
     ];
 
-    private int $patternImageCounter = 1;
-
     /**
      * @param array<int, string> $questionTexts
      */
@@ -679,10 +677,6 @@ class KcatQuestionGeneratorService
                 .'Both shape order and number increase are consistent. What is ?';
             $answer = $b.'-'.($offset + 4);
             $explanation = 'Shape cycle shifts right and number part increases by 1 each step.';
-            if ($index % 4 === 0) {
-                $questionImage = 'pattern_'.$this->patternImageCounter.'.png';
-                $this->patternImageCounter++;
-            }
         }
 
         $optionPool = $difficulty === 'hard'
