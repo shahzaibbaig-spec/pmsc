@@ -2,6 +2,9 @@
     <x-slot name="header"><h2 class="text-xl font-semibold text-slate-900">My KCAT Assignments</h2></x-slot>
 
     <div class="mx-auto max-w-5xl py-8">
+        @if (session('error'))
+            <div class="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{{ session('error') }}</div>
+        @endif
         <div class="space-y-4">
             @forelse ($assignments as $assignment)
                 <article class="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">

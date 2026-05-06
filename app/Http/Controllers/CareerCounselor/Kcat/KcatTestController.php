@@ -49,6 +49,15 @@ class KcatTestController extends Controller
 
     public function activate(Request $request, KcatTest $test): RedirectResponse
     {
+        $hasActiveQuestions = $test->questions()
+            ->where('is_active', true)
+            ->whereNull('retired_at')
+            ->exists();
+
+        if (! $hasActiveQuestions) {
+            return back()->with('error', 'Cannot activate this KCAT yet. Add at least one active question first.');
+        }
+
         $this->testService->activateTest($test, $request->user());
         return back()->with('success', 'KCAT test activated.');
     }

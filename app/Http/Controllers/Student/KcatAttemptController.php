@@ -36,6 +36,15 @@ class KcatAttemptController extends Controller
 
     public function start(Request $request, KcatAssignment $assignment): RedirectResponse
     {
+        $assignment->loadMissing('test');
+        $hasActiveQuestions = $assignment->test
+            ? $assignment->test->questions()->where('is_active', true)->whereNull('retired_at')->exists()
+            : false;
+
+        if (! $hasActiveQuestions) {
+            return back()->with('error', 'This KCAT assignment has no active questions yet. Please contact your teacher/counselor.');
+        }
+
         $attempt = $this->attemptService->startAttempt($assignment, $this->studentForUser($request));
         if ($attempt->is_adaptive) {
             return redirect()->route('student.kcat.attempts.adaptive.next', $attempt);
