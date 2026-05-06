@@ -4,15 +4,14 @@ namespace App\Modules\Results\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Models\Mark;
-use App\Models\Student;
 use App\Models\StudentResult;
 use App\Services\AssessmentMarkingModeService;
 use App\Services\ClassAssessmentModeService;
+use App\Services\StudentUserResolverService;
 use App\Services\StudentResultService;
 use App\Modules\Exams\Enums\ExamType;
 use App\Modules\Results\Requests\StudentResultIndexRequest;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Str;
 use Illuminate\View\View;
 
 class StudentResultController extends Controller
@@ -20,13 +19,14 @@ class StudentResultController extends Controller
     public function __construct(
         private readonly StudentResultService $studentResultService,
         private readonly ClassAssessmentModeService $assessmentModeService,
-        private readonly AssessmentMarkingModeService $markingModeService
+        private readonly AssessmentMarkingModeService $markingModeService,
+        private readonly StudentUserResolverService $studentUserResolver
     ) {}
 
     public function index(StudentResultIndexRequest $request): View
     {
         $user = auth()->user();
-        $student = $user ? $this->resolveStudentForUser((string) $user->name, (string) $user->email) : null;
+        $student = $user ? $this->studentUserResolver->resolveForUser($user) : null;
 
         if (! $student) {
             return view('modules.student.results', [
@@ -77,37 +77,6 @@ class StudentResultController extends Controller
             'groupedResults' => $groupedResults,
             'message' => null,
         ]);
-    }
-
-    private function resolveStudentForUser(string $userName, string $email): ?Student
-    {
-        $normalizedName = mb_strtolower(trim($userName));
-        $emailLocal = mb_strtolower(trim(Str::before($email, '@')));
-
-        if ($emailLocal !== '') {
-            $byStudentId = Student::query()
-                ->with('classRoom:id,name,section')
-                ->whereRaw('LOWER(student_id) = ?', [$emailLocal])
-                ->first();
-
-            if ($byStudentId) {
-                return $byStudentId;
-            }
-        }
-
-        if ($normalizedName !== '') {
-            $byName = Student::query()
-                ->with('classRoom:id,name,section')
-                ->whereRaw('LOWER(name) = ?', [$normalizedName])
-                ->orderByDesc('id')
-                ->get();
-
-            if ($byName->count() === 1) {
-                return $byName->first();
-            }
-        }
-
-        return null;
     }
 
     private function groupLegacyResults(Collection $results, bool $usesGradeSystem): Collection

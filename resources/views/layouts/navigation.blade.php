@@ -218,6 +218,17 @@
                         <x-nav-link :href="route('student.results.index')" :active="request()->routeIs('student.results.*')">
                             {{ __('My Results') }}
                         </x-nav-link>
+                        <x-nav-link :href="route('student.attendance.index')" :active="request()->routeIs('student.attendance.*')">
+                            {{ __('Attendance') }}
+                        </x-nav-link>
+                        <x-nav-link :href="route('student.discipline.index')" :active="request()->routeIs('student.discipline.*')">
+                            {{ __('Discipline') }}
+                        </x-nav-link>
+                        @can('view_student_daily_diary')
+                            <x-nav-link :href="route('student.daily-diary.index')" :active="request()->routeIs('student.daily-diary.*')">
+                                {{ __('Daily Diary') }}
+                            </x-nav-link>
+                        @endcan
                     @endif
                 </div>
             </div>
@@ -538,6 +549,17 @@
                 <x-responsive-nav-link :href="route('student.results.index')" :active="request()->routeIs('student.results.*')">
                     {{ __('My Results') }}
                 </x-responsive-nav-link>
+                <x-responsive-nav-link :href="route('student.attendance.index')" :active="request()->routeIs('student.attendance.*')">
+                    {{ __('Attendance') }}
+                </x-responsive-nav-link>
+                <x-responsive-nav-link :href="route('student.discipline.index')" :active="request()->routeIs('student.discipline.*')">
+                    {{ __('Discipline') }}
+                </x-responsive-nav-link>
+                @can('view_student_daily_diary')
+                    <x-responsive-nav-link :href="route('student.daily-diary.index')" :active="request()->routeIs('student.daily-diary.*')">
+                        {{ __('Daily Diary') }}
+                    </x-responsive-nav-link>
+                @endcan
             @endif
         </div>
 

@@ -7,7 +7,7 @@ use App\Models\CognitiveAssessmentAttempt;
 use App\Models\FeeChallan;
 use App\Modules\Fees\Services\FeeDefaulterService;
 use App\Services\CognitiveAssessmentService;
-use Illuminate\Support\Str;
+use App\Services\StudentUserResolverService;
 use Illuminate\Support\Facades\Schema;
 use App\Http\Controllers\Controller;
 use Illuminate\View\View;
@@ -17,7 +17,8 @@ class StudentDashboardController extends Controller
 {
     public function __construct(
         private readonly FeeDefaulterService $feeDefaulterService,
-        private readonly CognitiveAssessmentService $cognitiveAssessmentService
+        private readonly CognitiveAssessmentService $cognitiveAssessmentService,
+        private readonly StudentUserResolverService $studentUserResolver
     )
     {
     }
@@ -25,7 +26,7 @@ class StudentDashboardController extends Controller
     public function __invoke(): View
     {
         $user = auth()->user();
-        $student = $user ? $this->resolveStudentForUser((string) $user->name, (string) $user->email) : null;
+        $student = $user ? $this->studentUserResolver->resolveForUser($user) : null;
         $cognitiveAssessmentCard = $student ? $this->buildCognitiveAssessmentCard($student) : null;
 
         if (! $student) {
@@ -110,35 +111,6 @@ class StudentDashboardController extends Controller
             'due_amount' => $due,
             'is_recently_generated' => $isRecentlyGenerated,
         ];
-    }
-
-    private function resolveStudentForUser(string $userName, string $email): ?Student
-    {
-        $normalizedName = mb_strtolower(trim($userName));
-        $emailLocal = mb_strtolower(trim(Str::before($email, '@')));
-
-        if ($emailLocal !== '') {
-            $byStudentId = Student::query()
-                ->whereRaw('LOWER(student_id) = ?', [$emailLocal])
-                ->first();
-
-            if ($byStudentId) {
-                return $byStudentId;
-            }
-        }
-
-        if ($normalizedName !== '') {
-            $byName = Student::query()
-                ->whereRaw('LOWER(name) = ?', [$normalizedName])
-                ->orderByDesc('id')
-                ->get();
-
-            if ($byName->count() === 1) {
-                return $byName->first();
-            }
-        }
-
-        return null;
     }
 
     private function buildCognitiveAssessmentCard(Student $student): ?array

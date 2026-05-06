@@ -351,6 +351,8 @@
         $menuItems = [
             ['route' => 'student.dashboard', 'label' => 'Dashboard'],
             ['route' => 'student.results.index', 'label' => 'My Results'],
+            ['route' => 'student.attendance.index', 'label' => 'Attendance'],
+            ['route' => 'student.discipline.index', 'label' => 'Discipline Report'],
         ];
 
         if ($sidebarUser?->can('view_student_daily_diary')) {

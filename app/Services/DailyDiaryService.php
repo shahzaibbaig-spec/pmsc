@@ -23,7 +23,8 @@ use RuntimeException;
 class DailyDiaryService
 {
     public function __construct(
-        private readonly TeacherStudentVisibilityService $visibilityService
+        private readonly TeacherStudentVisibilityService $visibilityService,
+        private readonly StudentUserResolverService $studentUserResolver
     ) {
     }
 
@@ -1108,29 +1109,6 @@ class DailyDiaryService
 
     private function resolveStudentFromUser(User $user): ?Student
     {
-        $emailLocal = mb_strtolower(trim((string) str((string) $user->email)->before('@')));
-        if ($emailLocal !== '') {
-            $studentById = Student::query()
-                ->with('classRoom:id,name,section')
-                ->whereRaw('LOWER(student_id) = ?', [$emailLocal])
-                ->first();
-
-            if ($studentById) {
-                return $studentById;
-            }
-        }
-
-        $normalizedName = mb_strtolower(trim((string) $user->name));
-        if ($normalizedName === '') {
-            return null;
-        }
-
-        $matches = Student::query()
-            ->with('classRoom:id,name,section')
-            ->whereRaw('LOWER(name) = ?', [$normalizedName])
-            ->orderByDesc('id')
-            ->get();
-
-        return $matches->count() === 1 ? $matches->first() : null;
+        return $this->studentUserResolver->resolveForUser($user);
     }
 }

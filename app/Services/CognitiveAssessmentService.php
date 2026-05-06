@@ -21,11 +21,15 @@ use Illuminate\Pagination\LengthAwarePaginator as PaginationLengthAwarePaginator
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Str;
 use RuntimeException;
 
 class CognitiveAssessmentService
 {
+    public function __construct(
+        private readonly StudentUserResolverService $studentUserResolver
+    ) {
+    }
+
     /**
      * @return array<int, int>
      */
@@ -59,33 +63,7 @@ class CognitiveAssessmentService
 
     public function resolveStudentForUser(User $user): ?Student
     {
-        $normalizedName = mb_strtolower(trim((string) $user->name));
-        $emailLocal = mb_strtolower(trim(Str::before((string) $user->email, '@')));
-
-        if ($emailLocal !== '') {
-            $byStudentId = Student::query()
-                ->with('classRoom:id,name,section')
-                ->whereRaw('LOWER(student_id) = ?', [$emailLocal])
-                ->first();
-
-            if ($byStudentId) {
-                return $byStudentId;
-            }
-        }
-
-        if ($normalizedName !== '') {
-            $byName = Student::query()
-                ->with('classRoom:id,name,section')
-                ->whereRaw('LOWER(name) = ?', [$normalizedName])
-                ->orderByDesc('id')
-                ->get();
-
-            if ($byName->count() === 1) {
-                return $byName->first();
-            }
-        }
-
-        return null;
+        return $this->studentUserResolver->resolveForUser($user);
     }
 
     public function studentEligibleForAssessment(Student|int $student): bool

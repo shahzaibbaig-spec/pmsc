@@ -38,6 +38,8 @@ use App\Http\Controllers\Principal\ResultLockController;
 use App\Http\Controllers\Principal\AnalyticsExportController;
 use App\Http\Controllers\Principal\DailyDiaryMonitoringController;
 use App\Http\Controllers\Principal\PrincipalPromotionController;
+use App\Http\Controllers\Student\StudentAttendanceController;
+use App\Http\Controllers\Student\StudentDisciplineController;
 use App\Http\Controllers\Student\KcatAttemptController as StudentKcatAttemptController;
 use App\Http\Controllers\Student\StudentDailyDiaryController;
 use App\Http\Controllers\Teacher\DailyDiaryController;
@@ -265,6 +267,7 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
                 Route::delete('/questions/{question}', [KcatQuestionController::class, 'destroy'])->middleware('permission:manage_kcat_questions')->whereNumber('question')->name('questions.destroy');
                 Route::get('/assignments', [KcatAssignmentController::class, 'index'])->middleware('permission:assign_kcat_tests')->name('assignments.index');
                 Route::get('/assignments/create', [KcatAssignmentController::class, 'create'])->middleware('permission:assign_kcat_tests')->name('assignments.create');
+                Route::get('/assignments/students/search', [KcatAssignmentController::class, 'searchStudents'])->middleware('permission:assign_kcat_tests')->name('assignments.students.search');
                 Route::post('/assignments', [KcatAssignmentController::class, 'store'])->middleware('permission:assign_kcat_tests')->name('assignments.store');
                 Route::get('/assignments/{assignment}', [KcatAssignmentController::class, 'show'])->middleware('permission:assign_kcat_tests')->whereNumber('assignment')->name('assignments.show');
                 Route::get('/attempts', [CareerCounselorKcatAttemptController::class, 'index'])->middleware('permission:view_kcat_reports')->name('attempts.index');
@@ -1742,6 +1745,14 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
     Route::get('/student/results', [StudentResultController::class, 'index'])
         ->middleware('role:Student')
         ->name('student.results.index');
+
+    Route::get('/student/attendance', [StudentAttendanceController::class, 'index'])
+        ->middleware('role:Student')
+        ->name('student.attendance.index');
+
+    Route::get('/student/discipline', [StudentDisciplineController::class, 'index'])
+        ->middleware('role:Student')
+        ->name('student.discipline.index');
 
     Route::get('/student/daily-diary', [StudentDailyDiaryController::class, 'index'])
         ->middleware(['role:Student', 'permission:view_student_daily_diary'])
