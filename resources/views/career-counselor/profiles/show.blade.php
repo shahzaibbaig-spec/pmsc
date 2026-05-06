@@ -12,7 +12,7 @@
     <div class="mx-auto max-w-6xl space-y-6 py-8">
         @php
             $latestKcatAttempt = $profile->student?->kcatAttempts()
-                ->with('test')
+                ->with(['test', 'streamRecommendations'])
                 ->whereIn('status', ['submitted', 'reviewed'])
                 ->latest('submitted_at')
                 ->first();
@@ -32,7 +32,13 @@
                     <div>
                         <p class="text-xs font-semibold uppercase tracking-wide text-blue-700">Latest KCAT Result</p>
                         <h3 class="mt-1 text-lg font-semibold text-slate-900">{{ $latestKcatAttempt->test?->title }}</h3>
-                        <p class="text-sm text-slate-500">{{ $latestKcatAttempt->percentage ?? 0 }}% | {{ str_replace('_', ' ', $latestKcatAttempt->band ?? '-') }} | {{ $latestKcatAttempt->recommended_stream ?? '-' }}</p>
+                        <p class="text-sm text-slate-500">{{ $latestKcatAttempt->percentage ?? 0 }}% | {{ str_replace('_', ' ', $latestKcatAttempt->band ?? '-') }} | {{ $latestKcatAttempt->counselor_override_stream ?: $latestKcatAttempt->recommended_stream ?: '-' }}</p>
+                        @if ($latestKcatAttempt->streamRecommendations->isNotEmpty())
+                            <p class="mt-1 text-xs text-slate-500">
+                                Top 3:
+                                {{ $latestKcatAttempt->streamRecommendations->sortBy('rank')->take(3)->pluck('stream_name')->join(', ') }}
+                            </p>
+                        @endif
                     </div>
                     <a href="{{ route('career-counselor.kcat.reports.show', $latestKcatAttempt) }}" class="rounded-xl border border-blue-200 px-4 py-2 text-sm font-semibold text-blue-700">View KCAT Report</a>
                 </div>

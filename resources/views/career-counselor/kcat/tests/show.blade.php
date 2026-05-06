@@ -23,6 +23,26 @@
                 <form method="POST" action="{{ route('career-counselor.kcat.tests.activate', $test) }}">@csrf<button class="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white">Activate</button></form>
                 <form method="POST" action="{{ route('career-counselor.kcat.tests.archive', $test) }}">@csrf<button class="rounded-xl bg-slate-700 px-4 py-2 text-sm font-semibold text-white">Archive</button></form>
             </div>
+            @can('manage_kcat_adaptive_settings')
+                <form method="POST" action="{{ route('career-counselor.kcat.tests.adaptive-settings', $test) }}" class="mt-4 grid grid-cols-1 gap-3 rounded-xl border border-blue-100 bg-blue-50 p-4 md:grid-cols-4">
+                    @csrf
+                    <div class="md:col-span-2">
+                        <p class="text-xs font-semibold uppercase tracking-wide text-blue-700">Adaptive Mode</p>
+                        <p class="text-sm text-slate-600">
+                            Status:
+                            <span class="font-semibold">{{ $test->is_adaptive_enabled ? 'Enabled' : 'Disabled' }}</span>
+                        </p>
+                    </div>
+                    <div>
+                        <label class="text-xs font-semibold uppercase tracking-wide text-blue-700">Questions Per Section</label>
+                        <input type="number" min="1" max="200" name="questions_per_section" value="{{ old('questions_per_section', $test->questions_per_section ?? 10) }}" class="mt-1 block w-full rounded-xl border-slate-300 text-sm">
+                    </div>
+                    <div class="flex items-end gap-2">
+                        <button name="is_adaptive_enabled" value="1" class="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white">Enable</button>
+                        <button name="is_adaptive_enabled" value="0" class="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700">Disable</button>
+                    </div>
+                </form>
+            @endcan
         </section>
 
         <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -50,7 +70,7 @@
                         <div class="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
                             <div>
                                 <p class="font-semibold text-slate-900">{{ $question->sort_order }}. {{ $question->question_text }}</p>
-                                <p class="mt-1 text-xs text-slate-500">{{ $question->question_type }} | {{ $question->difficulty }} | {{ $question->marks }} mark(s)</p>
+                                <p class="mt-1 text-xs text-slate-500">{{ $question->question_type }} | {{ $question->difficulty }} | {{ $question->marks }} mark(s) | {{ $question->review_status }}</p>
                             </div>
                             <div class="flex gap-3">
                                 <a href="{{ route('career-counselor.kcat.questions.edit', $question) }}" class="text-sm font-semibold text-blue-700">Edit</a>

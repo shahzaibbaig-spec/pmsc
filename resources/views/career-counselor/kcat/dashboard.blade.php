@@ -25,11 +25,12 @@
             @endforeach
         </section>
 
-        <section class="grid grid-cols-1 gap-4 md:grid-cols-4">
+        <section class="grid grid-cols-1 gap-4 md:grid-cols-5">
             <a href="{{ route('career-counselor.kcat.tests.index') }}" class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:border-blue-300">Manage Tests</a>
             <a href="{{ route('career-counselor.kcat.assignments.index') }}" class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:border-blue-300">Assignments</a>
             <a href="{{ route('career-counselor.kcat.attempts.index') }}" class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:border-blue-300">Attempts</a>
             <a href="{{ route('career-counselor.kcat.assignments.create') }}" class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:border-blue-300">Assign KCAT</a>
+            <a href="{{ route('career-counselor.kcat.question-quality.index') }}" class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:border-blue-300">Question Quality</a>
         </section>
 
         <section class="rounded-2xl border border-slate-200 bg-white shadow-sm">

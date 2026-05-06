@@ -2,7 +2,10 @@
     <x-slot name="header">
         <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <h2 class="text-xl font-semibold text-slate-900">KCAT Reports</h2>
-            <a href="{{ route('principal.kcat.analytics.index') }}" class="rounded-xl border border-blue-200 px-4 py-2 text-sm font-semibold text-blue-700">Grade-wise Summary</a>
+            <div class="flex gap-2">
+                <a href="{{ route('principal.kcat.analytics.index') }}" class="rounded-xl border border-blue-200 px-4 py-2 text-sm font-semibold text-blue-700">Grade-wise Summary</a>
+                <a href="{{ route('principal.kcat.question-quality.index') }}" class="rounded-xl border border-blue-200 px-4 py-2 text-sm font-semibold text-blue-700">Question Quality</a>
+            </div>
         </div>
     </x-slot>
 
@@ -14,12 +17,12 @@
         </form>
         <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <table class="min-w-full divide-y divide-slate-200 text-sm">
-                <thead class="bg-blue-50 text-left text-xs font-semibold uppercase tracking-wide text-blue-700"><tr><th class="px-4 py-3">Student</th><th class="px-4 py-3">Class</th><th class="px-4 py-3">Test</th><th class="px-4 py-3">Score</th><th class="px-4 py-3">Band</th><th class="px-4 py-3"></th></tr></thead>
+                <thead class="bg-blue-50 text-left text-xs font-semibold uppercase tracking-wide text-blue-700"><tr><th class="px-4 py-3">Student</th><th class="px-4 py-3">Class</th><th class="px-4 py-3">Test</th><th class="px-4 py-3">Mode</th><th class="px-4 py-3">Score</th><th class="px-4 py-3">Band</th><th class="px-4 py-3">Top Stream</th><th class="px-4 py-3"></th></tr></thead>
                 <tbody class="divide-y divide-slate-100">
                     @forelse ($attempts as $attempt)
-                        <tr><td class="px-4 py-3 font-semibold">{{ $attempt->student?->name }}</td><td class="px-4 py-3">{{ trim(($attempt->student?->classRoom?->name ?? '').' '.($attempt->student?->classRoom?->section ?? '')) }}</td><td class="px-4 py-3">{{ $attempt->test?->title }}</td><td class="px-4 py-3">{{ $attempt->percentage ?? 0 }}%</td><td class="px-4 py-3">{{ str_replace('_', ' ', $attempt->band ?? '-') }}</td><td class="px-4 py-3 text-right"><a href="{{ route('principal.kcat.reports.show', $attempt) }}" class="font-semibold text-blue-700">View</a></td></tr>
+                        <tr><td class="px-4 py-3 font-semibold">{{ $attempt->student?->name }}</td><td class="px-4 py-3">{{ trim(($attempt->student?->classRoom?->name ?? '').' '.($attempt->student?->classRoom?->section ?? '')) }}</td><td class="px-4 py-3">{{ $attempt->test?->title }}</td><td class="px-4 py-3">{{ $attempt->is_adaptive ? 'Adaptive' : 'Fixed' }}</td><td class="px-4 py-3">{{ $attempt->percentage ?? 0 }}%</td><td class="px-4 py-3">{{ str_replace('_', ' ', $attempt->band ?? '-') }}</td><td class="px-4 py-3">{{ $attempt->counselor_override_stream ?: $attempt->recommended_stream ?: '-' }}</td><td class="px-4 py-3 text-right"><a href="{{ route('principal.kcat.reports.show', $attempt) }}" class="font-semibold text-blue-700">View</a></td></tr>
                     @empty
-                        <tr><td colspan="6" class="px-4 py-6 text-center text-slate-500">No KCAT reports found.</td></tr>
+                        <tr><td colspan="8" class="px-4 py-6 text-center text-slate-500">No KCAT reports found.</td></tr>
                     @endforelse
                 </tbody>
             </table>

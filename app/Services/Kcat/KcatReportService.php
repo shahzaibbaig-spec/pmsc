@@ -15,17 +15,33 @@ class KcatReportService
 {
     public function generateStudentReport(KcatAttempt $attempt): array
     {
+        $attempt = $attempt->load([
+            'student.classRoom',
+            'test',
+            'scores.section',
+            'latestReportNote.counselor',
+            'streamRecommendations',
+            'overrideBy',
+        ]);
+
+        $recommendations = $attempt->streamRecommendations->sortBy('rank')->values();
+        $finalStream = $attempt->counselor_override_stream ?: $attempt->recommended_stream;
+        $finalSummary = $attempt->counselor_override_reason ?: $attempt->recommendation_summary;
+
         return [
-            'attempt' => $attempt->load(['student.classRoom', 'test', 'scores.section', 'latestReportNote.counselor']),
+            'attempt' => $attempt,
             'scores' => $attempt->scores,
             'note' => $attempt->latestReportNote,
+            'recommendations' => $recommendations,
+            'final_stream' => $finalStream,
+            'final_summary' => $finalSummary,
         ];
     }
 
     public function getPrincipalReportData(array $filters = []): LengthAwarePaginator
     {
         return KcatAttempt::query()
-            ->with(['student.classRoom', 'test', 'counselor'])
+            ->with(['student.classRoom', 'test', 'counselor', 'streamRecommendations'])
             ->whereIn('status', ['submitted', 'reviewed'])
             ->when($filters['session'] ?? null, fn (Builder $query, string $session) => $query->where('session', $session))
             ->when($filters['student'] ?? null, function (Builder $query, string $student): void {
@@ -58,7 +74,8 @@ class KcatReportService
     {
         return DB::transaction(function () use ($attempt, $profile): CareerProfile {
             $summary = trim((string) $profile->counselor_notes);
-            $addition = 'KCAT '.$attempt->test?->title.': '.$attempt->percentage.'% ('.$attempt->band.'). Suggested direction: '.$attempt->recommended_stream.'.';
+            $stream = $attempt->counselor_override_stream ?: $attempt->recommended_stream;
+            $addition = 'KCAT '.$attempt->test?->title.': '.$attempt->percentage.'% ('.$attempt->band.'). Suggested direction: '.$stream.'.';
             $profile->update(['counselor_notes' => trim($summary.PHP_EOL.$addition)]);
 
             return $profile->fresh();
@@ -79,6 +96,21 @@ class KcatReportService
             $attempt->update(['status' => 'reviewed', 'updated_by' => $counselor->id]);
 
             return $note->fresh(['attempt.student.classRoom', 'counselor']);
+        });
+    }
+
+    public function overrideRecommendation(KcatAttempt $attempt, array $data, User $counselor): KcatAttempt
+    {
+        return DB::transaction(function () use ($attempt, $data, $counselor): KcatAttempt {
+            $attempt->update([
+                'counselor_override_stream' => $data['counselor_override_stream'],
+                'counselor_override_reason' => $data['counselor_override_reason'],
+                'override_by' => $counselor->id,
+                'override_at' => now(),
+                'updated_by' => $counselor->id,
+            ]);
+
+            return $attempt->fresh(['streamRecommendations', 'overrideBy']) ?? $attempt;
         });
     }
 }

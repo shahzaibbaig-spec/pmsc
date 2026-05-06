@@ -30,7 +30,12 @@ class KcatAttemptController extends Controller
 
     public function manualEntry(KcatTest $test): View
     {
-        return view('career-counselor.kcat.attempts.manual-entry', ['test' => $test->load('sections.questions.options')]);
+        return view('career-counselor.kcat.attempts.manual-entry', [
+            'test' => $test->load([
+                'sections.questions' => fn ($query) => $query->where('is_active', true)->whereNull('retired_at'),
+                'sections.questions.options',
+            ]),
+        ]);
     }
 
     public function storeManualEntry(StoreKcatManualAttemptRequest $request, KcatTest $test): RedirectResponse

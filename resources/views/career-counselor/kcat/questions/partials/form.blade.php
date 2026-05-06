@@ -10,7 +10,28 @@
     <div>
         <label class="text-sm font-semibold text-slate-700">Type</label>
         <select name="question_type" class="mt-1 block w-full rounded-xl border-slate-300 text-sm" required>
-            @foreach (['mcq','image_mcq','matrix','sequence','analogy','odd_one_out'] as $type)
+            @foreach ([
+                'mcq',
+                'image_mcq',
+                'analogy',
+                'synonym',
+                'antonym',
+                'odd_one_out',
+                'sentence_completion',
+                'number_series',
+                'missing_number',
+                'pattern_logic',
+                'ratio_logic',
+                'pattern_sequence',
+                'matrix',
+                'odd_shape',
+                'shape_series',
+                'rotation',
+                'mirror_image',
+                'folding',
+                'cube_logic',
+                'sequence',
+            ] as $type)
                 <option value="{{ $type }}" @selected(old('question_type', $question?->question_type ?? 'mcq') === $type)>{{ str_replace('_', ' ', ucfirst($type)) }}</option>
             @endforeach
         </select>

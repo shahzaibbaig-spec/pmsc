@@ -23,7 +23,17 @@ class KcatTestService
     {
         return DB::transaction(function () use ($data, $user): KcatTest {
             $test = KcatTest::query()->create([
-                ...collect($data)->only(['title', 'description', 'grade_from', 'grade_to', 'duration_minutes', 'status', 'session'])->all(),
+                ...collect($data)->only([
+                    'title',
+                    'description',
+                    'grade_from',
+                    'grade_to',
+                    'duration_minutes',
+                    'status',
+                    'is_adaptive_enabled',
+                    'questions_per_section',
+                    'session',
+                ])->all(),
                 'created_by' => $user->id,
                 'updated_by' => $user->id,
             ]);
@@ -41,7 +51,17 @@ class KcatTestService
     {
         return DB::transaction(function () use ($test, $data, $user): KcatTest {
             $test->update([
-                ...collect($data)->only(['title', 'description', 'grade_from', 'grade_to', 'duration_minutes', 'status', 'session'])->all(),
+                ...collect($data)->only([
+                    'title',
+                    'description',
+                    'grade_from',
+                    'grade_to',
+                    'duration_minutes',
+                    'status',
+                    'is_adaptive_enabled',
+                    'questions_per_section',
+                    'session',
+                ])->all(),
                 'updated_by' => $user->id,
             ]);
 
@@ -128,7 +148,9 @@ class KcatTestService
     {
         $test->load('sections.questions');
         foreach ($test->sections as $section) {
-            $questions = $section->questions->where('is_active', true);
+            $questions = $section->questions
+                ->where('is_active', true)
+                ->whereNull('retired_at');
             $section->update([
                 'total_questions' => $questions->count(),
                 'total_marks' => $questions->sum('marks'),

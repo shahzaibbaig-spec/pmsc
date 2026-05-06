@@ -24,13 +24,23 @@
 <div class="grid">
     <div class="card"><div class="label">Overall</div><h2>{{ $attempt->percentage ?? 0 }}%</h2></div>
     <div class="card"><div class="label">Band</div><h2>{{ str_replace('_', ' ', $attempt->band ?? '-') }}</h2></div>
-    <div class="card"><div class="label">Stream</div><h2>{{ $attempt->recommended_stream ?? '-' }}</h2></div>
-    <div class="card"><div class="label">Date</div><h2>{{ optional($attempt->submitted_at)->format('d M Y') ?? '-' }}</h2></div>
+    <div class="card"><div class="label">Final Stream</div><h2>{{ $report['final_stream'] ?? '-' }}</h2></div>
+    <div class="card"><div class="label">Mode</div><h2>{{ $attempt->is_adaptive ? 'Adaptive' : 'Fixed' }}</h2></div>
 </div>
 @foreach ($report['scores'] as $score)
     <div class="card"><strong>{{ $score->section?->name ?? str_replace('_', ' ', $score->section_code) }}</strong>: {{ $score->percentage }}% ({{ $score->raw_score }} / {{ $score->total_marks }})</div>
 @endforeach
-<div class="card"><div class="label">Recommendation Summary</div><p>{{ $attempt->recommendation_summary }}</p></div>
+<div class="card"><div class="label">Top Recommendations</div>
+    @forelse ($report['recommendations'] as $recommendation)
+        <p>{{ $recommendation->rank }}. {{ $recommendation->stream_name }} ({{ $recommendation->match_score }}%, {{ str_replace('_', ' ', $recommendation->confidence_band ?? '-') }})</p>
+    @empty
+        <p>-</p>
+    @endforelse
+</div>
+<div class="card"><div class="label">Recommendation Summary</div><p>{{ $report['final_summary'] }}</p></div>
+@if ($attempt->counselor_override_stream)
+    <div class="card"><div class="label">Counselor Override</div><p>{{ $attempt->counselor_override_stream }} - {{ $attempt->counselor_override_reason }}</p></div>
+@endif
 <div class="card"><div class="label">Counselor Notes</div><p>{{ $report['note']?->counselor_recommendation ?? '-' }}</p></div>
 <div class="signature"><div class="line">Career Counselor Signature</div><div class="line">Principal Signature</div></div>
 </body>

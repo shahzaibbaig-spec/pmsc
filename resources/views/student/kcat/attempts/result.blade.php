@@ -5,7 +5,21 @@
         <section class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <h3 class="text-lg font-semibold text-slate-900">{{ $attempt->test?->title }}</h3>
             <p class="mt-2 text-sm text-slate-600">Your KCAT has been submitted. Detailed interpretation will be reviewed by the Career Counselor.</p>
+            <p class="mt-2 text-xs font-semibold uppercase tracking-wide text-blue-700">{{ $attempt->is_adaptive ? 'Adaptive Test' : 'Fixed Test' }}</p>
+            @if ($attempt->recommended_stream)
+                <p class="mt-1 text-sm text-slate-700">Current top stream match: <span class="font-semibold">{{ $attempt->counselor_override_stream ?: $attempt->recommended_stream }}</span></p>
+            @endif
         </section>
+        @if ($attempt->streamRecommendations->isNotEmpty())
+            <section class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <h3 class="font-semibold text-slate-900">Top Stream Matches</h3>
+                <div class="mt-3 space-y-2">
+                    @foreach ($attempt->streamRecommendations->take(3) as $recommendation)
+                        <p class="text-sm text-slate-700">{{ $recommendation->rank }}. {{ $recommendation->stream_name }} ({{ $recommendation->match_score }}%)</p>
+                    @endforeach
+                </div>
+            </section>
+        @endif
         @if (in_array($attempt->latestReportNote?->visibility, ['student', 'student_parent'], true))
             <section class="rounded-2xl border border-blue-100 bg-white p-6 shadow-sm">
                 <p class="text-xs font-semibold uppercase text-blue-700">Visible Summary</p>

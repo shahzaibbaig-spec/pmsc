@@ -59,6 +59,22 @@ class KcatTestController extends Controller
         return back()->with('success', 'KCAT test archived.');
     }
 
+    public function setAdaptiveMode(Request $request, KcatTest $test): RedirectResponse
+    {
+        $validated = $request->validate([
+            'is_adaptive_enabled' => ['required', 'boolean'],
+            'questions_per_section' => ['nullable', 'integer', 'min:1', 'max:200'],
+        ]);
+
+        $test->update([
+            'is_adaptive_enabled' => (bool) $validated['is_adaptive_enabled'],
+            'questions_per_section' => (int) ($validated['questions_per_section'] ?? $test->questions_per_section ?? 10),
+            'updated_by' => $request->user()->id,
+        ]);
+
+        return back()->with('success', 'Adaptive settings updated.');
+    }
+
     public function storeSection(Request $request, KcatTest $test): RedirectResponse
     {
         $validated = $request->validate([

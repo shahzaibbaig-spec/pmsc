@@ -22,6 +22,16 @@
                 <div><label class="text-sm font-semibold text-slate-700">Duration</label><input type="number" min="1" name="duration_minutes" value="{{ old('duration_minutes', $test?->duration_minutes) }}" class="mt-1 block w-full rounded-xl border-slate-300 text-sm"></div>
                 <div><label class="text-sm font-semibold text-slate-700">Status</label><select name="status" class="mt-1 block w-full rounded-xl border-slate-300 text-sm"><option value="draft" @selected(old('status', $test?->status) === 'draft')>Draft</option><option value="active" @selected(old('status', $test?->status) === 'active')>Active</option><option value="archived" @selected(old('status', $test?->status) === 'archived')>Archived</option></select></div>
             </div>
+            <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                    <label class="text-sm font-semibold text-slate-700">Questions Per Section</label>
+                    <input type="number" min="1" max="200" name="questions_per_section" value="{{ old('questions_per_section', $test?->questions_per_section ?? 10) }}" class="mt-1 block w-full rounded-xl border-slate-300 text-sm">
+                </div>
+                <div class="flex items-center gap-3 rounded-xl border border-slate-200 px-4 py-3">
+                    <input id="is_adaptive_enabled" type="checkbox" name="is_adaptive_enabled" value="1" class="rounded border-slate-300 text-blue-600" @checked(old('is_adaptive_enabled', $test?->is_adaptive_enabled ?? false))>
+                    <label for="is_adaptive_enabled" class="text-sm font-semibold text-slate-700">Enable Adaptive Mode for this test</label>
+                </div>
+            </div>
             <div class="flex justify-end gap-2">
                 <a href="{{ route('career-counselor.kcat.tests.index') }}" class="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700">Cancel</a>
                 <button class="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white">Save</button>

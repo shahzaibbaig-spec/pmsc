@@ -7,7 +7,7 @@
                 <article class="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
                     <div>
                         <h3 class="font-semibold text-slate-900">{{ $assignment->test?->title }}</h3>
-                        <p class="text-sm text-slate-500">Due: {{ optional($assignment->due_date)->format('d M Y') ?? '-' }} | {{ ucfirst($assignment->status) }}</p>
+                        <p class="text-sm text-slate-500">Due: {{ optional($assignment->due_date)->format('d M Y') ?? '-' }} | {{ ucfirst($assignment->status) }} | {{ $assignment->test?->is_adaptive_enabled ? 'Adaptive' : 'Fixed' }}</p>
                     </div>
                     @if ($assignment->status !== 'completed')
                         <form method="POST" action="{{ route('student.kcat.assignments.start', $assignment) }}">@csrf<button class="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white">Start</button></form>

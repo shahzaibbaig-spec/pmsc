@@ -10,12 +10,21 @@ class KcatTest extends Model
 {
     protected $fillable = [
         'title', 'description', 'grade_from', 'grade_to', 'total_questions', 'total_marks',
-        'duration_minutes', 'status', 'session', 'created_by', 'updated_by',
+        'duration_minutes', 'status', 'is_adaptive_enabled', 'questions_per_section',
+        'session', 'created_by', 'updated_by',
     ];
 
     protected function casts(): array
     {
-        return ['grade_from' => 'integer', 'grade_to' => 'integer', 'total_questions' => 'integer', 'total_marks' => 'integer', 'duration_minutes' => 'integer'];
+        return [
+            'grade_from' => 'integer',
+            'grade_to' => 'integer',
+            'total_questions' => 'integer',
+            'total_marks' => 'integer',
+            'duration_minutes' => 'integer',
+            'is_adaptive_enabled' => 'boolean',
+            'questions_per_section' => 'integer',
+        ];
     }
 
     public function sections(): HasMany { return $this->hasMany(KcatSection::class)->orderBy('sort_order')->orderBy('id'); }

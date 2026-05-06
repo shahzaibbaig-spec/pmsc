@@ -16,7 +16,11 @@ class StoreKcatQuestionRequest extends FormRequest
     {
         return [
             'kcat_section_id' => ['required', 'exists:kcat_sections,id'],
-            'question_type' => ['required', 'string', 'in:mcq,image_mcq,matrix,sequence,analogy,odd_one_out'],
+            'question_type' => [
+                'required',
+                'string',
+                'in:mcq,image_mcq,matrix,sequence,analogy,odd_one_out,synonym,antonym,sentence_completion,number_series,missing_number,pattern_logic,ratio_logic,pattern_sequence,odd_shape,shape_series,rotation,mirror_image,folding,cube_logic',
+            ],
             'difficulty' => ['required', 'in:easy,medium,hard'],
             'question_text' => ['required_without:question_image', 'nullable', 'string'],
             'question_image' => ['nullable', 'image'],

@@ -35,4 +35,20 @@ class KcatReportController extends Controller
         $this->reportService->attachReportToCareerProfile($attempt, $profile);
         return back()->with('success', 'KCAT report attached to career profile notes.');
     }
+
+    public function recommendations(KcatAttempt $attempt): View
+    {
+        return $this->show($attempt);
+    }
+
+    public function storeOverride(\Illuminate\Http\Request $request, KcatAttempt $attempt): RedirectResponse
+    {
+        $validated = $request->validate([
+            'counselor_override_stream' => ['required', 'string', 'max:255'],
+            'counselor_override_reason' => ['required', 'string'],
+        ]);
+
+        $this->reportService->overrideRecommendation($attempt, $validated, $request->user());
+        return back()->with('success', 'Stream override saved.');
+    }
 }

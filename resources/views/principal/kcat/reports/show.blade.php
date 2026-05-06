@@ -15,8 +15,8 @@
         <section class="grid grid-cols-1 gap-4 md:grid-cols-4">
             <article class="rounded-2xl border border-blue-100 bg-white p-5 shadow-sm"><p class="text-xs font-semibold uppercase text-blue-700">Score</p><p class="mt-2 text-2xl font-semibold">{{ $attempt->percentage ?? 0 }}%</p></article>
             <article class="rounded-2xl border border-blue-100 bg-white p-5 shadow-sm"><p class="text-xs font-semibold uppercase text-blue-700">Band</p><p class="mt-2 text-2xl font-semibold">{{ str_replace('_', ' ', $attempt->band ?? '-') }}</p></article>
-            <article class="rounded-2xl border border-blue-100 bg-white p-5 shadow-sm"><p class="text-xs font-semibold uppercase text-blue-700">Stream</p><p class="mt-2 text-lg font-semibold">{{ $attempt->recommended_stream ?? '-' }}</p></article>
-            <article class="rounded-2xl border border-blue-100 bg-white p-5 shadow-sm"><p class="text-xs font-semibold uppercase text-blue-700">Session</p><p class="mt-2 text-lg font-semibold">{{ $attempt->session }}</p></article>
+            <article class="rounded-2xl border border-blue-100 bg-white p-5 shadow-sm"><p class="text-xs font-semibold uppercase text-blue-700">Final Stream</p><p class="mt-2 text-lg font-semibold">{{ $report['final_stream'] ?? '-' }}</p></article>
+            <article class="rounded-2xl border border-blue-100 bg-white p-5 shadow-sm"><p class="text-xs font-semibold uppercase text-blue-700">Mode</p><p class="mt-2 text-lg font-semibold">{{ $attempt->is_adaptive ? 'Adaptive' : 'Fixed' }}</p></article>
         </section>
         <section class="grid grid-cols-1 gap-4 md:grid-cols-4">
             @foreach ($report['scores'] as $score)
@@ -24,8 +24,28 @@
             @endforeach
         </section>
         <section class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h3 class="font-semibold text-slate-900">Top Recommendations</h3>
+            <div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+                @forelse ($report['recommendations'] as $recommendation)
+                    <article class="rounded-xl border border-slate-200 p-4 {{ $recommendation->rank === 1 ? 'bg-blue-50' : 'bg-white' }}">
+                        <p class="text-xs font-semibold uppercase tracking-wide text-blue-700">Rank {{ $recommendation->rank }}</p>
+                        <p class="mt-1 text-sm font-semibold text-slate-900">{{ $recommendation->stream_name }}</p>
+                        <p class="text-xs text-slate-600">Match {{ $recommendation->match_score }}% | {{ str_replace('_', ' ', $recommendation->confidence_band ?? '-') }}</p>
+                    </article>
+                @empty
+                    <p class="text-sm text-slate-500">No recommendations available.</p>
+                @endforelse
+            </div>
+            @if ($attempt->counselor_override_stream)
+                <div class="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                    <p class="font-semibold">Counselor Override: {{ $attempt->counselor_override_stream }}</p>
+                    <p class="mt-1">{{ $attempt->counselor_override_reason }}</p>
+                </div>
+            @endif
+        </section>
+        <section class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <h3 class="font-semibold text-slate-900">Counselor Summary</h3>
-            <p class="mt-2 whitespace-pre-line text-sm text-slate-700">{{ $report['note']?->counselor_recommendation ?? $attempt->recommendation_summary }}</p>
+            <p class="mt-2 whitespace-pre-line text-sm text-slate-700">{{ $report['note']?->counselor_recommendation ?? $report['final_summary'] }}</p>
         </section>
     </div>
 </x-app-layout>

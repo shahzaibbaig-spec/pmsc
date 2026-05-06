@@ -13,19 +13,20 @@
         <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <table class="min-w-full divide-y divide-slate-200 text-sm">
                 <thead class="bg-blue-50 text-left text-xs font-semibold uppercase tracking-wide text-blue-700">
-                    <tr><th class="px-4 py-3">Title</th><th class="px-4 py-3">Grades</th><th class="px-4 py-3">Questions</th><th class="px-4 py-3">Status</th><th class="px-4 py-3"></th></tr>
+                    <tr><th class="px-4 py-3">Title</th><th class="px-4 py-3">Grades</th><th class="px-4 py-3">Mode</th><th class="px-4 py-3">Questions</th><th class="px-4 py-3">Status</th><th class="px-4 py-3"></th></tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100">
                     @forelse ($tests as $test)
                         <tr>
                             <td class="px-4 py-3 font-semibold text-slate-900">{{ $test->title }}</td>
                             <td class="px-4 py-3 text-slate-600">{{ $test->grade_from ?? '-' }} to {{ $test->grade_to ?? '-' }}</td>
+                            <td class="px-4 py-3 text-slate-600">{{ $test->is_adaptive_enabled ? 'Adaptive' : 'Fixed' }}</td>
                             <td class="px-4 py-3 text-slate-600">{{ $test->questions_count }}</td>
                             <td class="px-4 py-3 text-slate-600">{{ ucfirst($test->status) }}</td>
                             <td class="px-4 py-3 text-right"><a class="font-semibold text-blue-700" href="{{ route('career-counselor.kcat.tests.show', $test) }}">Open</a></td>
                         </tr>
                     @empty
-                        <tr><td colspan="5" class="px-4 py-6 text-center text-slate-500">No KCAT tests created yet.</td></tr>
+                        <tr><td colspan="6" class="px-4 py-6 text-center text-slate-500">No KCAT tests created yet.</td></tr>
                     @endforelse
                 </tbody>
             </table>

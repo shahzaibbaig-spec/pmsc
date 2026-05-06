@@ -1,5 +1,10 @@
 <x-app-layout>
-    <x-slot name="header"><h2 class="text-xl font-semibold text-slate-900">KCAT Grade-wise Summary</h2></x-slot>
+    <x-slot name="header">
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <h2 class="text-xl font-semibold text-slate-900">KCAT Grade-wise Summary</h2>
+            <a href="{{ route('principal.kcat.question-quality.index') }}" class="rounded-xl border border-blue-200 px-4 py-2 text-sm font-semibold text-blue-700">Question Quality Analytics</a>
+        </div>
+    </x-slot>
 
     <div class="mx-auto max-w-6xl py-8">
         <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">

@@ -13,9 +13,11 @@ use App\Http\Controllers\CareerCounselor\ParentMeetingController as CareerCounse
 use App\Http\Controllers\CareerCounselor\StudentSearchController as CareerCounselorStudentSearchController;
 use App\Http\Controllers\CareerCounselor\UrgentGuidanceController as CareerCounselorUrgentGuidanceController;
 use App\Http\Controllers\CareerCounselor\Kcat\KcatAssignmentController;
+use App\Http\Controllers\CareerCounselor\Kcat\KcatAdaptiveAttemptController;
 use App\Http\Controllers\CareerCounselor\Kcat\KcatAttemptController as CareerCounselorKcatAttemptController;
 use App\Http\Controllers\CareerCounselor\Kcat\KcatDashboardController;
 use App\Http\Controllers\CareerCounselor\Kcat\KcatQuestionController;
+use App\Http\Controllers\CareerCounselor\Kcat\KcatQuestionQualityController as CareerCounselorKcatQuestionQualityController;
 use App\Http\Controllers\CareerCounselor\Kcat\KcatReportController as CareerCounselorKcatReportController;
 use App\Http\Controllers\CareerCounselor\Kcat\KcatTestController;
 use App\Http\Controllers\Principal\CareerAssessmentController as PrincipalCareerAssessmentController;
@@ -24,6 +26,7 @@ use App\Http\Controllers\Principal\CareerParentMeetingController as PrincipalCar
 use App\Http\Controllers\Principal\CareerReportController as PrincipalCareerReportController;
 use App\Http\Controllers\Principal\CareerUrgentCaseController as PrincipalCareerUrgentCaseController;
 use App\Http\Controllers\Principal\Kcat\KcatAnalyticsController as PrincipalKcatAnalyticsController;
+use App\Http\Controllers\Principal\Kcat\KcatQuestionQualityController as PrincipalKcatQuestionQualityController;
 use App\Http\Controllers\Principal\Kcat\KcatReportController as PrincipalKcatReportController;
 use App\Http\Controllers\Principal\TeacherAcrController;
 use App\Http\Controllers\Principal\TeacherAttendanceController as PrincipalTeacherAttendanceController;
@@ -251,6 +254,7 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
                 Route::put('/tests/{test}', [KcatTestController::class, 'update'])->middleware('permission:manage_kcat_tests')->whereNumber('test')->name('tests.update');
                 Route::post('/tests/{test}/activate', [KcatTestController::class, 'activate'])->middleware('permission:manage_kcat_tests')->whereNumber('test')->name('tests.activate');
                 Route::post('/tests/{test}/archive', [KcatTestController::class, 'archive'])->middleware('permission:manage_kcat_tests')->whereNumber('test')->name('tests.archive');
+                Route::post('/tests/{test}/adaptive-settings', [KcatTestController::class, 'setAdaptiveMode'])->middleware('permission:manage_kcat_adaptive_settings')->whereNumber('test')->name('tests.adaptive-settings');
                 Route::post('/tests/{test}/sections', [KcatTestController::class, 'storeSection'])->middleware('permission:manage_kcat_tests')->whereNumber('test')->name('sections.store');
                 Route::put('/sections/{section}', [KcatTestController::class, 'updateSection'])->middleware('permission:manage_kcat_tests')->whereNumber('section')->name('sections.update');
                 Route::delete('/sections/{section}', [KcatTestController::class, 'destroySection'])->middleware('permission:manage_kcat_tests')->whereNumber('section')->name('sections.destroy');
@@ -267,10 +271,19 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
                 Route::get('/attempts/{attempt}', [CareerCounselorKcatAttemptController::class, 'show'])->middleware('permission:view_kcat_reports')->whereNumber('attempt')->name('attempts.show');
                 Route::get('/tests/{test}/manual-entry', [CareerCounselorKcatAttemptController::class, 'manualEntry'])->middleware('permission:manually_enter_kcat_attempt')->whereNumber('test')->name('attempts.manual-entry');
                 Route::post('/tests/{test}/manual-entry', [CareerCounselorKcatAttemptController::class, 'storeManualEntry'])->middleware('permission:manually_enter_kcat_attempt')->whereNumber('test')->name('attempts.manual-entry.store');
+                Route::get('/adaptive/attempts/{attempt}/next-question', [KcatAdaptiveAttemptController::class, 'nextQuestion'])->middleware('permission:manage_kcat_adaptive_settings')->whereNumber('attempt')->name('adaptive.next-question');
+                Route::post('/adaptive/attempts/{attempt}/submit-answer', [KcatAdaptiveAttemptController::class, 'submitAnswer'])->middleware('permission:manage_kcat_adaptive_settings')->whereNumber('attempt')->name('adaptive.submit-answer');
                 Route::get('/reports/{attempt}', [CareerCounselorKcatReportController::class, 'show'])->middleware('permission:view_kcat_reports')->whereNumber('attempt')->name('reports.show');
                 Route::get('/reports/{attempt}/print', [CareerCounselorKcatReportController::class, 'print'])->middleware('permission:print_kcat_reports')->whereNumber('attempt')->name('reports.print');
+                Route::get('/reports/{attempt}/recommendations', [CareerCounselorKcatReportController::class, 'recommendations'])->middleware('permission:view_kcat_stream_recommendations')->whereNumber('attempt')->name('reports.recommendations');
+                Route::post('/reports/{attempt}/override-stream', [CareerCounselorKcatReportController::class, 'storeOverride'])->middleware('permission:override_kcat_stream_recommendation')->whereNumber('attempt')->name('reports.override');
                 Route::post('/reports/{attempt}/notes', [CareerCounselorKcatReportController::class, 'notes'])->middleware('permission:manage_kcat_report_notes')->whereNumber('attempt')->name('reports.notes.store');
                 Route::post('/reports/{attempt}/career-profiles/{profile}/attach', [CareerCounselorKcatReportController::class, 'attach'])->middleware('permission:attach_kcat_to_career_profile')->whereNumber(['attempt', 'profile'])->name('reports.attach-profile');
+                Route::get('/question-quality', [CareerCounselorKcatQuestionQualityController::class, 'index'])->middleware('permission:view_kcat_question_quality')->name('question-quality.index');
+                Route::get('/question-quality/{question}', [CareerCounselorKcatQuestionQualityController::class, 'show'])->middleware('permission:view_kcat_question_quality')->whereNumber('question')->name('question-quality.show');
+                Route::post('/question-quality/{question}/review', [CareerCounselorKcatQuestionQualityController::class, 'storeReview'])->middleware('permission:review_kcat_questions')->whereNumber('question')->name('question-quality.review');
+                Route::post('/question-quality/{question}/approve', [CareerCounselorKcatQuestionQualityController::class, 'approve'])->middleware('permission:review_kcat_questions')->whereNumber('question')->name('question-quality.approve');
+                Route::post('/question-quality/{question}/retire', [CareerCounselorKcatQuestionQualityController::class, 'retire'])->middleware('permission:retire_kcat_questions')->whereNumber('question')->name('question-quality.retire');
             });
         });
 
@@ -304,9 +317,12 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
                 Route::get('/reports', [PrincipalKcatReportController::class, 'index'])->middleware('permission:view_all_kcat_reports')->name('reports.index');
                 Route::get('/reports/{attempt}', [PrincipalKcatReportController::class, 'show'])->middleware('permission:view_all_kcat_reports')->whereNumber('attempt')->name('reports.show');
                 Route::get('/reports/{attempt}/print', [PrincipalKcatReportController::class, 'print'])->middleware('permission:print_kcat_reports')->whereNumber('attempt')->name('reports.print');
+                Route::get('/stream-recommendations', [PrincipalKcatReportController::class, 'index'])->middleware('permission:view_kcat_stream_recommendations')->name('stream-recommendations.index');
                 Route::get('/students/{student}/reports', [PrincipalKcatReportController::class, 'studentReport'])->middleware('permission:view_all_kcat_reports')->whereNumber('student')->name('students.reports');
                 Route::get('/analytics', [PrincipalKcatAnalyticsController::class, 'index'])->middleware('permission:view_all_kcat_reports')->name('analytics.index');
                 Route::get('/grade-wise-summary', [PrincipalKcatAnalyticsController::class, 'gradeWiseSummary'])->middleware('permission:view_all_kcat_reports')->name('grade-wise-summary');
+                Route::get('/question-quality', [PrincipalKcatQuestionQualityController::class, 'index'])->middleware('permission:view_kcat_question_analytics')->name('question-quality.index');
+                Route::get('/question-quality/{question}', [PrincipalKcatQuestionQualityController::class, 'show'])->middleware('permission:view_kcat_question_analytics')->whereNumber('question')->name('question-quality.show');
             });
         });
 
@@ -1733,12 +1749,14 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
 
     Route::prefix('student/kcat')
         ->name('student.kcat.')
-        ->middleware(['role:Student', 'permission:attempt_kcat_test'])
+        ->middleware(['role:Student', 'permission:attempt_kcat_test|attempt_adaptive_kcat'])
         ->group(function (): void {
             Route::get('/assignments', [StudentKcatAttemptController::class, 'index'])->name('assignments.index');
             Route::post('/assignments/{assignment}/start', [StudentKcatAttemptController::class, 'start'])->whereNumber('assignment')->name('assignments.start');
             Route::get('/attempts/{attempt}/question/{index?}', [StudentKcatAttemptController::class, 'question'])->whereNumber(['attempt', 'index'])->name('attempts.question');
             Route::post('/attempts/{attempt}/questions/{question}', [StudentKcatAttemptController::class, 'answer'])->whereNumber(['attempt', 'question'])->name('attempts.answer');
+            Route::get('/attempts/{attempt}/adaptive/next', [StudentKcatAttemptController::class, 'adaptiveQuestion'])->whereNumber('attempt')->name('attempts.adaptive.next');
+            Route::post('/attempts/{attempt}/adaptive/answer', [StudentKcatAttemptController::class, 'adaptiveAnswer'])->whereNumber('attempt')->name('attempts.adaptive.answer');
             Route::post('/attempts/{attempt}/submit', [StudentKcatAttemptController::class, 'submit'])->whereNumber('attempt')->name('attempts.submit');
             Route::get('/attempts/{attempt}/result', [StudentKcatAttemptController::class, 'result'])->whereNumber('attempt')->name('attempts.result');
         });

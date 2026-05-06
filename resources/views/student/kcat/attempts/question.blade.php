@@ -15,6 +15,7 @@
                         </label>
                     @endforeach
                 </div>
+                <input type="hidden" name="response_time_seconds" id="response_time_seconds" value="0">
                 <input type="hidden" name="next_index" value="{{ $index + 1 }}">
                 <div class="mt-6 flex justify-between">
                     @if ($index > 0)
@@ -32,4 +33,16 @@
             <div class="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">No questions are available for this KCAT.</div>
         @endif
     </div>
+
+    <script>
+        (() => {
+            const startedAt = Date.now();
+            const field = document.getElementById('response_time_seconds');
+            if (!field) return;
+            document.querySelector('form')?.addEventListener('submit', () => {
+                const seconds = Math.max(0, Math.round((Date.now() - startedAt) / 1000));
+                field.value = String(seconds);
+            });
+        })();
+    </script>
 </x-app-layout>

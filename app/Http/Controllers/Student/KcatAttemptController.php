@@ -37,6 +37,10 @@ class KcatAttemptController extends Controller
     public function start(Request $request, KcatAssignment $assignment): RedirectResponse
     {
         $attempt = $this->attemptService->startAttempt($assignment, $this->studentForUser($request));
+        if ($attempt->is_adaptive) {
+            return redirect()->route('student.kcat.attempts.adaptive.next', $attempt);
+        }
+
         return redirect()->route('student.kcat.attempts.question', [$attempt, 0]);
     }
 
@@ -44,14 +48,25 @@ class KcatAttemptController extends Controller
     {
         abort_unless((int) $attempt->student_id === (int) $this->studentForUser(request())->id, 403);
         abort_unless($attempt->status === 'in_progress', 403);
-        $questions = $attempt->test->questions()->where('is_active', true)->with('options')->get();
+        if ($attempt->is_adaptive) {
+            abort(404);
+        }
+        $questions = $attempt->test->questions()->where('is_active', true)->whereNull('retired_at')->with('options')->get();
         return view('student.kcat.attempts.question', ['attempt' => $attempt, 'questions' => $questions, 'question' => $questions->get($index), 'index' => $index]);
     }
 
     public function answer(Request $request, KcatAttempt $attempt, KcatQuestion $question): RedirectResponse
     {
         abort_unless((int) $attempt->student_id === (int) $this->studentForUser($request)->id, 403);
-        $validated = $request->validate(['selected_option_id' => ['nullable', 'exists:kcat_question_options,id'], 'answer_text' => ['nullable', 'string'], 'next_index' => ['nullable', 'integer']]);
+        if ($attempt->is_adaptive) {
+            abort(404);
+        }
+        $validated = $request->validate([
+            'selected_option_id' => ['nullable', 'exists:kcat_question_options,id'],
+            'answer_text' => ['nullable', 'string'],
+            'response_time_seconds' => ['nullable', 'integer', 'min:0', 'max:3600'],
+            'next_index' => ['nullable', 'integer'],
+        ]);
         $this->attemptService->saveAnswer($attempt, $question, $validated);
         return redirect()->route('student.kcat.attempts.question', [$attempt, (int) ($validated['next_index'] ?? 0)]);
     }
@@ -66,7 +81,59 @@ class KcatAttemptController extends Controller
     public function result(Request $request, KcatAttempt $attempt): View
     {
         abort_unless((int) $attempt->student_id === (int) $this->studentForUser($request)->id, 403);
-        return view('student.kcat.attempts.result', ['attempt' => $attempt->load(['test', 'scores.section', 'latestReportNote'])]);
+        return view('student.kcat.attempts.result', ['attempt' => $attempt->load(['test', 'scores.section', 'latestReportNote', 'streamRecommendations'])]);
+    }
+
+    public function adaptiveQuestion(Request $request, KcatAttempt $attempt): View|RedirectResponse
+    {
+        abort_unless((int) $attempt->student_id === (int) $this->studentForUser($request)->id, 403);
+        abort_unless($attempt->status === 'in_progress', 403);
+        abort_unless($attempt->is_adaptive, 404);
+
+        $question = $this->attemptService->getNextAdaptiveQuestion($attempt->fresh(['test.sections', 'answers']) ?? $attempt);
+        if (! $question) {
+            $this->attemptService->submitAttempt($attempt);
+            return redirect()->route('student.kcat.attempts.result', $attempt);
+        }
+        $question->loadMissing('section');
+
+        $attempt = $attempt->fresh(['test.sections', 'answers']) ?? $attempt;
+        $state = $attempt->adaptive_state ?? [];
+        $requiredPerSection = max((int) ($attempt->test?->questions_per_section ?? 10), 1);
+        $currentSection = $question->section;
+        $currentSectionCode = $currentSection?->code;
+        $sectionState = $currentSectionCode ? ($state['sections'][$currentSectionCode] ?? []) : [];
+        $sectionAnswered = (int) ($sectionState['answered'] ?? 0);
+        $totalAnswered = collect($state['sections'] ?? [])->sum(fn (array $row): int => (int) ($row['answered'] ?? 0));
+        $totalRequired = $requiredPerSection * max((int) $attempt->test?->sections?->count(), 1);
+
+        return view('student.kcat.attempts.adaptive-question', [
+            'attempt' => $attempt,
+            'question' => $question->load('options', 'section'),
+            'requiredPerSection' => $requiredPerSection,
+            'sectionAnswered' => $sectionAnswered,
+            'totalAnswered' => $totalAnswered,
+            'totalRequired' => $totalRequired,
+        ]);
+    }
+
+    public function adaptiveAnswer(Request $request, KcatAttempt $attempt): RedirectResponse
+    {
+        abort_unless((int) $attempt->student_id === (int) $this->studentForUser($request)->id, 403);
+        abort_unless($attempt->is_adaptive, 404);
+
+        $validated = $request->validate([
+            'selected_option_id' => ['nullable', 'exists:kcat_question_options,id'],
+            'answer_text' => ['nullable', 'string'],
+            'response_time_seconds' => ['nullable', 'integer', 'min:0', 'max:3600'],
+        ]);
+
+        $result = $this->attemptService->saveAdaptiveAnswer($attempt, $validated);
+        if (($result['completed'] ?? false) === true) {
+            return redirect()->route('student.kcat.attempts.result', $attempt);
+        }
+
+        return redirect()->route('student.kcat.attempts.adaptive.next', $attempt);
     }
 
     private function studentForUser(Request $request): Student
