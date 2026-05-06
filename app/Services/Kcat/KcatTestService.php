@@ -7,6 +7,8 @@ use App\Models\KcatQuestionOption;
 use App\Models\KcatSection;
 use App\Models\KcatTest;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -42,6 +44,8 @@ class KcatTestService
                 $code = array_keys(self::DEFAULT_SECTIONS)[$index];
                 $this->addSection($test, ['name' => $name, 'code' => $code, 'sort_order' => $index + 1]);
             }
+
+            $this->populateTestQuestionsFromBankIfRequested($test, $data, $user);
 
             return $test->fresh(['sections']);
         });
@@ -175,5 +179,182 @@ class KcatTestService
                 'sort_order' => (int) ($option['sort_order'] ?? ($index + 1)),
             ]);
         }
+    }
+
+    private function populateTestQuestionsFromBankIfRequested(KcatTest $test, array $data, User $user): void
+    {
+        $requestedTotalQuestions = (int) ($data['question_count'] ?? 0);
+        if ($requestedTotalQuestions <= 0) {
+            return;
+        }
+
+        $test->loadMissing('sections');
+        $sections = $test->sections->sortBy('sort_order')->values();
+        $sectionCount = $sections->count();
+        if ($sectionCount <= 0) {
+            throw ValidationException::withMessages([
+                'question_count' => 'KCAT sections are missing. Add sections before generating questions.',
+            ]);
+        }
+
+        if ($requestedTotalQuestions % $sectionCount !== 0) {
+            throw ValidationException::withMessages([
+                'question_count' => 'Total questions must be equally divisible by category count ('.$sectionCount.').',
+            ]);
+        }
+
+        $perSection = intdiv($requestedTotalQuestions, $sectionCount);
+        $difficultyMode = trim((string) ($data['difficulty_level'] ?? 'auto'));
+        $difficultyLevels = $this->resolveDifficultyLevels(
+            $difficultyMode,
+            isset($data['grade_from']) ? (int) $data['grade_from'] : null,
+            isset($data['grade_to']) ? (int) $data['grade_to'] : null
+        );
+
+        foreach ($sections as $section) {
+            $sourceQuestions = $this->selectRandomBankQuestions(
+                (string) $section->code,
+                $perSection,
+                $difficultyLevels,
+                (int) $test->id
+            );
+
+            if ($sourceQuestions->count() < $perSection) {
+                throw ValidationException::withMessages([
+                    'question_count' => 'Not enough '.$difficultyMode.' questions available in bank for '.$section->name
+                        .'. Required '.$perSection.', found '.$sourceQuestions->count().'.',
+                ]);
+            }
+
+            $nextSortOrder = ((int) ($section->questions()->max('sort_order') ?? 0)) + 1;
+            foreach ($sourceQuestions as $sourceQuestion) {
+                $clonedQuestion = $section->questions()->create([
+                    'kcat_test_id' => $test->id,
+                    'question_type' => (string) $sourceQuestion->question_type,
+                    'difficulty' => (string) $sourceQuestion->difficulty,
+                    'question_text' => (string) $sourceQuestion->question_text,
+                    'question_image' => $sourceQuestion->question_image,
+                    'explanation' => $sourceQuestion->explanation,
+                    'marks' => (int) $sourceQuestion->marks,
+                    'sort_order' => $nextSortOrder++,
+                    'is_active' => true,
+                    'created_by' => $user->id,
+                    'updated_by' => $user->id,
+                ]);
+
+                $this->syncOptions(
+                    $clonedQuestion,
+                    $sourceQuestion->options
+                        ->sortBy('sort_order')
+                        ->values()
+                        ->map(fn (KcatQuestionOption $option): array => [
+                            'option_text' => $option->option_text,
+                            'option_image' => $option->option_image,
+                            'is_correct' => (bool) $option->is_correct,
+                            'sort_order' => (int) $option->sort_order,
+                        ])
+                        ->all()
+                );
+            }
+        }
+
+        $this->refreshTotals($test->fresh(['sections.questions']) ?? $test);
+    }
+
+    /**
+     * @param array<int, string> $difficultyLevels
+     * @return Collection<int, KcatQuestion>
+     */
+    private function selectRandomBankQuestions(
+        string $sectionCode,
+        int $limit,
+        array $difficultyLevels,
+        int $excludeTestId
+    ): Collection {
+        $preferred = $this->questionBankQuery($sectionCode, $difficultyLevels, $excludeTestId, true)
+            ->inRandomOrder()
+            ->get();
+
+        $fallback = collect();
+        if ($preferred->count() < $limit) {
+            $fallback = $this->questionBankQuery($sectionCode, $difficultyLevels, $excludeTestId, false)
+                ->inRandomOrder()
+                ->get();
+        }
+
+        /** @var Collection<int, KcatQuestion> $combined */
+        $combined = $preferred
+            ->concat($fallback)
+            ->filter(fn (KcatQuestion $question): bool => $this->isUsableQuestion($question))
+            ->unique(fn (KcatQuestion $question): string => mb_strtolower(trim((string) $question->question_text)))
+            ->values();
+
+        return $combined->take($limit)->values();
+    }
+
+    /**
+     * @param array<int, string> $difficultyLevels
+     */
+    private function questionBankQuery(
+        string $sectionCode,
+        array $difficultyLevels,
+        int $excludeTestId,
+        bool $preferBankTests
+    ): Builder {
+        $query = KcatQuestion::query()
+            ->where('kcat_test_id', '!=', $excludeTestId)
+            ->where('is_active', true)
+            ->whereNull('retired_at')
+            ->whereIn('difficulty', $difficultyLevels)
+            ->whereHas('section', fn (Builder $builder) => $builder->where('code', $sectionCode))
+            ->whereHas('options')
+            ->with([
+                'options:id,kcat_question_id,option_text,option_image,is_correct,sort_order',
+                'test:id,title,description',
+            ]);
+
+        if ($preferBankTests) {
+            $query->whereHas('test', function (Builder $builder): void {
+                $builder->where(function (Builder $nested): void {
+                    $nested->where('title', 'like', 'KORT Cognitive Assessment Test%')
+                        ->orWhere('description', 'like', '%question bank%')
+                        ->orWhere('description', 'like', '%question-bank%');
+                });
+            });
+        }
+
+        return $query;
+    }
+
+    private function isUsableQuestion(KcatQuestion $question): bool
+    {
+        $options = $question->options ?? collect();
+
+        return $options->count() >= 2 && $options->where('is_correct', true)->count() === 1;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function resolveDifficultyLevels(string $mode, ?int $gradeFrom, ?int $gradeTo): array
+    {
+        $normalized = in_array($mode, ['easy', 'medium', 'hard', 'auto'], true) ? $mode : 'auto';
+        if ($normalized !== 'auto') {
+            return [$normalized];
+        }
+
+        $from = $gradeFrom ?? 7;
+        $to = $gradeTo ?? $from;
+        $average = ($from + $to) / 2;
+
+        if ($average <= 8.5) {
+            return ['easy'];
+        }
+
+        if ($average >= 10.5) {
+            return ['hard'];
+        }
+
+        return ['medium'];
     }
 }

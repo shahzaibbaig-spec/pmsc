@@ -22,6 +22,26 @@
                 <div><label class="text-sm font-semibold text-slate-700">Duration</label><input type="number" min="1" name="duration_minutes" value="{{ old('duration_minutes', $test?->duration_minutes) }}" class="mt-1 block w-full rounded-xl border-slate-300 text-sm"></div>
                 <div><label class="text-sm font-semibold text-slate-700">Status</label><select name="status" class="mt-1 block w-full rounded-xl border-slate-300 text-sm"><option value="draft" @selected(old('status', $test?->status) === 'draft')>Draft</option><option value="active" @selected(old('status', $test?->status) === 'active')>Active</option><option value="archived" @selected(old('status', $test?->status) === 'archived')>Archived</option></select></div>
             </div>
+            @if (! $test)
+                <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div>
+                        <label class="text-sm font-semibold text-slate-700">Total Questions</label>
+                        <input id="question_count" type="number" min="4" max="400" step="4" name="question_count" value="{{ old('question_count', 40) }}" class="mt-1 block w-full rounded-xl border-slate-300 text-sm" required>
+                        <p id="per_section_preview" class="mt-1 text-xs text-slate-500">Each category will get equal questions.</p>
+                        @error('question_count') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                    </div>
+                    <div>
+                        <label class="text-sm font-semibold text-slate-700">Difficulty Level</label>
+                        <select name="difficulty_level" class="mt-1 block w-full rounded-xl border-slate-300 text-sm" required>
+                            <option value="auto" @selected(old('difficulty_level', 'auto') === 'auto')>Auto by class level</option>
+                            <option value="easy" @selected(old('difficulty_level') === 'easy')>Easy (Grade 7-8)</option>
+                            <option value="medium" @selected(old('difficulty_level') === 'medium')>Medium (Grade 9-10)</option>
+                            <option value="hard" @selected(old('difficulty_level') === 'hard')>Hard (Grade 11-12)</option>
+                        </select>
+                        @error('difficulty_level') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
+                    </div>
+                </div>
+            @endif
             <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
                     <label class="text-sm font-semibold text-slate-700">Questions Per Section</label>
@@ -38,4 +58,34 @@
             </div>
         </form>
     </div>
+
+    @if (! $test)
+        <script>
+            (() => {
+                const totalInput = document.getElementById('question_count');
+                const preview = document.getElementById('per_section_preview');
+                if (!totalInput || !preview) {
+                    return;
+                }
+
+                const render = () => {
+                    const total = Number(totalInput.value || 0);
+                    if (!Number.isFinite(total) || total <= 0) {
+                        preview.textContent = 'Each category will get equal questions.';
+                        return;
+                    }
+
+                    if (total % 4 !== 0) {
+                        preview.textContent = 'Total questions must be divisible by 4 for equal category distribution.';
+                        return;
+                    }
+
+                    preview.textContent = `Each category will get ${total / 4} questions.`;
+                };
+
+                totalInput.addEventListener('input', render);
+                render();
+            })();
+        </script>
+    @endif
 </x-app-layout>
