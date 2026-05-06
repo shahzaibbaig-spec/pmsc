@@ -61,7 +61,9 @@ class ProvisionStudentPortals extends Command
         }
 
         $users = User::query()->with('roles:id,name')->get(['id', 'name', 'email', 'status']);
-        $usersByEmail = $users->keyBy(fn (User $user): string => mb_strtolower((string) $user->email));
+        $usersByEmail = $users
+            ->keyBy(fn (User $user): string => mb_strtolower((string) $user->email))
+            ->all();
         $claimedUserIds = [];
         $claimedEmails = [];
         $usedStudentIds = Student::query()
