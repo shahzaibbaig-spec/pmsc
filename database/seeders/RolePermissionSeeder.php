@@ -108,6 +108,12 @@ class RolePermissionSeeder extends Seeder
             'view_urgent_guidance_cases',
             'manage_career_visibility',
             'view_student_parent_career_summary',
+            'view_class_wise_student_lists',
+            'view_sports_teacher_panel',
+            'create_sports_observation',
+            'view_own_sports_observations',
+            'view_all_sports_observations',
+            'print_sports_observations',
             'view_kcat_panel',
             'manage_kcat_tests',
             'manage_kcat_questions',
@@ -133,6 +139,7 @@ class RolePermissionSeeder extends Seeder
         $accountant = Role::firstOrCreate(['name' => 'Accountant', 'guard_name' => 'web']);
         $warden = Role::firstOrCreate(['name' => 'Warden', 'guard_name' => 'web']);
         $careerCounselor = Role::firstOrCreate(['name' => 'Career Counselor', 'guard_name' => 'web']);
+        $sportsTeacher = Role::firstOrCreate(['name' => 'Sports Teacher', 'guard_name' => 'web']);
 
         $admin->syncPermissions($permissions);
         $principal->syncPermissions([
@@ -174,6 +181,9 @@ class RolePermissionSeeder extends Seeder
             'view_parent_meetings',
             'view_urgent_guidance_cases',
             'view_student_parent_career_summary',
+            'view_class_wise_student_lists',
+            'view_all_sports_observations',
+            'print_sports_observations',
             'view_all_kcat_reports',
             'print_kcat_reports',
         ]);
@@ -231,6 +241,7 @@ class RolePermissionSeeder extends Seeder
             'manage_hostel_leave',
             'mark_night_attendance',
             'view_night_attendance',
+            'view_all_sports_observations',
         ]);
         $careerCounselor->syncPermissions([
             'view_career_counselor_panel',
@@ -256,6 +267,11 @@ class RolePermissionSeeder extends Seeder
             'manage_kcat_report_notes',
             'attach_kcat_to_career_profile',
         ]);
+        $sportsTeacher->syncPermissions([
+            'view_sports_teacher_panel',
+            'create_sports_observation',
+            'view_own_sports_observations',
+        ]);
 
         $this->createUserWithRole('System Admin', 'admin@pmsc.edu.pk', 'Admin');
         $this->createUserWithRole('School Principal', 'principal@pmsc.edu.pk', 'Principal');
@@ -265,6 +281,7 @@ class RolePermissionSeeder extends Seeder
         $this->createUserWithRole('School Accountant', 'accountant@pmsc.edu.pk', 'Accountant');
         $this->createUserWithRole('School Warden', 'warden@pmsc.edu.pk', 'Warden');
         $this->createUserWithRole('Career Counselor', 'career.counselor@pmsc.edu.pk', 'Career Counselor');
+        $this->createUserWithRole('Sports Teacher', 'sports.teacher@pmsc.edu.pk', 'Sports Teacher');
     }
 
     private function createUserWithRole(string $name, string $email, string $role): void

@@ -26,6 +26,9 @@
     <x-ui.card class="mt-6" title="Quick Actions">
         <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <x-ui.button href="{{ route('principal.students.index') }}" variant="outline">Students List</x-ui.button>
+            @can('view_class_wise_student_lists')
+                <x-ui.button href="{{ route('principal.student-lists.index') }}" variant="outline">Class-wise Lists</x-ui.button>
+            @endcan
             <x-ui.button href="{{ route('principal.teachers.index') }}" variant="outline">Teachers List</x-ui.button>
             @can('manage_subject_assignments')
                 <x-ui.button href="{{ route('principal.subject-matrix.index') }}" variant="outline">Subject Matrix</x-ui.button>
@@ -33,6 +36,9 @@
             <x-ui.button href="{{ route('principal.teacher-assignments.index') }}" variant="outline">Teacher Assignments</x-ui.button>
             <x-ui.button href="{{ route('principal.results.generator') }}" variant="outline">Results Module</x-ui.button>
             <x-ui.button href="{{ route('principal.analytics.teachers.index') }}" variant="outline">Teacher Analytics</x-ui.button>
+            @can('view_all_sports_observations')
+                <x-ui.button href="{{ route('principal.sports-observations.daily') }}" variant="outline">Sports Daily Report</x-ui.button>
+            @endcan
             @can('view_attendance')
                 <x-ui.button href="{{ route('principal.attendance.index') }}" variant="outline">Class Attendance</x-ui.button>
             @endcan

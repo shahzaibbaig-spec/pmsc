@@ -93,6 +93,11 @@ class Student extends Model
         return $this->hasMany(DisciplineComplaint::class);
     }
 
+    public function sportsObservations(): HasMany
+    {
+        return $this->hasMany(StudentSportsObservation::class);
+    }
+
     public function subjectAssignments(): HasMany
     {
         return $this->hasMany(StudentSubject::class);

@@ -24,6 +24,8 @@ use App\Http\Controllers\Principal\CareerAssessmentController as PrincipalCareer
 use App\Http\Controllers\Principal\CareerCounselingController;
 use App\Http\Controllers\Principal\CareerParentMeetingController as PrincipalCareerParentMeetingController;
 use App\Http\Controllers\Principal\CareerReportController as PrincipalCareerReportController;
+use App\Http\Controllers\Principal\SportsObservationController as PrincipalSportsObservationController;
+use App\Http\Controllers\Principal\StudentListController as PrincipalClassWiseStudentListController;
 use App\Http\Controllers\Principal\CareerUrgentCaseController as PrincipalCareerUrgentCaseController;
 use App\Http\Controllers\Principal\Kcat\KcatAnalyticsController as PrincipalKcatAnalyticsController;
 use App\Http\Controllers\Principal\Kcat\KcatQuestionQualityController as PrincipalKcatQuestionQualityController;
@@ -48,10 +50,14 @@ use App\Http\Controllers\Teacher\TeacherEResourceController;
 use App\Http\Controllers\Teacher\TeacherInventoryController;
 use App\Http\Controllers\Teacher\TeacherInventoryDemandController;
 use App\Http\Controllers\Teacher\TeacherPromotionController;
+use App\Http\Controllers\SportsTeacher\DashboardController as SportsTeacherDashboardController;
+use App\Http\Controllers\SportsTeacher\SportsObservationController as SportsTeacherSportsObservationController;
+use App\Http\Controllers\SportsTeacher\StudentSearchController as SportsTeacherStudentSearchController;
 use App\Http\Controllers\Warden\WardenDailyDiaryController;
 use App\Http\Controllers\Warden\WardenDailyReportController;
 use App\Http\Controllers\Warden\WardenDashboardController;
 use App\Http\Controllers\Warden\WardenDisciplineController;
+use App\Http\Controllers\Warden\SportsObservationController as WardenSportsObservationController;
 use App\Http\Controllers\Warden\HostelLeaveController;
 use App\Http\Controllers\Warden\HostelNightAttendanceController;
 use App\Http\Controllers\Warden\HostelRoomAllocationController;
@@ -456,6 +462,14 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
     Route::get('/principal/students/data', [PrincipalStudentListController::class, 'data'])
         ->middleware(['role:Principal'])
         ->name('principal.students.data');
+
+    Route::get('/principal/student-lists', [PrincipalClassWiseStudentListController::class, 'index'])
+        ->middleware(['role:Principal,Admin', 'permission:view_class_wise_student_lists'])
+        ->name('principal.student-lists.index');
+
+    Route::get('/principal/student-lists/print', [PrincipalClassWiseStudentListController::class, 'print'])
+        ->middleware(['role:Principal,Admin', 'permission:view_class_wise_student_lists'])
+        ->name('principal.student-lists.print');
 
     Route::get('/principal/students/{student}', [StudentManagementController::class, 'show'])
         ->middleware('role:Principal')
@@ -933,6 +947,25 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
         ->middleware(['role:Admin,Principal', 'permission:monitor_daily_diary'])
         ->name('principal.daily-diary.completion-report');
 
+    Route::prefix('principal/sports-observations')
+        ->name('principal.sports-observations.')
+        ->middleware(['role:Principal,Admin', 'permission:view_all_sports_observations'])
+        ->group(function (): void {
+            Route::get('/', [PrincipalSportsObservationController::class, 'index'])
+                ->name('index');
+            Route::get('/daily', [PrincipalSportsObservationController::class, 'daily'])
+                ->name('daily');
+            Route::get('/print', [PrincipalSportsObservationController::class, 'print'])
+                ->middleware('permission:print_sports_observations')
+                ->name('print');
+            Route::post('/{observation}/acknowledge', [PrincipalSportsObservationController::class, 'acknowledge'])
+                ->whereNumber('observation')
+                ->name('acknowledge');
+            Route::post('/{observation}/resolve', [PrincipalSportsObservationController::class, 'resolve'])
+                ->whereNumber('observation')
+                ->name('resolve');
+        });
+
     Route::get('/principal/analytics/performance-insights/data', [PerformanceInsightsController::class, 'data'])
         ->middleware(['role:Principal', 'permission:view_teacher_performance'])
         ->name('principal.analytics.performance-insights.data');
@@ -1393,6 +1426,29 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
         ->middleware(['role:Principal'])
         ->name('api.timetable.entry.update');
 
+    Route::prefix('sports-teacher')
+        ->name('sports-teacher.')
+        ->middleware(['role:Sports Teacher', 'permission:view_sports_teacher_panel'])
+        ->group(function (): void {
+            Route::get('/dashboard', SportsTeacherDashboardController::class)
+                ->name('dashboard');
+            Route::get('/students/search', SportsTeacherStudentSearchController::class)
+                ->name('students.search');
+            Route::get('/observations', [SportsTeacherSportsObservationController::class, 'index'])
+                ->middleware('permission:view_own_sports_observations')
+                ->name('observations.index');
+            Route::get('/observations/create', [SportsTeacherSportsObservationController::class, 'create'])
+                ->middleware('permission:create_sports_observation')
+                ->name('observations.create');
+            Route::post('/observations', [SportsTeacherSportsObservationController::class, 'store'])
+                ->middleware('permission:create_sports_observation')
+                ->name('observations.store');
+            Route::get('/observations/{observation}', [SportsTeacherSportsObservationController::class, 'show'])
+                ->middleware('permission:view_own_sports_observations')
+                ->whereNumber('observation')
+                ->name('observations.show');
+        });
+
     Route::get('/teacher/dashboard', TeacherDashboardController::class)
         ->middleware('role:Teacher')
         ->name('teacher.dashboard');
@@ -1630,6 +1686,15 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
         ->middleware(['role:Warden', 'permission:view_student_discipline_reports'])
         ->whereNumber('report')
         ->name('warden.discipline-reports.show');
+
+    Route::get('/warden/sports-observations', [WardenSportsObservationController::class, 'index'])
+        ->middleware(['role:Warden', 'permission:view_all_sports_observations'])
+        ->name('warden.sports-observations.index');
+
+    Route::post('/warden/sports-observations/{observation}/acknowledge', [WardenSportsObservationController::class, 'acknowledge'])
+        ->middleware(['role:Warden', 'permission:view_all_sports_observations'])
+        ->whereNumber('observation')
+        ->name('warden.sports-observations.acknowledge');
 
     Route::get('/warden/students', [WardenStudentRecordController::class, 'index'])
         ->middleware(['role:Warden', 'permission:view_student_profiles_basic'])

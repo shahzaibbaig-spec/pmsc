@@ -102,6 +102,12 @@
         if ($sidebarUser?->can('view_teacher_result_entries')) {
             $menuItems[] = ['route' => 'principal.results.teacher-entries.index', 'label' => 'Teacher Result Entries'];
         }
+        if ($sidebarUser?->can('view_class_wise_student_lists')) {
+            $menuItems[] = ['route' => 'principal.student-lists.index', 'label' => 'Class-wise Student Lists'];
+        }
+        if ($sidebarUser?->can('view_all_sports_observations')) {
+            $menuItems[] = ['route' => 'principal.sports-observations.index', 'label' => 'Sports Observations'];
+        }
         if ($sidebarUser?->can('generate_results')) {
             $menuItems[] = ['route' => 'principal.result-locks.index', 'label' => 'Result Locks'];
         }
@@ -180,6 +186,12 @@
         }
         if ($sidebarUser?->can('view_teacher_result_entries')) {
             $menuItems[] = ['route' => 'principal.results.teacher-entries.index', 'label' => 'Teacher Result Entries'];
+        }
+        if ($sidebarUser?->can('view_class_wise_student_lists')) {
+            $menuItems[] = ['route' => 'principal.student-lists.index', 'label' => 'Class-wise Student Lists'];
+        }
+        if ($sidebarUser?->can('view_all_sports_observations')) {
+            $menuItems[] = ['route' => 'principal.sports-observations.index', 'label' => 'Sports Observations'];
         }
         if ($sidebarUser?->can('generate_results')) {
             $menuItems[] = ['route' => 'principal.result-locks.index', 'label' => 'Result Locks'];
@@ -338,7 +350,22 @@
         if ($sidebarUser?->can('view_night_attendance') || $sidebarUser?->can('mark_night_attendance')) {
             $menuItems[] = ['route' => 'warden.hostel.night-attendance.index', 'label' => 'Night Attendance'];
         }
+        if ($sidebarUser?->can('view_all_sports_observations')) {
+            $menuItems[] = ['route' => 'warden.sports-observations.index', 'label' => 'Sports Observations'];
+        }
 
+        $menuItems[] = ['route' => 'notifications.index', 'label' => 'Notifications'];
+    } elseif ($sidebarUser?->hasRole('Sports Teacher')) {
+        $menuItems = [
+            ['route' => 'sports-teacher.dashboard', 'label' => 'Dashboard'],
+        ];
+
+        if ($sidebarUser?->can('view_own_sports_observations')) {
+            $menuItems[] = ['route' => 'sports-teacher.observations.index', 'label' => 'My Observations'];
+        }
+        if ($sidebarUser?->can('create_sports_observation')) {
+            $menuItems[] = ['route' => 'sports-teacher.observations.create', 'label' => 'New Observation'];
+        }
         $menuItems[] = ['route' => 'notifications.index', 'label' => 'Notifications'];
     } elseif ($sidebarUser?->hasRole('Doctor')) {
         $menuItems = [
