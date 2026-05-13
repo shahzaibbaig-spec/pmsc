@@ -102,7 +102,7 @@
                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-blue-700">Date</th>
                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-blue-700">Student</th>
                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-blue-700">Class/Section</th>
-                            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-blue-700">Issue</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-blue-700">Issues</th>
                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-blue-700">Message</th>
                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-blue-700">Sports Teacher</th>
                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-blue-700">Status</th>
@@ -118,8 +118,8 @@
                                     <p class="text-xs text-slate-500">{{ $observation->student?->student_id ?? '-' }}</p>
                                 </td>
                                 <td class="px-4 py-4 text-sm text-slate-700">{{ trim(($observation->classRoom?->name ?? '').' '.($observation->classRoom?->section ?? '')) ?: '-' }}</td>
-                                <td class="px-4 py-4 text-sm text-slate-700">{{ $observation->issue_label }}</td>
-                                <td class="px-4 py-4 text-sm text-slate-700">{{ \Illuminate\Support\Str::limit((string) $observation->auto_message, 100) }}</td>
+                                <td class="px-4 py-4 text-sm text-slate-700">{{ $observation->resolvedIssueLabelText() }}</td>
+                                <td class="px-4 py-4 text-sm text-slate-700">{{ \Illuminate\Support\Str::limit($observation->resolvedCombinedMessage(), 100) }}</td>
                                 <td class="px-4 py-4 text-sm text-slate-700">{{ $observation->sportsTeacher?->name ?? '-' }}</td>
                                 <td class="px-4 py-4 text-sm">
                                     <span class="inline-flex rounded-full px-2 py-1 text-xs font-semibold {{ $observation->status === 'resolved' ? 'bg-emerald-100 text-emerald-700' : ($observation->status === 'acknowledged' ? 'bg-indigo-100 text-indigo-700' : 'bg-amber-100 text-amber-700') }}">

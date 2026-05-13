@@ -58,7 +58,9 @@ class SportsObservationController extends Controller
             'student_id' => ['required', 'integer', 'exists:students,id'],
             'session' => ['nullable', 'string', 'max:20'],
             'observation_date' => ['required', 'date'],
-            'issue_type' => ['required', Rule::in(array_keys(StudentSportsObservation::ISSUE_LABELS))],
+            'issue_types' => ['required_without:issue_type', 'array', 'min:1'],
+            'issue_types.*' => [Rule::in(array_keys(StudentSportsObservation::ISSUE_LABELS))],
+            'issue_type' => ['nullable', Rule::in(array_keys(StudentSportsObservation::ISSUE_LABELS))],
             'severity' => ['required', Rule::in(StudentSportsObservation::SEVERITIES)],
             'custom_note' => ['nullable', 'string', 'max:500'],
             'confirm_duplicate' => ['nullable', 'boolean'],
@@ -84,6 +86,7 @@ class SportsObservationController extends Controller
             'createdBy:id,name',
             'updatedBy:id,name',
             'resolvedBy:id,name',
+            'issues:id,student_sports_observation_id,issue_type,issue_label,auto_message',
         ]);
 
         return view('sports-teacher.observations.show', [

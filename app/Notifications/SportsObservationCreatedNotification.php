@@ -24,7 +24,10 @@ class SportsObservationCreatedNotification extends Notification
     {
         $studentName = (string) ($this->observation->student?->name ?? 'Student');
         $classSection = trim((string) ($this->observation->classRoom?->name ?? '').' '.(string) ($this->observation->classRoom?->section ?? ''));
-        $issueLabel = (string) ($this->observation->issue_label ?: StudentSportsObservation::issueLabelFor((string) $this->observation->issue_type));
+        $issueLabels = $this->observation->resolvedIssueLabels();
+        $issueLabel = $issueLabels !== []
+            ? implode(', ', $issueLabels)
+            : (string) ($this->observation->issue_label ?: StudentSportsObservation::issueLabelFor((string) $this->observation->issue_type));
         $teacherName = (string) ($this->observation->sportsTeacher?->name ?? 'Sports Teacher');
 
         return [
@@ -39,7 +42,8 @@ class SportsObservationCreatedNotification extends Notification
             'student_name' => $studentName,
             'class_section' => $classSection,
             'issue_label' => $issueLabel,
-            'auto_message' => (string) $this->observation->auto_message,
+            'issue_labels' => $issueLabels,
+            'auto_message' => $this->observation->resolvedCombinedMessage(),
             'observation_date' => optional($this->observation->observation_date)->toDateString(),
             'sports_teacher_name' => $teacherName,
             'observation_id' => (int) $this->observation->id,

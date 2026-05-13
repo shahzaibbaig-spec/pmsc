@@ -86,10 +86,10 @@ class SportsObservationService
             ->with('classRoom:id,name,section')
             ->findOrFail((int) $data['student_id']);
 
-        $issueType = trim((string) ($data['issue_type'] ?? ''));
-        if (! array_key_exists($issueType, StudentSportsObservation::ISSUE_LABELS)) {
+        $issueTypes = $this->extractIssueTypes($data);
+        if ($issueTypes === []) {
             throw ValidationException::withMessages([
-                'issue_type' => 'Please select a valid issue type.',
+                'issue_types' => 'Please select at least one issue type.',
             ]);
         }
 
@@ -106,38 +106,65 @@ class SportsObservationService
         $allowDuplicate = $severity === StudentSportsObservation::SEVERITY_REPEATED
             || (bool) ($data['confirm_duplicate'] ?? false);
 
-        $duplicateExists = StudentSportsObservation::query()
-            ->where('student_id', (int) $student->id)
-            ->where('issue_type', $issueType)
-            ->whereDate('observation_date', $observationDate)
-            ->where('session', $session)
-            ->exists();
+        $duplicateIssueTypes = $this->findDuplicateIssueTypes((int) $student->id, $issueTypes, $observationDate, $session);
+        if ($duplicateIssueTypes !== [] && ! $allowDuplicate) {
+            $duplicateLabels = collect($duplicateIssueTypes)
+                ->map(fn (string $issueType): string => StudentSportsObservation::issueLabelFor($issueType))
+                ->unique()
+                ->values()
+                ->implode(', ');
 
-        if ($duplicateExists && ! $allowDuplicate) {
             throw ValidationException::withMessages([
-                'duplicate_warning' => 'A similar observation already exists for this student on the selected date and session. Select severity "Repeated" or tick confirm duplicate to submit anyway.',
+                'duplicate_warning' => 'A similar observation already exists for: '.$duplicateLabels.'. Select severity "Repeated" or tick confirm duplicate to submit anyway.',
             ]);
         }
 
-        $issueLabel = StudentSportsObservation::issueLabelFor($issueType);
-        $autoMessage = $this->generateAutoMessage($student, $issueType, $customNote);
+        $issueMessages = $this->generateAutoMessages($student, $issueTypes, $customNote);
+        $combinedMessage = $this->generateCombinedAutoMessage($student, $issueTypes, $customNote);
+        $firstIssueType = $issueTypes[0];
+        $firstIssueLabel = StudentSportsObservation::issueLabelFor($firstIssueType);
 
         /** @var StudentSportsObservation $observation */
-        $observation = DB::transaction(function () use ($student, $sportsTeacher, $session, $observationDate, $issueType, $issueLabel, $autoMessage, $severity): StudentSportsObservation {
+        $observation = DB::transaction(function () use (
+            $student,
+            $sportsTeacher,
+            $session,
+            $observationDate,
+            $severity,
+            $customNote,
+            $issueTypes,
+            $issueMessages,
+            $combinedMessage,
+            $firstIssueType,
+            $firstIssueLabel
+        ): StudentSportsObservation {
             $observation = StudentSportsObservation::query()->create([
                 'student_id' => (int) $student->id,
                 'class_id' => $student->class_id ? (int) $student->class_id : null,
                 'sports_teacher_id' => (int) $sportsTeacher->id,
                 'session' => $session,
                 'observation_date' => $observationDate,
-                'issue_type' => $issueType,
-                'issue_label' => $issueLabel,
-                'auto_message' => $autoMessage,
+                'issue_type' => $firstIssueType,
+                'issue_label' => $firstIssueLabel,
+                'auto_message' => $combinedMessage,
+                'combined_auto_message' => $combinedMessage,
+                'custom_note' => $customNote,
                 'severity' => $severity,
                 'status' => StudentSportsObservation::STATUS_OPEN,
                 'created_by' => (int) $sportsTeacher->id,
                 'updated_by' => (int) $sportsTeacher->id,
             ]);
+
+            $issuesPayload = collect($issueTypes)
+                ->values()
+                ->map(fn (string $issueType): array => [
+                    'issue_type' => $issueType,
+                    'issue_label' => StudentSportsObservation::issueLabelFor($issueType),
+                    'auto_message' => (string) ($issueMessages[$issueType] ?? ''),
+                ])
+                ->all();
+
+            $observation->issues()->createMany($issuesPayload);
 
             $this->notifyPrincipalAndWardens($observation);
 
@@ -149,33 +176,78 @@ class SportsObservationService
             'classRoom:id,name,section',
             'sportsTeacher:id,name',
             'createdBy:id,name',
+            'issues:id,student_sports_observation_id,issue_type,issue_label,auto_message',
         ]);
     }
 
     public function generateAutoMessage(Student $student, string $issueType, ?string $customNote = null): string
     {
+        $messages = $this->generateAutoMessages($student, [$issueType], $customNote);
+
+        return (string) ($messages[$issueType] ?? '');
+    }
+
+    /**
+     * @param array<int, string> $issueTypes
+     * @return array<string, string>
+     */
+    public function generateAutoMessages(Student $student, array $issueTypes, ?string $customNote = null): array
+    {
         $studentName = trim((string) $student->name);
         $classSection = trim((string) ($student->classRoom?->name ?? '').' '.(string) ($student->classRoom?->section ?? ''));
+        $note = trim((string) $customNote);
 
-        $templates = [
-            StudentSportsObservation::ISSUE_NAILS_NOT_CUT => 'Student {student_name} of {class_section} came to sports class with nails not properly cut. Kindly ensure personal hygiene is maintained.',
-            StudentSportsObservation::ISSUE_HAIR_NOT_CUT => 'Student {student_name} of {class_section} needs a proper haircut as per school discipline policy.',
-            StudentSportsObservation::ISSUE_UNIFORM_NOT_NEAT => 'Student {student_name} of {class_section} was observed with an untidy uniform during sports class.',
-            StudentSportsObservation::ISSUE_SHOES_NOT_POLISHED => 'Student {student_name} of {class_section} came with shoes not properly polished.',
-            StudentSportsObservation::ISSUE_NOT_CLEAN => 'Student {student_name} of {class_section} was not properly clean and needs attention regarding personal hygiene.',
-            StudentSportsObservation::ISSUE_POOR_SPORTS_DISCIPLINE => 'Student {student_name} of {class_section} showed poor discipline during sports class and needs guidance.',
-        ];
+        $messages = [];
+        foreach ($this->sanitizeIssueTypes($issueTypes) as $issueType) {
+            $template = $this->issueTemplates()[$issueType] ?? 'Student {student_name} of {class_section} needs attention from sports discipline perspective.';
+            $message = str_replace(
+                ['{student_name}', '{class_section}'],
+                [$studentName !== '' ? $studentName : 'Student', $classSection !== '' ? $classSection : 'Unknown Class'],
+                $template
+            );
 
-        $template = $templates[$issueType] ?? 'Student {student_name} of {class_section} needs attention from sports discipline perspective.';
+            if ($note !== '') {
+                $message .= ' Note: '.$note;
+            }
 
-        $message = str_replace(
-            ['{student_name}', '{class_section}'],
-            [$studentName !== '' ? $studentName : 'Student', $classSection !== '' ? $classSection : 'Unknown Class'],
-            $template
+            $messages[$issueType] = $message;
+        }
+
+        return $messages;
+    }
+
+    /**
+     * @param array<int, string> $issueTypes
+     */
+    public function generateCombinedAutoMessage(Student $student, array $issueTypes, ?string $customNote = null): string
+    {
+        $normalizedIssueTypes = $this->sanitizeIssueTypes($issueTypes);
+        if ($normalizedIssueTypes === []) {
+            return '';
+        }
+
+        $studentName = trim((string) $student->name);
+        $classSection = trim((string) ($student->classRoom?->name ?? '').' '.(string) ($student->classRoom?->section ?? ''));
+        $note = trim((string) $customNote);
+
+        $header = sprintf(
+            'Student %s of %s needs attention for the following:',
+            $studentName !== '' ? $studentName : 'Student',
+            $classSection !== '' ? $classSection : 'Unknown Class'
         );
 
-        if ($customNote !== null && trim($customNote) !== '') {
-            $message .= ' Note: '.trim($customNote);
+        $lineMap = $this->combinedIssueLines();
+        $lines = collect($normalizedIssueTypes)
+            ->map(fn (string $issueType): string => (string) ($lineMap[$issueType] ?? StudentSportsObservation::issueLabelFor($issueType)))
+            ->values();
+
+        $numberedLines = $lines
+            ->map(fn (string $line, int $index): string => ($index + 1).'. '.$line)
+            ->implode("\n");
+
+        $message = $header."\n".$numberedLines."\n\nKindly ensure improvement.";
+        if ($note !== '') {
+            $message .= "\nNote: ".$note;
         }
 
         return $message;
@@ -187,6 +259,7 @@ class SportsObservationService
             'student.classRoom:id,name,section',
             'classRoom:id,name,section',
             'sportsTeacher:id,name',
+            'issues:id,student_sports_observation_id,issue_type,issue_label,auto_message',
         ]);
 
         $principalRecipients = $this->activeUsersByRoles(['Principal', 'Admin']);
@@ -236,6 +309,8 @@ class SportsObservationService
             ->withQueryString();
 
         $today = now()->toDateString();
+        $mostCommonIssueToday = $this->mostCommonIssueLabelForTeacher((int) $teacher->id, $today);
+
         $cards = [
             'today_observations' => StudentSportsObservation::query()
                 ->where('sports_teacher_id', (int) $teacher->id)
@@ -253,13 +328,7 @@ class SportsObservationService
                 ->where('sports_teacher_id', (int) $teacher->id)
                 ->where('status', StudentSportsObservation::STATUS_RESOLVED)
                 ->count(),
-            'most_common_issue_today' => StudentSportsObservation::query()
-                ->where('sports_teacher_id', (int) $teacher->id)
-                ->whereDate('observation_date', $today)
-                ->select('issue_type', 'issue_label', DB::raw('COUNT(*) as total'))
-                ->groupBy('issue_type', 'issue_label')
-                ->orderByDesc('total')
-                ->value('issue_label') ?? 'N/A',
+            'most_common_issue_today' => $mostCommonIssueToday,
         ];
 
         return [
@@ -325,18 +394,7 @@ class SportsObservationService
             'serious' => (int) (clone $summaryQuery)->where('severity', StudentSportsObservation::SEVERITY_SERIOUS)->count(),
         ];
 
-        $issueSummary = (clone $summaryQuery)
-            ->select('issue_type', 'issue_label', DB::raw('COUNT(*) as total'))
-            ->groupBy('issue_type', 'issue_label')
-            ->orderByDesc('total')
-            ->get()
-            ->map(fn ($row): array => [
-                'issue_type' => (string) $row->issue_type,
-                'issue_label' => (string) $row->issue_label,
-                'total' => (int) $row->total,
-            ])
-            ->values()
-            ->all();
+        $issueSummary = $this->issueSummaryFromFilteredObservations(clone $summaryQuery);
 
         $classSummary = (clone $summaryQuery)
             ->leftJoin('school_classes', 'school_classes.id', '=', 'student_sports_observations.class_id')
@@ -418,6 +476,7 @@ class SportsObservationService
             'classRoom:id,name,section',
             'sportsTeacher:id,name',
             'updatedBy:id,name',
+            'issues:id,student_sports_observation_id,issue_type,issue_label,auto_message',
         ]);
     }
 
@@ -442,6 +501,7 @@ class SportsObservationService
             'sportsTeacher:id,name',
             'resolvedBy:id,name',
             'updatedBy:id,name',
+            'issues:id,student_sports_observation_id,issue_type,issue_label,auto_message',
         ]);
     }
 
@@ -499,7 +559,11 @@ class SportsObservationService
         }
 
         if (isset($filters['issue_type']) && $filters['issue_type'] !== null) {
-            $query->where('issue_type', (string) $filters['issue_type']);
+            $issueType = (string) $filters['issue_type'];
+            $query->where(function (Builder $issueQuery) use ($issueType): void {
+                $issueQuery->where('issue_type', $issueType)
+                    ->orWhereHas('issues', fn (Builder $subQuery) => $subQuery->where('issue_type', $issueType));
+            });
         }
 
         if (isset($filters['sports_teacher_id']) && $filters['sports_teacher_id'] !== null) {
@@ -526,6 +590,7 @@ class SportsObservationService
                 'createdBy:id,name',
                 'updatedBy:id,name',
                 'resolvedBy:id,name',
+                'issues:id,student_sports_observation_id,issue_type,issue_label,auto_message',
             ]);
     }
 
@@ -620,5 +685,178 @@ class SportsObservationService
     private function resolveSession(?string $session): string
     {
         return $this->dailyDiaryService->resolveSession($session);
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     * @return array<int, string>
+     */
+    private function extractIssueTypes(array $data): array
+    {
+        $issueTypes = [];
+
+        if (isset($data['issue_types']) && is_array($data['issue_types'])) {
+            $issueTypes = array_map(static fn ($value): string => trim((string) $value), $data['issue_types']);
+        }
+
+        $legacyIssueType = trim((string) ($data['issue_type'] ?? ''));
+        if ($legacyIssueType !== '') {
+            $issueTypes[] = $legacyIssueType;
+        }
+
+        return $this->sanitizeIssueTypes($issueTypes);
+    }
+
+    /**
+     * @param array<int, string> $issueTypes
+     * @return array<int, string>
+     */
+    private function sanitizeIssueTypes(array $issueTypes): array
+    {
+        return collect($issueTypes)
+            ->map(static fn ($issueType): string => trim((string) $issueType))
+            ->filter(fn (string $issueType): bool => array_key_exists($issueType, StudentSportsObservation::ISSUE_LABELS))
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param array<int, string> $issueTypes
+     * @return array<int, string>
+     */
+    private function findDuplicateIssueTypes(int $studentId, array $issueTypes, string $observationDate, string $session): array
+    {
+        $selectedIssueTypes = $this->sanitizeIssueTypes($issueTypes);
+        if ($selectedIssueTypes === []) {
+            return [];
+        }
+
+        $matchingObservations = StudentSportsObservation::query()
+            ->with('issues:id,student_sports_observation_id,issue_type')
+            ->where('student_id', $studentId)
+            ->whereDate('observation_date', $observationDate)
+            ->where('session', $session)
+            ->where(function (Builder $query) use ($selectedIssueTypes): void {
+                $query->whereIn('issue_type', $selectedIssueTypes)
+                    ->orWhereHas('issues', fn (Builder $issueQuery) => $issueQuery->whereIn('issue_type', $selectedIssueTypes));
+            })
+            ->get(['id', 'issue_type']);
+
+        $matchedTypes = collect();
+        foreach ($matchingObservations as $observation) {
+            $legacyType = trim((string) $observation->issue_type);
+            if ($legacyType !== '') {
+                $matchedTypes->push($legacyType);
+            }
+
+            foreach ($observation->issues as $issue) {
+                $type = trim((string) $issue->issue_type);
+                if ($type !== '') {
+                    $matchedTypes->push($type);
+                }
+            }
+        }
+
+        return $matchedTypes
+            ->filter(fn (string $type): bool => in_array($type, $selectedIssueTypes, true))
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function issueTemplates(): array
+    {
+        return [
+            StudentSportsObservation::ISSUE_NAILS_NOT_CUT => 'Student {student_name} of {class_section} came to sports class with nails not properly cut. Kindly ensure personal hygiene is maintained.',
+            StudentSportsObservation::ISSUE_HAIR_NOT_CUT => 'Student {student_name} of {class_section} needs a proper haircut as per school discipline policy.',
+            StudentSportsObservation::ISSUE_UNIFORM_NOT_NEAT => 'Student {student_name} of {class_section} was observed with an untidy uniform during sports class.',
+            StudentSportsObservation::ISSUE_SHOES_NOT_POLISHED => 'Student {student_name} of {class_section} came with shoes not properly polished.',
+            StudentSportsObservation::ISSUE_NOT_CLEAN => 'Student {student_name} of {class_section} was not properly clean and needs attention regarding personal hygiene.',
+            StudentSportsObservation::ISSUE_POOR_SPORTS_DISCIPLINE => 'Student {student_name} of {class_section} showed poor discipline during sports class and needs guidance.',
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function combinedIssueLines(): array
+    {
+        return [
+            StudentSportsObservation::ISSUE_NAILS_NOT_CUT => 'Nails are not properly cut.',
+            StudentSportsObservation::ISSUE_HAIR_NOT_CUT => 'Haircut is required.',
+            StudentSportsObservation::ISSUE_UNIFORM_NOT_NEAT => 'Uniform is not neat.',
+            StudentSportsObservation::ISSUE_SHOES_NOT_POLISHED => 'Shoes are not properly polished.',
+            StudentSportsObservation::ISSUE_NOT_CLEAN => 'Personal cleanliness needs attention.',
+            StudentSportsObservation::ISSUE_POOR_SPORTS_DISCIPLINE => 'Sports class discipline needs improvement.',
+        ];
+    }
+
+    private function mostCommonIssueLabelForTeacher(int $teacherId, string $date): string
+    {
+        $observations = StudentSportsObservation::query()
+            ->with('issues:id,student_sports_observation_id,issue_type,issue_label')
+            ->where('sports_teacher_id', $teacherId)
+            ->whereDate('observation_date', $date)
+            ->get(['id', 'issue_type', 'issue_label']);
+
+        $counts = [];
+        foreach ($observations as $observation) {
+            foreach ($observation->resolvedIssueItems() as $issue) {
+                $label = trim((string) ($issue['label'] ?? ''));
+                if ($label === '') {
+                    continue;
+                }
+
+                $counts[$label] = ($counts[$label] ?? 0) + 1;
+            }
+        }
+
+        if ($counts === []) {
+            return 'N/A';
+        }
+
+        arsort($counts);
+
+        return (string) array_key_first($counts);
+    }
+
+    /**
+     * @return array<int, array{issue_type:string,issue_label:string,total:int}>
+     */
+    private function issueSummaryFromFilteredObservations(Builder $filteredQuery): array
+    {
+        $observations = $filteredQuery
+            ->with('issues:id,student_sports_observation_id,issue_type,issue_label')
+            ->get(['id', 'issue_type', 'issue_label']);
+
+        $countsByType = [];
+        foreach ($observations as $observation) {
+            foreach ($observation->resolvedIssueItems() as $issue) {
+                $issueType = trim((string) ($issue['type'] ?? ''));
+                if ($issueType === '') {
+                    continue;
+                }
+
+                $issueLabel = trim((string) ($issue['label'] ?? StudentSportsObservation::issueLabelFor($issueType)));
+                if (! isset($countsByType[$issueType])) {
+                    $countsByType[$issueType] = [
+                        'issue_type' => $issueType,
+                        'issue_label' => $issueLabel,
+                        'total' => 0,
+                    ];
+                }
+
+                $countsByType[$issueType]['total']++;
+            }
+        }
+
+        return collect(array_values($countsByType))
+            ->sortByDesc('total')
+            ->values()
+            ->all();
     }
 }

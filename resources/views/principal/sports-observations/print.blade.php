@@ -152,8 +152,8 @@
                         <th>Student Name</th>
                         <th>Admission No</th>
                         <th>Class/Section</th>
-                        <th>Issue</th>
-                        <th>Auto Message</th>
+                        <th>Issues</th>
+                        <th>Message</th>
                         <th>Sports Teacher</th>
                         <th>Status</th>
                     </tr>
@@ -166,8 +166,8 @@
                             <td>{{ $observation->student?->name ?? '-' }}</td>
                             <td>{{ $observation->student?->student_id ?? '-' }}</td>
                             <td>{{ trim(($observation->classRoom?->name ?? '').' '.($observation->classRoom?->section ?? '')) ?: '-' }}</td>
-                            <td>{{ $observation->issue_label }}</td>
-                            <td>{{ $observation->auto_message }}</td>
+                            <td>{{ $observation->resolvedIssueLabelText() }}</td>
+                            <td>{{ $observation->resolvedCombinedMessage() }}</td>
                             <td>{{ $observation->sportsTeacher?->name ?? '-' }}</td>
                             <td>{{ ucfirst((string) $observation->status) }}</td>
                         </tr>

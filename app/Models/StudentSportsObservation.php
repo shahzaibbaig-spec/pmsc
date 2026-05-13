@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class StudentSportsObservation extends Model
 {
@@ -61,6 +62,8 @@ class StudentSportsObservation extends Model
         'issue_type',
         'issue_label',
         'auto_message',
+        'combined_auto_message',
+        'custom_note',
         'severity',
         'status',
         'resolved_at',
@@ -93,6 +96,69 @@ class StudentSportsObservation extends Model
         return self::ISSUE_LABELS[$issueType] ?? str_replace('_', ' ', ucfirst($issueType));
     }
 
+    /**
+     * @return array<int, array{type:string,label:string,message:string}>
+     */
+    public function resolvedIssueItems(): array
+    {
+        $issues = $this->relationLoaded('issues')
+            ? $this->issues
+            : $this->issues()->get(['issue_type', 'issue_label', 'auto_message']);
+
+        if ($issues->isNotEmpty()) {
+            return $issues
+                ->map(fn (StudentSportsObservationIssue $issue): array => [
+                    'type' => (string) $issue->issue_type,
+                    'label' => (string) ($issue->issue_label ?: self::issueLabelFor((string) $issue->issue_type)),
+                    'message' => (string) $issue->auto_message,
+                ])
+                ->unique('type')
+                ->values()
+                ->all();
+        }
+
+        $legacyType = trim((string) $this->issue_type);
+        if ($legacyType === '') {
+            return [];
+        }
+
+        return [[
+            'type' => $legacyType,
+            'label' => trim((string) ($this->issue_label ?: self::issueLabelFor($legacyType))),
+            'message' => (string) $this->auto_message,
+        ]];
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function resolvedIssueLabels(): array
+    {
+        return collect($this->resolvedIssueItems())
+            ->pluck('label')
+            ->filter(fn ($label): bool => is_string($label) && trim($label) !== '')
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    public function resolvedIssueLabelText(string $separator = ', '): string
+    {
+        $labels = $this->resolvedIssueLabels();
+
+        return $labels !== [] ? implode($separator, $labels) : '-';
+    }
+
+    public function resolvedCombinedMessage(): string
+    {
+        $combined = trim((string) ($this->combined_auto_message ?? ''));
+        if ($combined !== '') {
+            return $combined;
+        }
+
+        return (string) ($this->auto_message ?? '');
+    }
+
     public function student(): BelongsTo
     {
         return $this->belongsTo(Student::class);
@@ -106,6 +172,11 @@ class StudentSportsObservation extends Model
     public function sportsTeacher(): BelongsTo
     {
         return $this->belongsTo(User::class, 'sports_teacher_id');
+    }
+
+    public function issues(): HasMany
+    {
+        return $this->hasMany(StudentSportsObservationIssue::class, 'student_sports_observation_id');
     }
 
     public function createdBy(): BelongsTo

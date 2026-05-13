@@ -3,7 +3,7 @@
         <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
                 <h2 class="text-xl font-semibold text-slate-900">New Sports Observation</h2>
-                <p class="mt-1 text-sm text-slate-500">Search student globally, select issue, preview message, and submit.</p>
+                <p class="mt-1 text-sm text-slate-500">Search student globally, select one or more issues, preview combined message, and submit.</p>
             </div>
             <a href="{{ route('sports-teacher.observations.index') }}" class="inline-flex min-h-11 items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
                 Back to List
@@ -66,13 +66,25 @@
 
                 <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
                     <div>
-                        <label for="issue_type" class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Issue Type</label>
-                        <select id="issue_type" name="issue_type" class="mt-1 block min-h-11 w-full rounded-xl border-slate-300 text-sm" required>
-                            <option value="">Select Issue</option>
+                        @php
+                            $oldIssueTypes = old('issue_types', old('issue_type') ? [old('issue_type')] : []);
+                        @endphp
+                        <p class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Select Issues</p>
+                        <div class="mt-2 grid grid-cols-1 gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
                             @foreach ($issue_options as $key => $label)
-                                <option value="{{ $key }}" @selected(old('issue_type') === $key)>{{ $label }}</option>
+                                <label class="inline-flex items-center gap-2 text-sm text-slate-700">
+                                    <input
+                                        type="checkbox"
+                                        name="issue_types[]"
+                                        value="{{ $key }}"
+                                        @checked(in_array($key, (array) $oldIssueTypes, true))
+                                        class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                    >
+                                    <span>{{ $label }}</span>
+                                </label>
                             @endforeach
-                        </select>
+                        </div>
+                        <p class="mt-2 text-xs text-slate-500">Choose one or more issues for the same student observation.</p>
                     </div>
                     <div>
                         <label for="custom_note" class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Custom Note (Optional)</label>
@@ -82,12 +94,12 @@
 
                 <div class="rounded-xl border border-indigo-200 bg-indigo-50 p-4">
                     <p class="text-xs font-semibold uppercase tracking-wide text-indigo-700">Auto-generated Message Preview</p>
-                    <p id="auto_message_preview" class="mt-2 whitespace-pre-line text-sm text-indigo-900">Select student and issue type to preview the message.</p>
+                    <p id="auto_message_preview" class="mt-2 whitespace-pre-line text-sm text-indigo-900">Select student and one or more issues to preview the combined message.</p>
                 </div>
 
                 <div class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
                     <p class="font-semibold">Duplicate Handling</p>
-                    <p class="mt-1">If the same student already has the same issue on the same date/session, the system warns before saving. You can still submit by choosing repeated severity or confirming below.</p>
+                    <p class="mt-1">If the same student already has one or more of the selected issues on the same date/session, the system warns before saving. You can still submit by choosing repeated severity or confirming below.</p>
                     <label class="mt-3 inline-flex items-center gap-2">
                         <input type="checkbox" name="confirm_duplicate" value="1" @checked(old('confirm_duplicate')) class="h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500">
                         <span>Confirm duplicate entry if warning appears.</span>
@@ -113,7 +125,7 @@
                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Date</th>
                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Student</th>
                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Class</th>
-                            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Issue</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Issues</th>
                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
                         </tr>
                     </thead>
@@ -123,7 +135,7 @@
                                 <td class="px-4 py-4 text-sm text-slate-700">{{ optional($observation->observation_date)->format('d M Y') ?: '-' }}</td>
                                 <td class="px-4 py-4 text-sm text-slate-900">{{ $observation->student?->name }}</td>
                                 <td class="px-4 py-4 text-sm text-slate-700">{{ trim(($observation->classRoom?->name ?? '').' '.($observation->classRoom?->section ?? '')) ?: '-' }}</td>
-                                <td class="px-4 py-4 text-sm text-slate-700">{{ $observation->issue_label }}</td>
+                                <td class="px-4 py-4 text-sm text-slate-700">{{ $observation->resolvedIssueLabelText() }}</td>
                                 <td class="px-4 py-4 text-sm text-slate-700">{{ ucfirst($observation->status) }}</td>
                             </tr>
                         @empty
@@ -140,49 +152,59 @@
     <script>
         (() => {
             const endpoint = @json(route('sports-teacher.students.search'));
-            const issueTemplates = @json($issue_options);
-            const previewTemplates = {
-                nails_not_cut: 'Student {student_name} of {class_section} came to sports class with nails not properly cut. Kindly ensure personal hygiene is maintained.',
-                hair_not_cut: 'Student {student_name} of {class_section} needs a proper haircut as per school discipline policy.',
-                uniform_not_neat: 'Student {student_name} of {class_section} was observed with an untidy uniform during sports class.',
-                shoes_not_polished: 'Student {student_name} of {class_section} came with shoes not properly polished.',
-                not_clean: 'Student {student_name} of {class_section} was not properly clean and needs attention regarding personal hygiene.',
-                poor_sports_discipline: 'Student {student_name} of {class_section} showed poor discipline during sports class and needs guidance.',
+            const previewLines = {
+                nails_not_cut: 'Nails are not properly cut.',
+                hair_not_cut: 'Haircut is required.',
+                uniform_not_neat: 'Uniform is not neat.',
+                shoes_not_polished: 'Shoes are not properly polished.',
+                not_clean: 'Personal cleanliness needs attention.',
+                poor_sports_discipline: 'Sports class discipline needs improvement.',
             };
 
             const searchInput = document.getElementById('student_search');
             const studentIdInput = document.getElementById('student_id');
             const selectedStudent = document.getElementById('selected_student');
             const resultBox = document.getElementById('student_results');
-            const issueTypeInput = document.getElementById('issue_type');
+            const issueTypeInputs = Array.from(document.querySelectorAll('input[name="issue_types[]"]'));
             const customNoteInput = document.getElementById('custom_note');
             const previewBox = document.getElementById('auto_message_preview');
             const sessionInput = document.getElementById('session');
 
-            if (!searchInput || !studentIdInput || !selectedStudent || !resultBox || !issueTypeInput || !customNoteInput || !previewBox || !sessionInput) {
+            if (!searchInput || !studentIdInput || !selectedStudent || !resultBox || !customNoteInput || !previewBox || !sessionInput) {
                 return;
             }
 
             let selected = null;
 
-            const setPreview = () => {
-                const issueType = issueTypeInput.value;
-                const template = previewTemplates[issueType] || '';
+            const selectedIssueTypes = () => issueTypeInputs
+                .filter((checkbox) => checkbox.checked)
+                .map((checkbox) => checkbox.value);
 
-                if (!template) {
-                    previewBox.textContent = 'Select student and issue type to preview the message.';
+            const setPreview = () => {
+                const issueTypes = selectedIssueTypes();
+                if (issueTypes.length === 0) {
+                    previewBox.textContent = 'Select student and one or more issues to preview the combined message.';
                     return;
                 }
 
                 const studentName = selected?.student_name || 'Student';
                 const classSection = selected?.class_section || 'Unknown Class';
-                let message = template
-                    .replace('{student_name}', studentName)
-                    .replace('{class_section}', classSection);
+                const lines = issueTypes
+                    .map((issueType) => previewLines[issueType] || null)
+                    .filter(Boolean);
+
+                if (lines.length === 0) {
+                    previewBox.textContent = 'Select student and one or more issues to preview the combined message.';
+                    return;
+                }
+
+                let message = `Student ${studentName} of ${classSection} needs attention for the following:\n`;
+                message += lines.map((line, index) => `${index + 1}. ${line}`).join('\n');
+                message += '\n\nKindly ensure improvement.';
 
                 const customNote = customNoteInput.value.trim();
                 if (customNote !== '') {
-                    message += ` Note: ${customNote}`;
+                    message += `\nNote: ${customNote}`;
                 }
 
                 previewBox.textContent = message;
@@ -245,7 +267,7 @@
                 fetchStudents();
             });
 
-            issueTypeInput.addEventListener('change', setPreview);
+            issueTypeInputs.forEach((checkbox) => checkbox.addEventListener('change', setPreview));
             customNoteInput.addEventListener('input', setPreview);
 
             resultBox.addEventListener('click', (event) => {

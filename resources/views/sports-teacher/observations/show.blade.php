@@ -30,17 +30,30 @@
 
         <section class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <h3 class="text-lg font-semibold text-slate-900">Observation Details</h3>
+            @php
+                $issueItems = $observation->resolvedIssueItems();
+            @endphp
             <div class="mt-4 grid grid-cols-1 gap-3 text-sm text-slate-700 md:grid-cols-2">
-                <p><span class="font-semibold text-slate-900">Issue:</span> {{ $observation->issue_label }}</p>
-                <p><span class="font-semibold text-slate-900">Issue Type:</span> {{ $observation->issue_type }}</p>
+                <p><span class="font-semibold text-slate-900">Issue(s):</span> {{ $observation->resolvedIssueLabelText() }}</p>
+                <p><span class="font-semibold text-slate-900">Issue Type(s):</span> {{ collect($issueItems)->pluck('type')->implode(', ') ?: '-' }}</p>
                 <p><span class="font-semibold text-slate-900">Severity:</span> {{ ucfirst($observation->severity) }}</p>
                 <p><span class="font-semibold text-slate-900">Status:</span> {{ ucfirst($observation->status) }}</p>
                 <p><span class="font-semibold text-slate-900">Submitted By:</span> {{ $observation->sportsTeacher?->name ?? '-' }}</p>
                 <p><span class="font-semibold text-slate-900">Last Updated:</span> {{ optional($observation->updated_at)->format('d M Y h:i A') ?: '-' }}</p>
             </div>
+            <div class="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <p class="text-xs font-semibold uppercase tracking-wide text-slate-700">Issue-wise Messages</p>
+                <ul class="mt-2 space-y-2 text-sm text-slate-700">
+                    @forelse ($issueItems as $issue)
+                        <li><span class="font-semibold">{{ $issue['label'] }}:</span> {{ $issue['message'] }}</li>
+                    @empty
+                        <li>-</li>
+                    @endforelse
+                </ul>
+            </div>
             <div class="mt-5 rounded-xl border border-indigo-200 bg-indigo-50 p-4">
-                <p class="text-xs font-semibold uppercase tracking-wide text-indigo-700">Auto Message</p>
-                <p class="mt-2 whitespace-pre-line text-sm text-indigo-900">{{ $observation->auto_message }}</p>
+                <p class="text-xs font-semibold uppercase tracking-wide text-indigo-700">Combined Auto Message</p>
+                <p class="mt-2 whitespace-pre-line text-sm text-indigo-900">{{ $observation->resolvedCombinedMessage() }}</p>
             </div>
         </section>
 
