@@ -23,6 +23,7 @@ use App\Http\Controllers\CareerCounselor\Kcat\KcatTestController;
 use App\Http\Controllers\Principal\CareerAssessmentController as PrincipalCareerAssessmentController;
 use App\Http\Controllers\Principal\CareerCounselingController;
 use App\Http\Controllers\Principal\CareerParentMeetingController as PrincipalCareerParentMeetingController;
+use App\Http\Controllers\Principal\DisciplineReportController as PrincipalDisciplineReportController;
 use App\Http\Controllers\Principal\CareerReportController as PrincipalCareerReportController;
 use App\Http\Controllers\Principal\SportsObservationController as PrincipalSportsObservationController;
 use App\Http\Controllers\Principal\StudentListController as PrincipalClassWiseStudentListController;
@@ -46,6 +47,8 @@ use App\Http\Controllers\Student\KcatAttemptController as StudentKcatAttemptCont
 use App\Http\Controllers\Student\StudentDailyDiaryController;
 use App\Http\Controllers\Teacher\DailyDiaryController;
 use App\Http\Controllers\Teacher\TeacherDeviceDeclarationController;
+use App\Http\Controllers\Teacher\DisciplineReportController as TeacherDisciplineReportController;
+use App\Http\Controllers\Teacher\DisciplineStudentSearchController as TeacherDisciplineStudentSearchController;
 use App\Http\Controllers\Teacher\TeacherEResourceController;
 use App\Http\Controllers\Teacher\TeacherInventoryController;
 use App\Http\Controllers\Teacher\TeacherInventoryDemandController;
@@ -56,6 +59,7 @@ use App\Http\Controllers\SportsTeacher\StudentSearchController as SportsTeacherS
 use App\Http\Controllers\Warden\WardenDailyDiaryController;
 use App\Http\Controllers\Warden\WardenDailyReportController;
 use App\Http\Controllers\Warden\WardenDashboardController;
+use App\Http\Controllers\Warden\DisciplineReportController as WardenClassDisciplineReportController;
 use App\Http\Controllers\Warden\WardenDisciplineController;
 use App\Http\Controllers\Warden\SportsObservationController as WardenSportsObservationController;
 use App\Http\Controllers\Warden\HostelLeaveController;
@@ -966,6 +970,30 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
                 ->name('resolve');
         });
 
+    Route::prefix('principal/discipline-reports')
+        ->name('principal.discipline-reports.')
+        ->middleware(['role:Principal,Admin', 'permission:view_all_student_discipline_reports'])
+        ->group(function (): void {
+            Route::get('/', [PrincipalDisciplineReportController::class, 'index'])
+                ->name('index');
+            Route::get('/daily', [PrincipalDisciplineReportController::class, 'daily'])
+                ->name('daily');
+            Route::get('/print', [PrincipalDisciplineReportController::class, 'print'])
+                ->middleware('permission:print_student_discipline_reports')
+                ->name('print');
+            Route::get('/{report}', [PrincipalDisciplineReportController::class, 'show'])
+                ->whereNumber('report')
+                ->name('show');
+            Route::post('/{report}/acknowledge', [PrincipalDisciplineReportController::class, 'acknowledge'])
+                ->middleware('permission:acknowledge_student_discipline_report')
+                ->whereNumber('report')
+                ->name('acknowledge');
+            Route::post('/{report}/resolve', [PrincipalDisciplineReportController::class, 'resolve'])
+                ->middleware('permission:resolve_student_discipline_report')
+                ->whereNumber('report')
+                ->name('resolve');
+        });
+
     Route::get('/principal/analytics/performance-insights/data', [PerformanceInsightsController::class, 'data'])
         ->middleware(['role:Principal', 'permission:view_teacher_performance'])
         ->name('principal.analytics.performance-insights.data');
@@ -1453,6 +1481,28 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
         ->middleware('role:Teacher')
         ->name('teacher.dashboard');
 
+    Route::prefix('teacher/discipline-reports')
+        ->name('teacher.discipline-reports.')
+        ->middleware(['role:Teacher'])
+        ->group(function (): void {
+            Route::get('/', [TeacherDisciplineReportController::class, 'index'])
+                ->middleware('permission:view_own_student_discipline_reports')
+                ->name('index');
+            Route::get('/create', [TeacherDisciplineReportController::class, 'create'])
+                ->middleware('permission:create_student_discipline_report')
+                ->name('create');
+            Route::post('/', [TeacherDisciplineReportController::class, 'store'])
+                ->middleware('permission:create_student_discipline_report')
+                ->name('store');
+            Route::get('/students/search', TeacherDisciplineStudentSearchController::class)
+                ->middleware('permission:create_student_discipline_report')
+                ->name('students.search');
+            Route::get('/{report}', [TeacherDisciplineReportController::class, 'show'])
+                ->middleware('permission:view_own_student_discipline_reports')
+                ->whereNumber('report')
+                ->name('show');
+        });
+
     Route::get('/teacher/e-resources', [TeacherEResourceController::class, 'index'])
         ->middleware(['role:Principal,Teacher'])
         ->name('teacher.e-resources.index');
@@ -1686,6 +1736,20 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
         ->middleware(['role:Warden', 'permission:view_student_discipline_reports'])
         ->whereNumber('report')
         ->name('warden.discipline-reports.show');
+
+    Route::get('/warden/class-discipline-reports', [WardenClassDisciplineReportController::class, 'index'])
+        ->middleware(['role:Warden', 'permission:view_all_student_discipline_reports'])
+        ->name('warden.class-discipline-reports.index');
+
+    Route::get('/warden/class-discipline-reports/{report}', [WardenClassDisciplineReportController::class, 'show'])
+        ->middleware(['role:Warden', 'permission:view_all_student_discipline_reports'])
+        ->whereNumber('report')
+        ->name('warden.class-discipline-reports.show');
+
+    Route::post('/warden/class-discipline-reports/{report}/acknowledge', [WardenClassDisciplineReportController::class, 'acknowledge'])
+        ->middleware(['role:Warden', 'permission:acknowledge_student_discipline_report'])
+        ->whereNumber('report')
+        ->name('warden.class-discipline-reports.acknowledge');
 
     Route::get('/warden/sports-observations', [WardenSportsObservationController::class, 'index'])
         ->middleware(['role:Warden', 'permission:view_all_sports_observations'])

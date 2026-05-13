@@ -96,6 +96,10 @@
                     <h3 class="text-base font-semibold text-slate-900">Discipline Reports</h3>
                     <p class="mt-1 text-sm text-slate-500">Review student incidents and case status updates.</p>
                 </a>
+                <a href="{{ route('warden.class-discipline-reports.index') }}" class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:bg-slate-50">
+                    <h3 class="text-base font-semibold text-slate-900">Class Discipline Reports</h3>
+                    <p class="mt-1 text-sm text-slate-500">Review teacher-submitted classroom discipline reports.</p>
+                </a>
                 <a href="{{ route('warden.students.index') }}" class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:bg-slate-50">
                     <h3 class="text-base font-semibold text-slate-900">Students / Educational Records</h3>
                     <p class="mt-1 text-sm text-slate-500">Open student profiles for attendance and academic history.</p>

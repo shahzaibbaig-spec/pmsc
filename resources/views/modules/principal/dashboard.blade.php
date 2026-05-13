@@ -39,6 +39,9 @@
             @can('view_all_sports_observations')
                 <x-ui.button href="{{ route('principal.sports-observations.daily') }}" variant="outline">Sports Daily Report</x-ui.button>
             @endcan
+            @can('view_all_student_discipline_reports')
+                <x-ui.button href="{{ route('principal.discipline-reports.daily') }}" variant="outline">Class Discipline Report</x-ui.button>
+            @endcan
             @can('view_attendance')
                 <x-ui.button href="{{ route('principal.attendance.index') }}" variant="outline">Class Attendance</x-ui.button>
             @endcan

@@ -108,6 +108,9 @@
         if ($sidebarUser?->can('view_all_sports_observations')) {
             $menuItems[] = ['route' => 'principal.sports-observations.index', 'label' => 'Sports Observations'];
         }
+        if ($sidebarUser?->can('view_all_student_discipline_reports')) {
+            $menuItems[] = ['route' => 'principal.discipline-reports.index', 'label' => 'Class Discipline Reports'];
+        }
         if ($sidebarUser?->can('generate_results')) {
             $menuItems[] = ['route' => 'principal.result-locks.index', 'label' => 'Result Locks'];
         }
@@ -192,6 +195,9 @@
         }
         if ($sidebarUser?->can('view_all_sports_observations')) {
             $menuItems[] = ['route' => 'principal.sports-observations.index', 'label' => 'Sports Observations'];
+        }
+        if ($sidebarUser?->can('view_all_student_discipline_reports')) {
+            $menuItems[] = ['route' => 'principal.discipline-reports.index', 'label' => 'Class Discipline Reports'];
         }
         if ($sidebarUser?->can('generate_results')) {
             $menuItems[] = ['route' => 'principal.result-locks.index', 'label' => 'Result Locks'];
@@ -311,6 +317,9 @@
         if ($sidebarUser?->can('view_own_mark_entries')) {
             $menuItems[] = ['route' => 'teacher.marks.entries.index', 'label' => 'My Mark Entries'];
         }
+        if ($sidebarUser?->can('create_student_discipline_report') || $sidebarUser?->can('view_own_student_discipline_reports')) {
+            $menuItems[] = ['route' => 'teacher.discipline-reports.index', 'label' => 'Class Discipline Reports'];
+        }
 
         $menuItems[] = ['route' => 'teacher.timetable.index', 'label' => 'Timetable'];
         $menuItems[] = ['route' => 'teacher.e-resources.index', 'label' => 'E Resources'];
@@ -352,6 +361,9 @@
         }
         if ($sidebarUser?->can('view_all_sports_observations')) {
             $menuItems[] = ['route' => 'warden.sports-observations.index', 'label' => 'Sports Observations'];
+        }
+        if ($sidebarUser?->can('view_all_student_discipline_reports')) {
+            $menuItems[] = ['route' => 'warden.class-discipline-reports.index', 'label' => 'Class Discipline Reports'];
         }
 
         $menuItems[] = ['route' => 'notifications.index', 'label' => 'Notifications'];

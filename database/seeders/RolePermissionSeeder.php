@@ -114,6 +114,12 @@ class RolePermissionSeeder extends Seeder
             'view_own_sports_observations',
             'view_all_sports_observations',
             'print_sports_observations',
+            'create_student_discipline_report',
+            'view_own_student_discipline_reports',
+            'view_all_student_discipline_reports',
+            'acknowledge_student_discipline_report',
+            'resolve_student_discipline_report',
+            'print_student_discipline_reports',
             'view_kcat_panel',
             'manage_kcat_tests',
             'manage_kcat_questions',
@@ -184,6 +190,10 @@ class RolePermissionSeeder extends Seeder
             'view_class_wise_student_lists',
             'view_all_sports_observations',
             'print_sports_observations',
+            'view_all_student_discipline_reports',
+            'acknowledge_student_discipline_report',
+            'resolve_student_discipline_report',
+            'print_student_discipline_reports',
             'view_all_kcat_reports',
             'print_kcat_reports',
         ]);
@@ -201,6 +211,8 @@ class RolePermissionSeeder extends Seeder
             'create_inventory_demand',
             'view_own_inventory_demands',
             'submit_device_declaration',
+            'create_student_discipline_report',
+            'view_own_student_discipline_reports',
         ]);
         $doctor->syncPermissions([
             'view_medical_requests',
@@ -242,6 +254,8 @@ class RolePermissionSeeder extends Seeder
             'mark_night_attendance',
             'view_night_attendance',
             'view_all_sports_observations',
+            'view_all_student_discipline_reports',
+            'acknowledge_student_discipline_report',
         ]);
         $careerCounselor->syncPermissions([
             'view_career_counselor_panel',

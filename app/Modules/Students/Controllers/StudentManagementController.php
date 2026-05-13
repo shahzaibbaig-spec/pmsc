@@ -11,6 +11,8 @@ use App\Models\MedicalReferral;
 use App\Models\SchoolClass;
 use App\Models\Student;
 use App\Models\StudentCbcReport;
+use App\Models\StudentDisciplineReport;
+use App\Models\StudentSportsObservation;
 use App\Models\StudentAttendance;
 use App\Services\StudentPhotoService;
 use App\Services\StudentResultService;
@@ -26,6 +28,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\View\View;
 use RuntimeException;
 use Throwable;
@@ -735,19 +738,64 @@ class StudentManagementController extends Controller
 
     private function disciplineTabData(Student $student): array
     {
+        $disciplineReports = collect();
+        if (Schema::hasTable('student_discipline_reports')) {
+            $disciplineReports = StudentDisciplineReport::query()
+                ->with([
+                    'classRoom:id,name,section',
+                    'subject:id,name',
+                    'teacher:id,name',
+                    'acknowledgedBy:id,name',
+                    'resolvedBy:id,name',
+                ])
+                ->where('student_id', (int) $student->id)
+                ->orderByDesc('report_date')
+                ->orderByDesc('id')
+                ->limit(120)
+                ->get();
+        }
+
         $disciplineComplaints = DisciplineComplaint::query()
             ->where('student_id', (int) $student->id)
             ->orderByDesc('complaint_date')
             ->limit(80)
             ->get();
 
-        $openCount = $disciplineComplaints
+        $openComplaintCount = $disciplineComplaints
             ->filter(fn ($row) => ! in_array(strtolower((string) $row->status), ['closed', 'resolved'], true))
             ->count();
 
+        $openReportCount = $disciplineReports
+            ->filter(fn ($row) => ! in_array(strtolower((string) $row->status), ['resolved'], true))
+            ->count();
+
+        $sportsObservations = collect();
+        if (Schema::hasTable('student_sports_observations')) {
+            $sportsObservations = StudentSportsObservation::query()
+                ->with([
+                    'classRoom:id,name,section',
+                    'sportsTeacher:id,name',
+                    'issues:id,student_sports_observation_id,issue_type,issue_label,auto_message',
+                ])
+                ->where('student_id', (int) $student->id)
+                ->orderByDesc('observation_date')
+                ->orderByDesc('id')
+                ->limit(100)
+                ->get();
+        }
+
+        $openSportsCount = $sportsObservations
+            ->filter(fn ($row) => ! in_array(strtolower((string) $row->status), ['resolved'], true))
+            ->count();
+
         return [
+            'disciplineReports' => $disciplineReports,
             'disciplineComplaints' => $disciplineComplaints,
-            'openCount' => $openCount,
+            'sportsObservations' => $sportsObservations,
+            'openReportCount' => $openReportCount,
+            'openComplaintCount' => $openComplaintCount,
+            'openSportsCount' => $openSportsCount,
+            'openCount' => $openReportCount + $openComplaintCount + $openSportsCount,
         ];
     }
 
