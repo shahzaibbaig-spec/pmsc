@@ -5,9 +5,11 @@
                 <h2 class="text-xl font-semibold text-slate-900">Class Discipline Reports</h2>
                 <p class="mt-1 text-sm text-slate-500">Review discipline reports submitted for students you teach.</p>
             </div>
-            <a href="{{ route('teacher.discipline-reports.create') }}" class="inline-flex min-h-11 items-center rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
-                New Report
-            </a>
+            @can('create_student_discipline_report')
+                <a href="{{ route('teacher.discipline-reports.create') }}" class="inline-flex min-h-11 items-center rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+                    New Report
+                </a>
+            @endcan
         </div>
     </x-slot>
 
@@ -180,4 +182,3 @@
         })();
     </script>
 </x-app-layout>
-

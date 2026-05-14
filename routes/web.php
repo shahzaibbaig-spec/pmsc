@@ -1606,7 +1606,7 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
             Route::post('/', [TeacherDisciplineReportController::class, 'store'])
                 ->middleware('permission:create_student_discipline_report')
                 ->name('store');
-            Route::get('/students/search', TeacherDisciplineStudentSearchController::class)
+            Route::get('/students/search', [TeacherDisciplineStudentSearchController::class, 'search'])
                 ->middleware('permission:create_student_discipline_report')
                 ->name('students.search');
             Route::get('/{report}', [TeacherDisciplineReportController::class, 'show'])

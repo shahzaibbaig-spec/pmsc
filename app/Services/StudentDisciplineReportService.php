@@ -31,7 +31,7 @@ class StudentDisciplineReportService
 
     /**
      * @param array<string, mixed> $filters
-     * @return array<int, array{id:int,student_name:string,admission_no:string,class_section:string,father_name:string,roll_number:string,subjects:array<int, array{id:int,name:string}>}>
+     * @return array<int, array{id:int,text:string,student_name:string,admission_no:string,class_section:string,father_name:string,roll_number:string,subjects:array<int, array{id:int,name:string}>}>
      */
     public function searchStudentsForTeacher(User $teacher, string $term, array $filters = []): array
     {
@@ -102,10 +102,14 @@ class StudentDisciplineReportService
                     : trim((string) ($student->classRoom?->name ?? '').' '.(string) ($student->classRoom?->section ?? ''));
                 $subjectOptions = $assignmentContext['subjects_by_class'][$classId] ?? [];
 
+                $studentName = (string) $student->name;
+                $admissionNo = (string) $student->student_id;
+
                 return [
                     'id' => (int) $student->id,
-                    'student_name' => (string) $student->name,
-                    'admission_no' => (string) $student->student_id,
+                    'text' => trim($studentName.' | '.$admissionNo.' | '.$classSection),
+                    'student_name' => $studentName,
+                    'admission_no' => $admissionNo,
                     'class_section' => $classSection,
                     'father_name' => (string) ($student->father_name ?? ''),
                     'roll_number' => (string) ((($hasRollNumber ? ($student->roll_number ?? '') : '') ?: $student->student_id) ?? ''),
