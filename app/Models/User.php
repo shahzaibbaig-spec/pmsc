@@ -267,4 +267,44 @@ class User extends Authenticatable
         return $this->hasMany(KcatAttempt::class, 'counselor_id');
     }
 
+    public function observedLessonObservations(): HasMany
+    {
+        return $this->hasMany(LessonObservation::class, 'observed_teacher_id');
+    }
+
+    public function conductedLessonObservations(): HasMany
+    {
+        return $this->hasMany(LessonObservation::class, 'observer_id');
+    }
+
+    public function observedNotebookObservations(): HasMany
+    {
+        return $this->hasMany(NotebookObservation::class, 'observed_teacher_id');
+    }
+
+    public function conductedNotebookObservations(): HasMany
+    {
+        return $this->hasMany(NotebookObservation::class, 'observer_id');
+    }
+
+    public function teacherPerformanceEvents(): HasMany
+    {
+        return $this->hasMany(TeacherPerformanceEvent::class, 'teacher_id');
+    }
+
+    public function principalCommunicationThreads(): HasMany
+    {
+        return $this->hasMany(PrincipalTeacherThread::class, 'principal_id');
+    }
+
+    public function teacherCommunicationThreads(): HasMany
+    {
+        return $this->hasMany(PrincipalTeacherThread::class, 'teacher_id');
+    }
+
+    public function principalTeacherSentMessages(): HasMany
+    {
+        return $this->hasMany(PrincipalTeacherMessage::class, 'sender_id');
+    }
+
 }

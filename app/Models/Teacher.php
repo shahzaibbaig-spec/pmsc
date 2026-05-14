@@ -99,4 +99,9 @@ class Teacher extends Model
     {
         return $this->hasMany(DailyDiary::class);
     }
+
+    public function sectionHeadAssignments(): HasMany
+    {
+        return $this->hasMany(SectionHeadAssignment::class);
+    }
 }
