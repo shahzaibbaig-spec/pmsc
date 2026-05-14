@@ -70,6 +70,8 @@ class SectionHeadAssignmentService
                 'updated_by' => (int) $principal->id,
             ]);
 
+            // Section Head must always remain a Teacher role account.
+            $this->ensureRoleAssignment($teacher->user, 'Teacher');
             $this->ensureRoleAssignment($teacher->user, $sectionHeadType);
 
             return $assignment->fresh([
