@@ -53,6 +53,11 @@ class StudentDisciplineReportService
         $prefix = $needle.'%';
         $hasRollNumber = Schema::hasTable('students') && Schema::hasColumn('students', 'roll_number');
 
+        $studentColumns = ['id', 'student_id', 'name', 'father_name', 'class_id'];
+        if ($hasRollNumber) {
+            $studentColumns[] = 'roll_number';
+        }
+
         $students = Student::query()
             ->with('classRoom:id,name,section')
             ->where('status', 'active')
@@ -79,7 +84,7 @@ class StudentDisciplineReportService
             ->orderByRaw("CASE WHEN student_id LIKE ? THEN 0 ELSE 1 END", [$prefix])
             ->orderBy('name')
             ->limit($limit)
-            ->get(['id', 'student_id', 'name', 'father_name', 'class_id']);
+            ->get($studentColumns);
 
         $sessionClassMap = $this->sessionClassMap(
             $students->pluck('id')->map(fn ($id): int => (int) $id)->all(),
@@ -87,7 +92,7 @@ class StudentDisciplineReportService
         );
 
         return $students
-            ->map(function (Student $student) use ($sessionClassMap, $assignmentContext): array {
+            ->map(function (Student $student) use ($sessionClassMap, $assignmentContext, $hasRollNumber): array {
                 $resolvedClass = $sessionClassMap[(int) $student->id] ?? null;
                 $classId = is_array($resolvedClass)
                     ? (int) ($resolvedClass['class_id'] ?? 0)
@@ -103,7 +108,7 @@ class StudentDisciplineReportService
                     'admission_no' => (string) $student->student_id,
                     'class_section' => $classSection,
                     'father_name' => (string) ($student->father_name ?? ''),
-                    'roll_number' => (string) ($student->student_id ?? ''),
+                    'roll_number' => (string) ((($hasRollNumber ? ($student->roll_number ?? '') : '') ?: $student->student_id) ?? ''),
                     'subjects' => $subjectOptions,
                 ];
             })

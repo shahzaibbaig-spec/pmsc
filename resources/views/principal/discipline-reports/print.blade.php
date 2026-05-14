@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Daily Sports Hygiene &amp; Discipline Report</title>
+    <title>Daily Class Discipline Report</title>
     <style>
         * { box-sizing: border-box; }
         body {
@@ -110,7 +110,9 @@
 </head>
 <body>
     @php
-        $selectedDate = $filters['date'] ?? now()->toDateString();
+        $selectedDate = $filters['date'] ?? null;
+        $selectedDateFrom = $filters['date_from'] ?? null;
+        $selectedDateTo = $filters['date_to'] ?? null;
         $selectedSession = $filters['session'] ?? '-';
         $selectedClass = collect($classes ?? [])->firstWhere('id', (int) ($filters['class_id'] ?? 0));
         $selectedStudent = collect($students ?? [])->firstWhere('id', (int) ($filters['student_id'] ?? 0));
@@ -118,6 +120,12 @@
         $classLabel = $selectedClass['name'] ?? 'All Classes';
         $studentLabel = $selectedStudent['name'] ?? 'All Students';
         $teacherLabel = $selectedTeacher['name'] ?? 'All';
+        $dateLabel = $selectedDate ? \Illuminate\Support\Carbon::parse($selectedDate)->format('d M Y') : 'All Dates';
+        if ($selectedDateFrom || $selectedDateTo) {
+            $from = $selectedDateFrom ? \Illuminate\Support\Carbon::parse($selectedDateFrom)->format('d M Y') : 'Start';
+            $to = $selectedDateTo ? \Illuminate\Support\Carbon::parse($selectedDateTo)->format('d M Y') : 'Today';
+            $dateLabel = $from.' to '.$to;
+        }
     @endphp
 
     <div class="shell">
@@ -128,12 +136,12 @@
 
         <section class="sheet">
             <header class="header">
-                <h1 class="title">Daily Sports Hygiene &amp; Discipline Report</h1>
+                <h1 class="title">Daily Class Discipline Report</h1>
                 <p class="subtitle">Classroom discipline submissions by teachers for principal and warden follow-up.</p>
             </header>
 
             <div class="meta">
-                <div><strong>Date:</strong> {{ \Illuminate\Support\Carbon::parse($selectedDate)->format('d M Y') }}</div>
+                <div><strong>Date:</strong> {{ $dateLabel }}</div>
                 <div><strong>Session:</strong> {{ $selectedSession }}</div>
                 <div><strong>Generated At:</strong> {{ $generated_at->format('d M Y h:i A') }}</div>
                 <div><strong>Class/Section:</strong> {{ $classLabel }}</div>
@@ -195,4 +203,3 @@
     </div>
 </body>
 </html>
-

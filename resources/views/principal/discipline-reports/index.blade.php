@@ -1,15 +1,22 @@
 <x-app-layout>
     <x-slot name="header">
+        @php
+            $dailyDate = request('date') ?: request('date_from', now()->toDateString());
+            $printQuery = request()->query();
+            if (! request()->filled('date') && ! request()->filled('date_from') && ! request()->filled('date_to')) {
+                $printQuery['date'] = now()->toDateString();
+            }
+        @endphp
         <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
                 <h2 class="text-xl font-semibold text-slate-900">Class Discipline Monitoring</h2>
                 <p class="mt-1 text-sm text-slate-500">Principal/Admin monitoring of teacher-submitted class discipline reports.</p>
             </div>
             <div class="flex flex-wrap items-center gap-2">
-                <a href="{{ route('principal.discipline-reports.daily', array_merge(request()->query(), ['date' => request('date', now()->toDateString())])) }}" class="inline-flex min-h-11 items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                <a href="{{ route('principal.discipline-reports.daily', array_merge(request()->query(), ['date' => $dailyDate])) }}" class="inline-flex min-h-11 items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
                     Daily View
                 </a>
-                <a href="{{ route('principal.discipline-reports.print', array_merge(request()->query(), ['date' => request('date', now()->toDateString())])) }}" target="_blank" class="inline-flex min-h-11 items-center rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+                <a href="{{ route('principal.discipline-reports.print', $printQuery) }}" target="_blank" class="inline-flex min-h-11 items-center rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
                     Print Report
                 </a>
             </div>
@@ -36,6 +43,14 @@
                 <div>
                     <label for="date" class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Date</label>
                     <input id="date" type="date" name="date" value="{{ $filters['date'] ?? '' }}" class="mt-1 block min-h-11 w-full rounded-xl border-slate-300 text-sm">
+                </div>
+                <div>
+                    <label for="date_from" class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Date From</label>
+                    <input id="date_from" type="date" name="date_from" value="{{ $filters['date_from'] ?? '' }}" class="mt-1 block min-h-11 w-full rounded-xl border-slate-300 text-sm">
+                </div>
+                <div>
+                    <label for="date_to" class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Date To</label>
+                    <input id="date_to" type="date" name="date_to" value="{{ $filters['date_to'] ?? '' }}" class="mt-1 block min-h-11 w-full rounded-xl border-slate-300 text-sm">
                 </div>
                 <div>
                     <label for="session" class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Session</label>
@@ -274,4 +289,3 @@
         </section>
     </div>
 </x-app-layout>
-
