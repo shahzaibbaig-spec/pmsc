@@ -734,6 +734,28 @@ class TeacherObservationService
     }
 
     /**
+     * @return array{
+     *   session:string,
+     *   sessions:array<int, string>,
+     *   classes:array<int, array{id:int,name:string}>,
+     *   subjects:array<int, array{id:int,name:string}>,
+     *   scopes:array<int, string>
+     * }
+     */
+    public function getObservationFormLookups(User $observer, ?string $session = null): array
+    {
+        $resolvedSession = $this->resolveSession($session);
+
+        return [
+            'session' => $resolvedSession,
+            'sessions' => $this->sessionOptions(),
+            'classes' => $this->classOptions(),
+            'subjects' => $this->subjectOptions(),
+            'scopes' => $this->availableScopesForObserver($observer, $resolvedSession),
+        ];
+    }
+
+    /**
      * @param array<int, array<string, mixed>> $rawItems
      * @return array<int, array{area:string,standard_text:string,mark:int,max_mark:int,comments:?string,sort_order:int}>
      */

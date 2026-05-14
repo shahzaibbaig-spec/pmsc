@@ -99,6 +99,12 @@
         if ($sidebarUser?->can('view_teacher_acr')) {
             $menuItems[] = ['route' => 'principal.acr.index', 'label' => 'Teacher ACR'];
         }
+        if ($sidebarUser?->can('view_lesson_observations')) {
+            $menuItems[] = ['route' => 'principal.lesson-observations.index', 'label' => 'Lesson Observations'];
+        }
+        if ($sidebarUser?->can('view_notebook_observations')) {
+            $menuItems[] = ['route' => 'principal.notebook-observations.index', 'label' => 'Notebook Observations'];
+        }
         if ($sidebarUser?->can('view_teacher_result_entries')) {
             $menuItems[] = ['route' => 'principal.results.teacher-entries.index', 'label' => 'Teacher Result Entries'];
         }
@@ -186,6 +192,12 @@
         }
         if ($sidebarUser?->can('view_teacher_acr')) {
             $menuItems[] = ['route' => 'principal.acr.index', 'label' => 'Teacher ACR'];
+        }
+        if ($sidebarUser?->can('view_lesson_observations')) {
+            $menuItems[] = ['route' => 'principal.lesson-observations.index', 'label' => 'Lesson Observations'];
+        }
+        if ($sidebarUser?->can('view_notebook_observations')) {
+            $menuItems[] = ['route' => 'principal.notebook-observations.index', 'label' => 'Notebook Observations'];
         }
         if ($sidebarUser?->can('view_teacher_result_entries')) {
             $menuItems[] = ['route' => 'principal.results.teacher-entries.index', 'label' => 'Teacher Result Entries'];

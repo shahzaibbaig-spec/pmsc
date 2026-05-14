@@ -24,6 +24,8 @@ use App\Http\Controllers\Principal\CareerAssessmentController as PrincipalCareer
 use App\Http\Controllers\Principal\CareerCounselingController;
 use App\Http\Controllers\Principal\CareerParentMeetingController as PrincipalCareerParentMeetingController;
 use App\Http\Controllers\Principal\DisciplineReportController as PrincipalDisciplineReportController;
+use App\Http\Controllers\Principal\LessonObservationController as PrincipalLessonObservationController;
+use App\Http\Controllers\Principal\NotebookObservationController as PrincipalNotebookObservationController;
 use App\Http\Controllers\Principal\CareerReportController as PrincipalCareerReportController;
 use App\Http\Controllers\Principal\SportsObservationController as PrincipalSportsObservationController;
 use App\Http\Controllers\Principal\StudentListController as PrincipalClassWiseStudentListController;
@@ -992,6 +994,55 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
                 ->middleware('permission:resolve_student_discipline_report')
                 ->whereNumber('report')
                 ->name('resolve');
+        });
+
+    Route::prefix('principal/lesson-observations')
+        ->name('principal.lesson-observations.')
+        ->middleware('role:Principal,Admin')
+        ->group(function (): void {
+            Route::get('/', [PrincipalLessonObservationController::class, 'index'])
+                ->middleware('permission:view_lesson_observations')
+                ->name('index');
+            Route::get('/create', [PrincipalLessonObservationController::class, 'create'])
+                ->middleware('permission:conduct_lesson_observation')
+                ->name('create');
+            Route::post('/', [PrincipalLessonObservationController::class, 'store'])
+                ->middleware('permission:conduct_lesson_observation')
+                ->name('store');
+            Route::get('/teachers/search', [PrincipalLessonObservationController::class, 'searchTeachers'])
+                ->middleware('permission:conduct_lesson_observation')
+                ->name('teachers.search');
+            Route::get('/{observation}', [PrincipalLessonObservationController::class, 'show'])
+                ->middleware('permission:view_lesson_observations')
+                ->whereNumber('observation')
+                ->name('show');
+            Route::get('/{observation}/print', [PrincipalLessonObservationController::class, 'print'])
+                ->middleware('permission:print_observations')
+                ->whereNumber('observation')
+                ->name('print');
+        });
+
+    Route::prefix('principal/notebook-observations')
+        ->name('principal.notebook-observations.')
+        ->middleware('role:Principal,Admin')
+        ->group(function (): void {
+            Route::get('/', [PrincipalNotebookObservationController::class, 'index'])
+                ->middleware('permission:view_notebook_observations')
+                ->name('index');
+            Route::get('/create', [PrincipalNotebookObservationController::class, 'create'])
+                ->middleware('permission:conduct_notebook_observation')
+                ->name('create');
+            Route::post('/', [PrincipalNotebookObservationController::class, 'store'])
+                ->middleware('permission:conduct_notebook_observation')
+                ->name('store');
+            Route::get('/{observation}', [PrincipalNotebookObservationController::class, 'show'])
+                ->middleware('permission:view_notebook_observations')
+                ->whereNumber('observation')
+                ->name('show');
+            Route::get('/{observation}/print', [PrincipalNotebookObservationController::class, 'print'])
+                ->middleware('permission:print_observations')
+                ->whereNumber('observation')
+                ->name('print');
         });
 
     Route::get('/principal/analytics/performance-insights/data', [PerformanceInsightsController::class, 'data'])
