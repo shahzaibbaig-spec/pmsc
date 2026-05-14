@@ -31,10 +31,13 @@
     </style>
 </head>
 <body>
+    @php
+        $routeBase = $routeBase ?? 'principal.lesson-observations';
+    @endphp
     <div class="shell">
         <div class="toolbar">
             <button type="button" onclick="window.print()" class="btn">Print</button>
-            <a href="{{ route('principal.lesson-observations.show', $observation->id) }}" class="btn">Back</a>
+            <a href="{{ route($routeBase.'.show', $observation->id) }}" class="btn">Back</a>
         </div>
 
         <section class="sheet">

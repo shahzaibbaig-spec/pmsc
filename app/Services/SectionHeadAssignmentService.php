@@ -7,7 +7,9 @@ use App\Models\Teacher;
 use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Pagination\LengthAwarePaginator as LengthAwarePaginatorInstance;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 use Spatie\Permission\Models\Role;
 
@@ -125,6 +127,17 @@ class SectionHeadAssignmentService
     public function getActiveSectionHeads(array $filters = []): array
     {
         $normalized = $this->normalizeFilters($filters);
+
+        if (! Schema::hasTable('section_head_assignments')) {
+            return [
+                'assignments' => $this->emptyAssignmentsPaginator((int) $normalized['per_page']),
+                'filters' => $normalized,
+                'sessions' => [],
+                'section_head_types' => array_keys(SectionHeadAssignment::TYPE_SCOPE_MAP),
+                'scope_options' => SectionHeadAssignment::SCOPE_LABELS,
+            ];
+        }
+
         $query = SectionHeadAssignment::query()
             ->with([
                 'teacher.user:id,name,email',
@@ -174,6 +187,10 @@ class SectionHeadAssignmentService
      */
     public function getObserverScopes(User $observer, ?string $session = null): array
     {
+        if (! Schema::hasTable('section_head_assignments')) {
+            return [];
+        }
+
         $resolvedSession = trim((string) $session);
 
         $query = SectionHeadAssignment::query()
@@ -305,6 +322,10 @@ class SectionHeadAssignmentService
      */
     private function sessionOptions(): array
     {
+        if (! Schema::hasTable('section_head_assignments')) {
+            return [];
+        }
+
         return SectionHeadAssignment::query()
             ->orderByDesc('session')
             ->pluck('session')
@@ -312,5 +333,21 @@ class SectionHeadAssignmentService
             ->unique()
             ->values()
             ->all();
+    }
+
+    private function emptyAssignmentsPaginator(int $perPage): LengthAwarePaginator
+    {
+        $resolvedPerPage = max(10, min($perPage, 100));
+
+        return new LengthAwarePaginatorInstance(
+            collect(),
+            0,
+            $resolvedPerPage,
+            1,
+            [
+                'path' => request()->url(),
+                'query' => request()->query(),
+            ]
+        );
     }
 }

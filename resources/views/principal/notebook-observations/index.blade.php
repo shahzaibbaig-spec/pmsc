@@ -1,12 +1,16 @@
 <x-app-layout>
+    @php
+        $routeBase = $routeBase ?? 'principal.notebook-observations';
+        $panelLabel = $panelLabel ?? 'Principal/Admin';
+    @endphp
     <x-slot name="header">
         <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
                 <h2 class="text-xl font-semibold text-slate-900">Notebook Observations</h2>
-                <p class="mt-1 text-sm text-slate-500">Principal/Admin notebook quality and checklist monitoring.</p>
+                <p class="mt-1 text-sm text-slate-500">{{ $panelLabel }} notebook quality and checklist monitoring.</p>
             </div>
             @can('conduct_notebook_observation')
-                <a href="{{ route('principal.notebook-observations.create') }}" class="inline-flex min-h-11 items-center rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+                <a href="{{ route($routeBase.'.create') }}" class="inline-flex min-h-11 items-center rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
                     New Observation
                 </a>
             @endcan
@@ -29,7 +33,7 @@
         @endif
 
         <section class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <form method="GET" action="{{ route('principal.notebook-observations.index') }}" class="grid grid-cols-1 gap-4 md:grid-cols-4">
+            <form method="GET" action="{{ route($routeBase.'.index') }}" class="grid grid-cols-1 gap-4 md:grid-cols-4">
                 <div>
                     <label for="date" class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Date</label>
                     <input id="date" name="date" type="date" value="{{ $filters['date'] ?? '' }}" class="mt-1 block min-h-11 w-full rounded-xl border-slate-300 text-sm">
@@ -96,7 +100,7 @@
                 </div>
                 <div class="md:col-span-4 flex flex-wrap gap-2">
                     <button type="submit" class="inline-flex min-h-11 items-center rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800">Apply</button>
-                    <a href="{{ route('principal.notebook-observations.index') }}" class="inline-flex min-h-11 items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Reset</a>
+                    <a href="{{ route($routeBase.'.index') }}" class="inline-flex min-h-11 items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Reset</a>
                 </div>
             </form>
         </section>
@@ -137,9 +141,9 @@
                                 </td>
                                 <td class="px-4 py-3 text-sm">
                                     <div class="flex flex-wrap gap-2">
-                                        <a href="{{ route('principal.notebook-observations.show', $observation->id) }}" class="inline-flex min-h-9 items-center rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">View</a>
+                                        <a href="{{ route($routeBase.'.show', $observation->id) }}" class="inline-flex min-h-9 items-center rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">View</a>
                                         @can('print_observations')
-                                            <a target="_blank" href="{{ route('principal.notebook-observations.print', $observation->id) }}" class="inline-flex min-h-9 items-center rounded-lg border border-blue-300 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100">Print</a>
+                                            <a target="_blank" href="{{ route($routeBase.'.print', $observation->id) }}" class="inline-flex min-h-9 items-center rounded-lg border border-blue-300 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100">Print</a>
                                         @endcan
                                     </div>
                                 </td>

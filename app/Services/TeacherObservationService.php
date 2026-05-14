@@ -15,6 +15,7 @@ use App\Models\User;
 use App\Notifications\ObservationPendingCommentNotification;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Pagination\LengthAwarePaginator as LengthAwarePaginatorInstance;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -204,6 +205,12 @@ class TeacherObservationService
      */
     public function createLessonObservation(array $data, User $observer): LessonObservation
     {
+        if (! $this->lessonObservationTablesReady()) {
+            throw ValidationException::withMessages([
+                'observation' => 'Lesson observation module is not migrated yet. Please run database migrations.',
+            ]);
+        }
+
         $session = $this->resolveSession(isset($data['session']) ? (string) $data['session'] : null);
         $teacher = User::query()
             ->with('teacher:id,user_id')
@@ -297,6 +304,12 @@ class TeacherObservationService
      */
     public function createNotebookObservation(array $data, User $observer): NotebookObservation
     {
+        if (! $this->notebookObservationTablesReady()) {
+            throw ValidationException::withMessages([
+                'observation' => 'Notebook observation module is not migrated yet. Please run database migrations.',
+            ]);
+        }
+
         $session = $this->resolveSession(isset($data['session']) ? (string) $data['session'] : null);
         $teacher = User::query()
             ->with('teacher:id,user_id')
@@ -551,6 +564,12 @@ class TeacherObservationService
         }
 
         if ($type === 'lesson') {
+            if (! $this->lessonObservationTablesReady()) {
+                throw ValidationException::withMessages([
+                    'observation' => 'Lesson observation module is not migrated yet. Please run database migrations.',
+                ]);
+            }
+
             $observation = LessonObservation::query()
                 ->whereKey($id)
                 ->where('observed_teacher_id', (int) $teacher->id)
@@ -568,6 +587,12 @@ class TeacherObservationService
         }
 
         if ($type === 'notebook') {
+            if (! $this->notebookObservationTablesReady()) {
+                throw ValidationException::withMessages([
+                    'observation' => 'Notebook observation module is not migrated yet. Please run database migrations.',
+                ]);
+            }
+
             $observation = NotebookObservation::query()
                 ->whereKey($id)
                 ->where('observed_teacher_id', (int) $teacher->id)
@@ -603,6 +628,22 @@ class TeacherObservationService
     public function getLessonObservationsForObserver(User $observer, array $filters = []): array
     {
         $normalized = $this->normalizeObservationFilters($filters);
+        $paginate = array_key_exists('paginate', $filters) ? (bool) $filters['paginate'] : true;
+
+        if (! $this->lessonObservationTablesReady()) {
+            return [
+                'observations' => $paginate
+                    ? $this->emptyObservationPaginator((int) $normalized['per_page'])
+                    : collect(),
+                'filters' => $normalized,
+                'sessions' => $this->sessionOptions(),
+                'classes' => $this->classOptions(),
+                'teachers' => $this->teacherOptions(),
+                'observers' => $this->observerOptions(),
+                'area_options' => array_keys(self::LESSON_STANDARDS),
+            ];
+        }
+
         $query = LessonObservation::query()->with($this->lessonObservationRelations());
 
         if (! $this->isPrincipalOrAdmin($observer)) {
@@ -611,7 +652,6 @@ class TeacherObservationService
 
         $this->applyObservationFilters($query, $normalized);
 
-        $paginate = array_key_exists('paginate', $filters) ? (bool) $filters['paginate'] : true;
         $observations = $paginate
             ? $query->orderByDesc('observation_date')->orderByDesc('id')->paginate((int) $normalized['per_page'])->withQueryString()
             : $query->orderBy('observation_date')->orderBy('id')->get();
@@ -642,6 +682,22 @@ class TeacherObservationService
     public function getNotebookObservationsForObserver(User $observer, array $filters = []): array
     {
         $normalized = $this->normalizeObservationFilters($filters);
+        $paginate = array_key_exists('paginate', $filters) ? (bool) $filters['paginate'] : true;
+
+        if (! $this->notebookObservationTablesReady()) {
+            return [
+                'observations' => $paginate
+                    ? $this->emptyObservationPaginator((int) $normalized['per_page'])
+                    : collect(),
+                'filters' => $normalized,
+                'sessions' => $this->sessionOptions(),
+                'classes' => $this->classOptions(),
+                'teachers' => $this->teacherOptions(),
+                'observers' => $this->observerOptions(),
+                'subjects' => $this->subjectOptions(),
+            ];
+        }
+
         $query = NotebookObservation::query()->with($this->notebookObservationRelations());
 
         if (! $this->isPrincipalOrAdmin($observer)) {
@@ -650,7 +706,6 @@ class TeacherObservationService
 
         $this->applyObservationFilters($query, $normalized);
 
-        $paginate = array_key_exists('paginate', $filters) ? (bool) $filters['paginate'] : true;
         $observations = $paginate
             ? $query->orderByDesc('observation_date')->orderByDesc('id')->paginate((int) $normalized['per_page'])->withQueryString()
             : $query->orderBy('observation_date')->orderBy('id')->get();
@@ -1125,19 +1180,31 @@ class TeacherObservationService
      */
     private function sessionOptions(): array
     {
-        return collect(array_merge(
-            LessonObservation::query()
-                ->pluck('session')
-                ->filter(static fn ($session): bool => is_string($session) && trim($session) !== '')
-                ->values()
-                ->all(),
-            NotebookObservation::query()
-                ->pluck('session')
-                ->filter(static fn ($session): bool => is_string($session) && trim($session) !== '')
-                ->values()
-                ->all(),
-            $this->dailyDiaryService->sessionOptions()
-        ))
+        $sessions = $this->dailyDiaryService->sessionOptions();
+
+        if (Schema::hasTable('lesson_observations')) {
+            $sessions = array_merge(
+                $sessions,
+                LessonObservation::query()
+                    ->pluck('session')
+                    ->filter(static fn ($session): bool => is_string($session) && trim($session) !== '')
+                    ->values()
+                    ->all()
+            );
+        }
+
+        if (Schema::hasTable('notebook_observations')) {
+            $sessions = array_merge(
+                $sessions,
+                NotebookObservation::query()
+                    ->pluck('session')
+                    ->filter(static fn ($session): bool => is_string($session) && trim($session) !== '')
+                    ->values()
+                    ->all()
+            );
+        }
+
+        return collect($sessions)
             ->unique()
             ->sortDesc()
             ->values()
@@ -1261,5 +1328,33 @@ class TeacherObservationService
         $trimmed = trim((string) $value);
 
         return $trimmed !== '' ? $trimmed : null;
+    }
+
+    private function lessonObservationTablesReady(): bool
+    {
+        return Schema::hasTable('lesson_observations')
+            && Schema::hasTable('lesson_observation_items');
+    }
+
+    private function notebookObservationTablesReady(): bool
+    {
+        return Schema::hasTable('notebook_observations')
+            && Schema::hasTable('notebook_observation_items');
+    }
+
+    private function emptyObservationPaginator(int $perPage): LengthAwarePaginator
+    {
+        $resolvedPerPage = max(10, min($perPage, 100));
+
+        return new LengthAwarePaginatorInstance(
+            collect(),
+            0,
+            $resolvedPerPage,
+            1,
+            [
+                'path' => request()->url(),
+                'query' => request()->query(),
+            ]
+        );
     }
 }

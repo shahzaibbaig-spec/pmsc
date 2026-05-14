@@ -1,4 +1,7 @@
 <x-app-layout>
+    @php
+        $routeBase = $routeBase ?? 'principal.notebook-observations';
+    @endphp
     <x-slot name="header">
         <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -6,9 +9,9 @@
                 <p class="mt-1 text-sm text-slate-500">Observation #{{ $observation->id }} submitted on {{ optional($observation->observation_date)->format('d M Y') ?: '-' }}.</p>
             </div>
             <div class="flex flex-wrap items-center gap-2">
-                <a href="{{ route('principal.notebook-observations.index') }}" class="inline-flex min-h-11 items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Back</a>
+                <a href="{{ route($routeBase.'.index') }}" class="inline-flex min-h-11 items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Back</a>
                 @can('print_observations')
-                    <a href="{{ route('principal.notebook-observations.print', $observation->id) }}" target="_blank" class="inline-flex min-h-11 items-center rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Print</a>
+                    <a href="{{ route($routeBase.'.print', $observation->id) }}" target="_blank" class="inline-flex min-h-11 items-center rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Print</a>
                 @endcan
             </div>
         </div>

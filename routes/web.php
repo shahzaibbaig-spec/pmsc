@@ -59,6 +59,8 @@ use App\Http\Controllers\Teacher\TeacherPromotionController;
 use App\Http\Controllers\SportsTeacher\DashboardController as SportsTeacherDashboardController;
 use App\Http\Controllers\SportsTeacher\SportsObservationController as SportsTeacherSportsObservationController;
 use App\Http\Controllers\SportsTeacher\StudentSearchController as SportsTeacherStudentSearchController;
+use App\Http\Controllers\SectionHead\LessonObservationController as SectionHeadLessonObservationController;
+use App\Http\Controllers\SectionHead\NotebookObservationController as SectionHeadNotebookObservationController;
 use App\Http\Controllers\Warden\WardenDailyDiaryController;
 use App\Http\Controllers\Warden\WardenDailyReportController;
 use App\Http\Controllers\Warden\WardenDashboardController;
@@ -1050,6 +1052,55 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
                 ->whereNumber('observation')
                 ->name('show');
             Route::get('/{observation}/print', [PrincipalNotebookObservationController::class, 'print'])
+                ->middleware('permission:print_observations')
+                ->whereNumber('observation')
+                ->name('print');
+        });
+
+    Route::prefix('section-head/lesson-observations')
+        ->name('section-head.lesson-observations.')
+        ->middleware('role:Early Years Section Head,Middle School Section Head,Senior School Section Head')
+        ->group(function (): void {
+            Route::get('/', [SectionHeadLessonObservationController::class, 'index'])
+                ->middleware('permission:view_lesson_observations')
+                ->name('index');
+            Route::get('/create', [SectionHeadLessonObservationController::class, 'create'])
+                ->middleware('permission:conduct_lesson_observation')
+                ->name('create');
+            Route::post('/', [SectionHeadLessonObservationController::class, 'store'])
+                ->middleware('permission:conduct_lesson_observation')
+                ->name('store');
+            Route::get('/teachers/search', [SectionHeadLessonObservationController::class, 'searchTeachers'])
+                ->middleware('permission:conduct_lesson_observation')
+                ->name('teachers.search');
+            Route::get('/{observation}', [SectionHeadLessonObservationController::class, 'show'])
+                ->middleware('permission:view_lesson_observations')
+                ->whereNumber('observation')
+                ->name('show');
+            Route::get('/{observation}/print', [SectionHeadLessonObservationController::class, 'print'])
+                ->middleware('permission:print_observations')
+                ->whereNumber('observation')
+                ->name('print');
+        });
+
+    Route::prefix('section-head/notebook-observations')
+        ->name('section-head.notebook-observations.')
+        ->middleware('role:Early Years Section Head,Middle School Section Head,Senior School Section Head')
+        ->group(function (): void {
+            Route::get('/', [SectionHeadNotebookObservationController::class, 'index'])
+                ->middleware('permission:view_notebook_observations')
+                ->name('index');
+            Route::get('/create', [SectionHeadNotebookObservationController::class, 'create'])
+                ->middleware('permission:conduct_notebook_observation')
+                ->name('create');
+            Route::post('/', [SectionHeadNotebookObservationController::class, 'store'])
+                ->middleware('permission:conduct_notebook_observation')
+                ->name('store');
+            Route::get('/{observation}', [SectionHeadNotebookObservationController::class, 'show'])
+                ->middleware('permission:view_notebook_observations')
+                ->whereNumber('observation')
+                ->name('show');
+            Route::get('/{observation}/print', [SectionHeadNotebookObservationController::class, 'print'])
                 ->middleware('permission:print_observations')
                 ->whereNumber('observation')
                 ->name('print');

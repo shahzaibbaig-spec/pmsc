@@ -1,11 +1,15 @@
 <x-app-layout>
+    @php
+        $routeBase = $routeBase ?? 'principal.lesson-observations';
+        $panelLabel = $panelLabel ?? 'Principal/Admin';
+    @endphp
     <x-slot name="header">
         <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
                 <h2 class="text-xl font-semibold text-slate-900">New Lesson Observation</h2>
-                <p class="mt-1 text-sm text-slate-500">Conduct and record classroom lesson observation with KORT checklist scoring.</p>
+                <p class="mt-1 text-sm text-slate-500">{{ $panelLabel }} lesson observation form with KORT checklist scoring.</p>
             </div>
-            <a href="{{ route('principal.lesson-observations.index') }}" class="inline-flex min-h-11 items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+            <a href="{{ route($routeBase.'.index') }}" class="inline-flex min-h-11 items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
                 Back to List
             </a>
         </div>
@@ -26,7 +30,7 @@
             </div>
         @endif
 
-        <form method="POST" action="{{ route('principal.lesson-observations.store') }}" class="space-y-6">
+        <form method="POST" action="{{ route($routeBase.'.store') }}" class="space-y-6">
             @csrf
 
             <section class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -151,7 +155,7 @@
                 <button type="submit" class="inline-flex min-h-11 items-center rounded-xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700">
                     Submit Observation
                 </button>
-                <a href="{{ route('principal.lesson-observations.index') }}" class="inline-flex min-h-11 items-center rounded-xl border border-slate-300 bg-white px-5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                <a href="{{ route($routeBase.'.index') }}" class="inline-flex min-h-11 items-center rounded-xl border border-slate-300 bg-white px-5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
                     Cancel
                 </a>
             </div>

@@ -308,6 +308,12 @@
         $menuItems[] = ['route' => 'teacher.e-resources.index', 'label' => 'E Resources'];
         $menuItems[] = ['route' => 'notifications.index', 'label' => 'Notifications'];
     } elseif ($sidebarUser?->hasRole('Teacher')) {
+        $isSectionHeadUser = $sidebarUser?->hasAnyRole([
+            'Early Years Section Head',
+            'Middle School Section Head',
+            'Senior School Section Head',
+        ]);
+
         $menuItems = [
             ['route' => 'teacher.dashboard', 'label' => 'Dashboard'],
         ];
@@ -331,6 +337,12 @@
         }
         if ($sidebarUser?->can('create_student_discipline_report') || $sidebarUser?->can('view_own_student_discipline_reports')) {
             $menuItems[] = ['route' => 'teacher.discipline-reports.index', 'label' => 'Class Discipline Reports'];
+        }
+        if ($isSectionHeadUser && $sidebarUser?->can('view_lesson_observations')) {
+            $menuItems[] = ['route' => 'section-head.lesson-observations.index', 'label' => 'Lesson Observations'];
+        }
+        if ($isSectionHeadUser && $sidebarUser?->can('view_notebook_observations')) {
+            $menuItems[] = ['route' => 'section-head.notebook-observations.index', 'label' => 'Notebook Observations'];
         }
 
         $menuItems[] = ['route' => 'teacher.timetable.index', 'label' => 'Timetable'];
