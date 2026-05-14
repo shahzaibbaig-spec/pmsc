@@ -12,6 +12,8 @@ use App\Models\Subject;
 use App\Models\Teacher;
 use App\Models\TeacherAssignment;
 use App\Models\User;
+use App\Models\SectionHeadAssignment;
+use App\Services\SectionHeadAssignmentService;
 use App\Services\TeacherAssignmentService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -22,7 +24,11 @@ use Illuminate\View\View;
 
 class TeacherAssignmentController extends Controller
 {
-    public function index(Request $request, TeacherAssignmentService $service): View
+    public function index(
+        Request $request,
+        TeacherAssignmentService $service,
+        SectionHeadAssignmentService $sectionHeadAssignmentService
+    ): View
     {
         $this->ensureTeacherProfiles($service);
 
@@ -71,6 +77,14 @@ class TeacherAssignmentController extends Controller
             ->get();
 
         $groupedAssignments = $this->groupAssignmentsByTeacherAndSession($assignments)->values();
+        $sectionHeadFilters = [
+            'session' => $request->query('sh_session', $selectedSession !== '' ? $selectedSession : null),
+            'scope' => $request->query('sh_scope'),
+            'status' => $request->query('sh_status', SectionHeadAssignment::STATUS_ACTIVE),
+            'teacher_name' => $request->query('sh_teacher_name'),
+            'per_page' => $request->query('sh_per_page', 10),
+        ];
+        $sectionHeadPayload = $sectionHeadAssignmentService->getActiveSectionHeads($sectionHeadFilters);
 
         return view('principal.teacher-assignments.index', [
             'assignmentsGrouped' => $groupedAssignments,
@@ -81,6 +95,13 @@ class TeacherAssignmentController extends Controller
             'classTeacherSession' => $classTeacherSession,
             'classes' => $this->classes(),
             'subjects' => $this->subjects(),
+            'teachersList' => $this->teachers(),
+            'sectionHeadAssignments' => $sectionHeadPayload['assignments'],
+            'sectionHeadFilters' => $sectionHeadPayload['filters'],
+            'sectionHeadSessions' => $sectionHeadPayload['sessions'],
+            'sectionHeadTypeOptions' => $sectionHeadPayload['section_head_types'],
+            'sectionHeadScopeOptions' => $sectionHeadPayload['scope_options'],
+            'sectionHeadTypeScopeMap' => SectionHeadAssignment::TYPE_SCOPE_MAP,
         ]);
     }
 

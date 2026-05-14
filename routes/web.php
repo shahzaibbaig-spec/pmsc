@@ -28,6 +28,7 @@ use App\Http\Controllers\Principal\LessonObservationController as PrincipalLesso
 use App\Http\Controllers\Principal\NotebookObservationController as PrincipalNotebookObservationController;
 use App\Http\Controllers\Principal\CareerReportController as PrincipalCareerReportController;
 use App\Http\Controllers\Principal\SportsObservationController as PrincipalSportsObservationController;
+use App\Http\Controllers\Principal\SectionHeadAssignmentController as PrincipalSectionHeadAssignmentController;
 use App\Http\Controllers\Principal\StudentListController as PrincipalClassWiseStudentListController;
 use App\Http\Controllers\Principal\CareerUrgentCaseController as PrincipalCareerUrgentCaseController;
 use App\Http\Controllers\Principal\Kcat\KcatAnalyticsController as PrincipalKcatAnalyticsController;
@@ -717,6 +718,15 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
         ->middleware(['role:Principal|Admin', 'permission:assign_teachers'])
         ->whereNumber('teacher')
         ->name('principal.teacher-assignments.teacher.replace-session-assignments');
+
+    Route::post('/principal/teacher-assignments/section-head-assignments', [PrincipalSectionHeadAssignmentController::class, 'store'])
+        ->middleware(['role:Principal|Admin', 'permission:assign_section_heads'])
+        ->name('principal.teacher-assignments.section-head-assignments.store');
+
+    Route::post('/principal/teacher-assignments/section-head-assignments/{assignment}/deactivate', [PrincipalSectionHeadAssignmentController::class, 'deactivate'])
+        ->middleware(['role:Principal|Admin', 'permission:assign_section_heads'])
+        ->whereNumber('assignment')
+        ->name('principal.teacher-assignments.section-head-assignments.deactivate');
 
     Route::get('/principal/teacher-assignments/rollover', [TeacherAssignmentRolloverController::class, 'index'])
         ->middleware(['role:Principal|Admin', 'permission:assign_teachers'])

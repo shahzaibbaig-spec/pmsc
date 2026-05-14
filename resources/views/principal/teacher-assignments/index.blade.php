@@ -65,6 +65,219 @@
                 <div id="selectedTeacherPanel" class="mt-6"></div>
             </div>
 
+            <div id="sectionHeadAssignmentSection" class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                        <h3 class="text-base font-semibold text-slate-900">Section Head Assignment</h3>
+                        <p class="mt-1 text-sm text-slate-600">Assign a teacher as Early Years, Middle School, or Senior School Section Head for a session.</p>
+                    </div>
+                    <span class="inline-flex w-fit rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+                        Historical records preserved
+                    </span>
+                </div>
+
+                @can('assign_section_heads')
+                    <form method="POST" action="{{ route('principal.teacher-assignments.section-head-assignments.store') }}" class="mt-5 grid grid-cols-1 gap-4 md:grid-cols-4">
+                        @csrf
+                        <div class="md:col-span-2">
+                            <label for="sh_teacher_id" class="mb-1 block text-sm font-medium text-slate-700">Teacher</label>
+                            <select
+                                id="sh_teacher_id"
+                                name="teacher_id"
+                                required
+                                class="block w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-500"
+                            >
+                                <option value="">Select teacher</option>
+                                @foreach ($teachersList as $teacherOption)
+                                    <option value="{{ $teacherOption->id }}" @selected((int) old('teacher_id') === (int) $teacherOption->id)>
+                                        {{ $teacherOption->user?->name ?? ('Teacher #'.$teacherOption->id) }}
+                                        @if ($teacherOption->teacher_id)
+                                            ({{ $teacherOption->teacher_id }})
+                                        @endif
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        <div>
+                            <label for="sh_section_head_type" class="mb-1 block text-sm font-medium text-slate-700">Section Head Type</label>
+                            <select
+                                id="sh_section_head_type"
+                                name="section_head_type"
+                                required
+                                class="block w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-500"
+                            >
+                                <option value="">Select type</option>
+                                @foreach ($sectionHeadTypeOptions as $typeOption)
+                                    <option value="{{ $typeOption }}" @selected(old('section_head_type') === $typeOption)>{{ $typeOption }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        <div>
+                            <label for="sh_scope" class="mb-1 block text-sm font-medium text-slate-700">Scope</label>
+                            <select
+                                id="sh_scope"
+                                name="scope"
+                                required
+                                class="block w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-500"
+                            >
+                                <option value="">Select scope</option>
+                                @foreach ($sectionHeadScopeOptions as $scopeKey => $scopeLabel)
+                                    <option value="{{ $scopeKey }}" @selected(old('scope') === $scopeKey)>{{ $scopeLabel }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        <div>
+                            <label for="sh_session_assign" class="mb-1 block text-sm font-medium text-slate-700">Session</label>
+                            <select
+                                id="sh_session_assign"
+                                name="session"
+                                required
+                                class="block w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-500"
+                            >
+                                @foreach ($sessions as $session)
+                                    <option value="{{ $session }}" @selected(old('session', $selectedSession ?: $classTeacherSession) === $session)>{{ $session }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        <div class="md:col-span-4">
+                            <button
+                                type="submit"
+                                class="inline-flex min-h-10 items-center rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                            >
+                                Assign Section Head
+                            </button>
+                        </div>
+                    </form>
+                @endcan
+
+                <form method="GET" action="{{ route('principal.teacher-assignments.index') }}" class="mt-6 grid grid-cols-1 gap-4 md:grid-cols-5">
+                    <input type="hidden" name="session" value="{{ $selectedSession }}">
+                    <div>
+                        <label for="sh_session" class="mb-1 block text-sm font-medium text-slate-700">Session</label>
+                        <select id="sh_session" name="sh_session" class="block w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-500">
+                            <option value="">All Sessions</option>
+                            @foreach (collect(array_merge($sessions, $sectionHeadSessions))->unique()->values() as $sessionOption)
+                                <option value="{{ $sessionOption }}" @selected(($sectionHeadFilters['session'] ?? null) === $sessionOption)>{{ $sessionOption }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div>
+                        <label for="sh_scope_filter" class="mb-1 block text-sm font-medium text-slate-700">Scope</label>
+                        <select id="sh_scope_filter" name="sh_scope" class="block w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-500">
+                            <option value="">All Scopes</option>
+                            @foreach ($sectionHeadScopeOptions as $scopeKey => $scopeLabel)
+                                <option value="{{ $scopeKey }}" @selected(($sectionHeadFilters['scope'] ?? null) === $scopeKey)>{{ $scopeLabel }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div>
+                        <label for="sh_status" class="mb-1 block text-sm font-medium text-slate-700">Status</label>
+                        <select id="sh_status" name="sh_status" class="block w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-500">
+                            <option value="active" @selected(($sectionHeadFilters['status'] ?? 'active') === 'active')>Active</option>
+                            <option value="inactive" @selected(($sectionHeadFilters['status'] ?? null) === 'inactive')>Inactive</option>
+                            <option value="all" @selected(($sectionHeadFilters['status'] ?? null) === 'all')>All</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="sh_teacher_name" class="mb-1 block text-sm font-medium text-slate-700">Teacher Name</label>
+                        <input
+                            id="sh_teacher_name"
+                            type="text"
+                            name="sh_teacher_name"
+                            value="{{ $sectionHeadFilters['teacher_name'] ?? '' }}"
+                            placeholder="Search teacher"
+                            class="block w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-500"
+                        >
+                    </div>
+                    <div>
+                        <label for="sh_per_page" class="mb-1 block text-sm font-medium text-slate-700">Rows</label>
+                        <select id="sh_per_page" name="sh_per_page" class="block w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-500">
+                            @foreach ([10, 20, 50] as $size)
+                                <option value="{{ $size }}" @selected((int) ($sectionHeadFilters['per_page'] ?? 10) === $size)>{{ $size }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="md:col-span-5 flex flex-wrap items-center gap-2">
+                        <button type="submit" class="inline-flex min-h-10 items-center rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Filter Section Heads</button>
+                        <a href="{{ route('principal.teacher-assignments.index') }}#sectionHeadAssignmentSection" class="inline-flex min-h-10 items-center rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Reset</a>
+                    </div>
+                </form>
+
+                <div class="mt-6 overflow-x-auto">
+                    <table class="min-w-full divide-y divide-slate-200">
+                        <thead class="bg-blue-50">
+                            <tr>
+                                <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-blue-700">Sr #</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-blue-700">Teacher</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-blue-700">Type</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-blue-700">Scope</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-blue-700">Session</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-blue-700">Status</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-blue-700">Assigned By</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-blue-700">Assigned At</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-blue-700">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100 bg-white">
+                            @php
+                                $shPageOffset = ($sectionHeadAssignments->currentPage() - 1) * $sectionHeadAssignments->perPage();
+                            @endphp
+                            @forelse ($sectionHeadAssignments as $index => $sectionHeadAssignment)
+                                <tr>
+                                    <td class="px-4 py-3 text-sm text-slate-700">{{ $shPageOffset + $index + 1 }}</td>
+                                    <td class="px-4 py-3 text-sm text-slate-900">
+                                        {{ $sectionHeadAssignment->teacher?->user?->name ?? '-' }}
+                                        <p class="text-xs text-slate-500">{{ $sectionHeadAssignment->teacher?->user?->email ?? '-' }}</p>
+                                    </td>
+                                    <td class="px-4 py-3 text-sm text-slate-700">{{ $sectionHeadAssignment->section_head_type }}</td>
+                                    <td class="px-4 py-3 text-sm text-slate-700">{{ $sectionHeadScopeOptions[$sectionHeadAssignment->scope] ?? $sectionHeadAssignment->scope }}</td>
+                                    <td class="px-4 py-3 text-sm text-slate-700">{{ $sectionHeadAssignment->session }}</td>
+                                    <td class="px-4 py-3 text-sm">
+                                        <span class="inline-flex rounded-full px-2 py-1 text-xs font-semibold {{ $sectionHeadAssignment->status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-700' }}">
+                                            {{ ucfirst($sectionHeadAssignment->status) }}
+                                        </span>
+                                    </td>
+                                    <td class="px-4 py-3 text-sm text-slate-700">{{ $sectionHeadAssignment->assignedBy?->name ?? '-' }}</td>
+                                    <td class="px-4 py-3 text-sm text-slate-700">{{ optional($sectionHeadAssignment->assigned_at)->format('d M Y h:i A') ?: '-' }}</td>
+                                    <td class="px-4 py-3 text-sm">
+                                        @can('assign_section_heads')
+                                            @if ($sectionHeadAssignment->status === 'active')
+                                                <form method="POST" action="{{ route('principal.teacher-assignments.section-head-assignments.deactivate', $sectionHeadAssignment) }}">
+                                                    @csrf
+                                                    <button
+                                                        type="submit"
+                                                        class="inline-flex min-h-9 items-center rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-100"
+                                                        onclick="return confirm('Deactivate this section head assignment? History will be preserved.');"
+                                                    >
+                                                        Deactivate
+                                                    </button>
+                                                </form>
+                                            @else
+                                                <span class="text-xs text-slate-500">-</span>
+                                            @endif
+                                        @endcan
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="9" class="px-4 py-8 text-center text-sm text-slate-500">No section head assignments found.</td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+
+                @if ($sectionHeadAssignments->hasPages())
+                    <div class="mt-4 border-t border-slate-200 pt-3">
+                        {{ $sectionHeadAssignments->links() }}
+                    </div>
+                @endif
+            </div>
+
             <div id="copyAllocationSection" class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
                 <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                     <div>
@@ -458,6 +671,8 @@
             const copyTargetClassSelect = document.getElementById('copy_target_class_id');
             const copySourceSectionInput = document.getElementById('copy_source_section');
             const copyTargetSectionInput = document.getElementById('copy_target_section');
+            const sectionHeadTypeSelect = document.getElementById('sh_section_head_type');
+            const sectionHeadScopeSelect = document.getElementById('sh_scope');
             const escapeHtml = (window.NSMS && typeof window.NSMS.escapeHtml === 'function')
                 ? window.NSMS.escapeHtml
                 : (value) => String(value)
@@ -471,6 +686,7 @@
             const showUrlTemplate = @json(route('principal.teacher-assignments.teacher.show', ['teacher' => '__TEACHER__']));
             const classTeacherMatrixUrl = @json(route('principal.teacher-assignments.class-teachers'));
             const focusTeacherId = Number(@json((int) request()->query('focus_teacher', 0)));
+            const sectionHeadTypeScopeMap = @json($sectionHeadTypeScopeMap);
             let selectedTeacherId = null;
             let activeTeacherPanelSession = '';
 
@@ -655,6 +871,15 @@
             copyTargetClassSelect?.addEventListener('change', () => syncSelectedSection(copyTargetClassSelect, copyTargetSectionInput));
             syncSelectedSection(copySourceClassSelect, copySourceSectionInput);
             syncSelectedSection(copyTargetClassSelect, copyTargetSectionInput);
+            sectionHeadTypeSelect?.addEventListener('change', () => {
+                if (!sectionHeadScopeSelect) {
+                    return;
+                }
+                const mappedScope = sectionHeadTypeScopeMap?.[sectionHeadTypeSelect.value];
+                if (mappedScope) {
+                    sectionHeadScopeSelect.value = mappedScope;
+                }
+            });
 
             if (focusTeacherId > 0) {
                 loadTeacherPanel(focusTeacherId);
