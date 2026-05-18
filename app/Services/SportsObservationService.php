@@ -534,48 +534,50 @@ class SportsObservationService
      */
     private function applyObservationFilters(Builder $query, array $filters): void
     {
+        $table = 'student_sports_observations';
+
         if (isset($filters['session']) && $filters['session'] !== null) {
-            $query->where('session', (string) $filters['session']);
+            $query->where($table.'.session', (string) $filters['session']);
         }
 
         if (isset($filters['date']) && $filters['date'] !== null) {
-            $query->whereDate('observation_date', Carbon::parse((string) $filters['date'])->toDateString());
+            $query->whereDate($table.'.observation_date', Carbon::parse((string) $filters['date'])->toDateString());
         }
 
         if (isset($filters['date_from']) && $filters['date_from'] !== null) {
-            $query->whereDate('observation_date', '>=', Carbon::parse((string) $filters['date_from'])->toDateString());
+            $query->whereDate($table.'.observation_date', '>=', Carbon::parse((string) $filters['date_from'])->toDateString());
         }
 
         if (isset($filters['date_to']) && $filters['date_to'] !== null) {
-            $query->whereDate('observation_date', '<=', Carbon::parse((string) $filters['date_to'])->toDateString());
+            $query->whereDate($table.'.observation_date', '<=', Carbon::parse((string) $filters['date_to'])->toDateString());
         }
 
         if (isset($filters['class_id']) && $filters['class_id'] !== null) {
-            $query->where('class_id', (int) $filters['class_id']);
+            $query->where($table.'.class_id', (int) $filters['class_id']);
         }
 
         if (isset($filters['student_id']) && $filters['student_id'] !== null) {
-            $query->where('student_id', (int) $filters['student_id']);
+            $query->where($table.'.student_id', (int) $filters['student_id']);
         }
 
         if (isset($filters['issue_type']) && $filters['issue_type'] !== null) {
             $issueType = (string) $filters['issue_type'];
             $query->where(function (Builder $issueQuery) use ($issueType): void {
-                $issueQuery->where('issue_type', $issueType)
+                $issueQuery->where('student_sports_observations.issue_type', $issueType)
                     ->orWhereHas('issues', fn (Builder $subQuery) => $subQuery->where('issue_type', $issueType));
             });
         }
 
         if (isset($filters['sports_teacher_id']) && $filters['sports_teacher_id'] !== null) {
-            $query->where('sports_teacher_id', (int) $filters['sports_teacher_id']);
+            $query->where($table.'.sports_teacher_id', (int) $filters['sports_teacher_id']);
         }
 
         if (isset($filters['status']) && $filters['status'] !== null) {
-            $query->where('status', (string) $filters['status']);
+            $query->where($table.'.status', (string) $filters['status']);
         }
 
         if (isset($filters['severity']) && $filters['severity'] !== null) {
-            $query->where('severity', (string) $filters['severity']);
+            $query->where($table.'.severity', (string) $filters['severity']);
         }
     }
 
