@@ -58,7 +58,9 @@ class DisciplineReportController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $validated = $request->validate([
-            'student_id' => ['required', 'integer', 'exists:students,id'],
+            'student_id' => ['nullable', 'integer', 'exists:students,id', 'required_without:student_ids'],
+            'student_ids' => ['nullable', 'array', 'min:1', 'required_without:student_id'],
+            'student_ids.*' => ['required', 'integer', 'exists:students,id', 'distinct'],
             'subject_id' => ['nullable', 'integer', 'exists:subjects,id'],
             'session' => ['nullable', 'string', 'max:20'],
             'report_date' => ['required', 'date'],
@@ -68,11 +70,19 @@ class DisciplineReportController extends Controller
             'confirm_duplicate' => ['nullable', 'boolean'],
         ]);
 
-        $report = $this->disciplineReportService->createReport($validated, $request->user());
+        $reports = $this->disciplineReportService->createReports($validated, $request->user());
+        $createdCount = $reports->count();
+        $firstReport = $reports->first();
+
+        if ($createdCount === 1 && $firstReport instanceof StudentDisciplineReport) {
+            return redirect()
+                ->route('teacher.discipline-reports.show', $firstReport)
+                ->with('success', 'Discipline report submitted and notifications sent successfully.');
+        }
 
         return redirect()
-            ->route('teacher.discipline-reports.show', $report)
-            ->with('success', 'Discipline report submitted and notifications sent successfully.');
+            ->route('teacher.discipline-reports.index')
+            ->with('success', $createdCount.' discipline reports submitted and notifications sent successfully.');
     }
 
     public function show(StudentDisciplineReport $report, Request $request): View
@@ -100,4 +110,3 @@ class DisciplineReportController extends Controller
         ]);
     }
 }
-

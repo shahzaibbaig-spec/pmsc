@@ -125,45 +125,44 @@ class StudentDisciplineReportService
      */
     public function createReport(array $data, User $teacher): StudentDisciplineReport
     {
+        $report = $this->createReports($data, $teacher)->first();
+
+        if (! $report instanceof StudentDisciplineReport) {
+            throw ValidationException::withMessages([
+                'student_ids' => 'Please select at least one student.',
+            ]);
+        }
+
+        return $report;
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     * @return Collection<int, StudentDisciplineReport>
+     */
+    public function createReports(array $data, User $teacher): Collection
+    {
         $session = $this->resolveSession(isset($data['session']) ? (string) $data['session'] : null);
-        $student = Student::query()
+        $studentIds = $this->extractRequestedStudentIds($data);
+        if ($studentIds === []) {
+            throw ValidationException::withMessages([
+                'student_ids' => 'Please select at least one student.',
+            ]);
+        }
+
+        $students = Student::query()
             ->with('classRoom:id,name,section')
-            ->findOrFail((int) $data['student_id']);
+            ->whereIn('id', $studentIds)
+            ->get()
+            ->keyBy(fn (Student $student): int => (int) $student->id);
+        if ($students->count() !== count($studentIds)) {
+            throw ValidationException::withMessages([
+                'student_ids' => 'One or more selected students could not be found.',
+            ]);
+        }
 
         $subjectId = isset($data['subject_id']) && $data['subject_id'] !== '' ? (int) $data['subject_id'] : null;
         $assignmentContext = $this->teacherAssignmentContext($teacher, $session);
-        $resolvedClassMeta = $this->resolveClassMetaForStudentSession($student, $session);
-        $resolvedClassId = is_array($resolvedClassMeta)
-            ? (int) ($resolvedClassMeta['class_id'] ?? 0)
-            : (int) $student->class_id;
-        $allowedSubjectIds = $assignmentContext['subject_ids_by_class'][$resolvedClassId] ?? [];
-
-        if (! $this->canTeacherReportStudentWithContext($assignmentContext, $student, $session, $subjectId)) {
-            throw ValidationException::withMessages([
-                'student_id' => 'You are not allowed to report this student for the selected session.',
-            ]);
-        }
-
-        if ($subjectId === null && count($allowedSubjectIds) > 1) {
-            throw ValidationException::withMessages([
-                'subject_id' => 'Please select a subject for this student.',
-            ]);
-        }
-
-        if ($subjectId !== null && ! in_array($subjectId, $allowedSubjectIds, true)) {
-            throw ValidationException::withMessages([
-                'subject_id' => 'You are not assigned this subject for the selected student/class.',
-            ]);
-        }
-
-        if ($subjectId !== null && $this->visibilityService->classRequiresSubjectFiltering($resolvedClassId)) {
-            $classIdForSubjectValidation = $resolvedClassId > 0 ? $resolvedClassId : (int) $student->class_id;
-            if (! $this->studentHasSubjectForSession((int) $student->id, $classIdForSubjectValidation, $subjectId, $session)) {
-                throw ValidationException::withMessages([
-                    'subject_id' => 'Selected subject is not assigned to this student for the selected session.',
-                ]);
-            }
-        }
 
         $issueType = trim((string) ($data['issue_type'] ?? ''));
         if (! array_key_exists($issueType, StudentDisciplineReport::ISSUE_LABELS)) {
@@ -188,39 +187,65 @@ class StudentDisciplineReportService
             StudentDisciplineReport::SEVERITY_URGENT,
         ], true) || (bool) ($data['confirm_duplicate'] ?? false);
 
-        $duplicateExists = StudentDisciplineReport::query()
-            ->where('student_id', (int) $student->id)
-            ->where('teacher_id', (int) $teacher->id)
-            ->where('issue_type', $issueType)
-            ->whereDate('report_date', $reportDate)
-            ->where('session', $session)
-            ->exists();
-
-        if ($duplicateExists && ! $allowDuplicate) {
-            throw ValidationException::withMessages([
-                'duplicate_warning' => 'A similar report already exists for this student today. Choose severity Repeated/Serious/Urgent or confirm duplicate to continue.',
-            ]);
-        }
-
         $subject = $subjectId !== null
             ? Subject::query()->find($subjectId)
             : null;
-        $autoMessage = $this->generateAutoMessage($student, $teacher, $issueType, $description, $subject);
 
-        /** @var StudentDisciplineReport $report */
-        $report = DB::transaction(function () use (
-            $student,
-            $teacher,
-            $subjectId,
-            $session,
-            $reportDate,
-            $issueType,
-            $severity,
-            $description,
-            $autoMessage,
-            $resolvedClassId
-        ): StudentDisciplineReport {
-            $report = StudentDisciplineReport::query()->create([
+        $preparedRows = [];
+        $duplicateStudentNames = [];
+        foreach ($studentIds as $studentId) {
+            /** @var Student|null $student */
+            $student = $students->get($studentId);
+            if (! $student instanceof Student) {
+                continue;
+            }
+
+            $resolvedClassMeta = $this->resolveClassMetaForStudentSession($student, $session);
+            $resolvedClassId = is_array($resolvedClassMeta)
+                ? (int) ($resolvedClassMeta['class_id'] ?? 0)
+                : (int) $student->class_id;
+            $allowedSubjectIds = $assignmentContext['subject_ids_by_class'][$resolvedClassId] ?? [];
+            $studentName = trim((string) $student->name) !== '' ? trim((string) $student->name) : 'selected student';
+
+            if (! $this->canTeacherReportStudentWithContext($assignmentContext, $student, $session, $subjectId)) {
+                throw ValidationException::withMessages([
+                    'student_ids' => 'You are not allowed to report '.$studentName.' for the selected session.',
+                ]);
+            }
+
+            if ($subjectId === null && count($allowedSubjectIds) > 1) {
+                throw ValidationException::withMessages([
+                    'subject_id' => 'Please select a subject for '.$studentName.'.',
+                ]);
+            }
+
+            if ($subjectId !== null && ! in_array($subjectId, $allowedSubjectIds, true)) {
+                throw ValidationException::withMessages([
+                    'subject_id' => 'You are not assigned the selected subject for '.$studentName.'.',
+                ]);
+            }
+
+            if ($subjectId !== null && $this->visibilityService->classRequiresSubjectFiltering($resolvedClassId)) {
+                $classIdForSubjectValidation = $resolvedClassId > 0 ? $resolvedClassId : (int) $student->class_id;
+                if (! $this->studentHasSubjectForSession((int) $student->id, $classIdForSubjectValidation, $subjectId, $session)) {
+                    throw ValidationException::withMessages([
+                        'subject_id' => 'Selected subject is not assigned to '.$studentName.' for the selected session.',
+                    ]);
+                }
+            }
+
+            $duplicateExists = StudentDisciplineReport::query()
+                ->where('student_id', (int) $student->id)
+                ->where('teacher_id', (int) $teacher->id)
+                ->where('issue_type', $issueType)
+                ->whereDate('report_date', $reportDate)
+                ->where('session', $session)
+                ->exists();
+            if ($duplicateExists && ! $allowDuplicate) {
+                $duplicateStudentNames[] = $studentName;
+            }
+
+            $preparedRows[] = [
                 'student_id' => (int) $student->id,
                 'class_id' => $resolvedClassId > 0 ? $resolvedClassId : null,
                 'subject_id' => $subjectId,
@@ -231,18 +256,32 @@ class StudentDisciplineReportService
                 'issue_label' => StudentDisciplineReport::issueLabelFor($issueType),
                 'severity' => $severity,
                 'description' => $description,
-                'auto_message' => $autoMessage,
+                'auto_message' => $this->generateAutoMessage($student, $teacher, $issueType, $description, $subject),
                 'status' => StudentDisciplineReport::STATUS_OPEN,
                 'created_by' => (int) $teacher->id,
                 'updated_by' => (int) $teacher->id,
+            ];
+        }
+
+        if ($duplicateStudentNames !== [] && ! $allowDuplicate) {
+            throw ValidationException::withMessages([
+                'duplicate_warning' => 'A similar report already exists today for: '.implode(', ', $duplicateStudentNames).'. Choose severity Repeated/Serious/Urgent or confirm duplicate to continue.',
             ]);
+        }
 
-            $this->notifyPrincipalAndWardens($report);
+        $reportIds = DB::transaction(function () use ($preparedRows): array {
+            $ids = [];
+            foreach ($preparedRows as $row) {
+                /** @var StudentDisciplineReport $report */
+                $report = StudentDisciplineReport::query()->create($row);
+                $this->notifyPrincipalAndWardens($report);
+                $ids[] = (int) $report->id;
+            }
 
-            return $report;
+            return $ids;
         });
 
-        return $report->fresh([
+        $relations = [
             'student.classRoom:id,name,section',
             'classRoom:id,name,section',
             'subject:id,name',
@@ -251,7 +290,16 @@ class StudentDisciplineReportService
             'resolvedBy:id,name',
             'createdBy:id,name',
             'updatedBy:id,name',
-        ]);
+        ];
+
+        $positionById = array_flip($reportIds);
+
+        return StudentDisciplineReport::query()
+            ->with($relations)
+            ->whereIn('id', $reportIds)
+            ->get()
+            ->sortBy(fn (StudentDisciplineReport $report): int => (int) ($positionById[(int) $report->id] ?? PHP_INT_MAX))
+            ->values();
     }
 
     public function teacherCanReportStudent(User $teacher, Student $student, ?int $subjectId = null): bool
@@ -1041,6 +1089,22 @@ class StudentDisciplineReportService
     private function resolveSession(?string $session): string
     {
         return $this->dailyDiaryService->resolveSession($session);
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     * @return array<int, int>
+     */
+    private function extractRequestedStudentIds(array $data): array
+    {
+        return collect((array) ($data['student_ids'] ?? []))
+            ->push($data['student_id'] ?? null)
+            ->filter(fn ($studentId): bool => $studentId !== null && $studentId !== '')
+            ->map(fn ($studentId): int => (int) $studentId)
+            ->filter(fn (int $studentId): bool => $studentId > 0)
+            ->unique()
+            ->values()
+            ->all();
     }
 
     /**

@@ -3,7 +3,7 @@
         <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
                 <h2 class="text-xl font-semibold text-slate-900">New Class Discipline Report</h2>
-                <p class="mt-1 text-sm text-slate-500">Search assigned student, select issue and severity, preview message, and submit.</p>
+                <p class="mt-1 text-sm text-slate-500">Search assigned students, select one or more students from class, choose issue and severity, preview message, and submit.</p>
             </div>
             <a href="{{ route('teacher.discipline-reports.index') }}" class="inline-flex min-h-11 items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
                 Back to List
@@ -29,6 +29,21 @@
         <section class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <form method="POST" action="{{ route('teacher.discipline-reports.store') }}" class="space-y-5" id="disciplineReportForm">
                 @csrf
+                @php
+                    $oldStudentIds = collect((array) old('student_ids', []))
+                        ->filter(fn ($id) => $id !== null && $id !== '')
+                        ->map(fn ($id) => (int) $id)
+                        ->filter(fn ($id) => $id > 0)
+                        ->values()
+                        ->all();
+
+                    if ($oldStudentIds === [] && old('student_id')) {
+                        $legacyStudentId = (int) old('student_id');
+                        if ($legacyStudentId > 0) {
+                            $oldStudentIds = [$legacyStudentId];
+                        }
+                    }
+                @endphp
 
                 <div class="grid grid-cols-1 gap-4 md:grid-cols-4">
                     <div>
@@ -64,18 +79,25 @@
 
                 <div class="rounded-xl border border-blue-100 bg-blue-50 p-4">
                     <label for="student_search" class="block text-sm font-semibold text-slate-700">AJAX Student Search</label>
-                    <input id="student_search" type="text" autocomplete="off" placeholder="Search by name, admission number, roll number, father name, class, section" class="mt-2 block w-full rounded-xl border-slate-300 text-sm" value="{{ old('student_name') }}">
-                    <input type="hidden" id="student_id" name="student_id" value="{{ old('student_id') }}">
-                    <div id="selected_student" class="mt-3 {{ old('student_id') ? '' : 'hidden' }} rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700"></div>
+                    <input id="student_search" type="text" autocomplete="off" placeholder="Search by name, admission number, roll number, father name, class, section" class="mt-2 block w-full rounded-xl border-slate-300 text-sm">
+                    <div id="student_id_inputs">
+                        @foreach ($oldStudentIds as $oldStudentId)
+                            <input type="hidden" name="student_ids[]" value="{{ (int) $oldStudentId }}">
+                        @endforeach
+                    </div>
+                    <div id="selected_students_panel" class="mt-3 {{ $oldStudentIds !== [] ? '' : 'hidden' }} rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+                        <p id="selected_students_count">Selected students: {{ count($oldStudentIds) }}</p>
+                        <div id="selected_students" class="mt-2 flex flex-wrap gap-2"></div>
+                    </div>
                     <div id="student_results" class="mt-3 hidden divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white"></div>
-                    <p class="mt-2 text-xs text-slate-500">Only students from your assigned classes are searchable for selected session.</p>
+                    <p class="mt-2 text-xs text-slate-500">Only students from your assigned classes are searchable for selected session. You can add multiple students before submit.</p>
                 </div>
 
                 <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
                     <div>
                         <label for="subject_id" class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Subject</label>
                         <select id="subject_id" name="subject_id" class="mt-1 block min-h-11 w-full rounded-xl border-slate-300 text-sm">
-                            <option value="">Select after student</option>
+                            <option value="">Select after students</option>
                         </select>
                         <p class="mt-2 text-xs text-slate-500">Required when multiple assigned subjects are available for this class/student.</p>
                     </div>
@@ -87,12 +109,12 @@
 
                 <div class="rounded-xl border border-indigo-200 bg-indigo-50 p-4">
                     <p class="text-xs font-semibold uppercase tracking-wide text-indigo-700">Auto-generated Message Preview</p>
-                    <p id="auto_message_preview" class="mt-2 whitespace-pre-line text-sm text-indigo-900">Select student and issue type to preview auto message.</p>
+                    <p id="auto_message_preview" class="mt-2 whitespace-pre-line text-sm text-indigo-900">Select students and issue type to preview auto message.</p>
                 </div>
 
                 <div class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
                     <p class="font-semibold">Duplicate Handling</p>
-                    <p class="mt-1">If the same issue for same student is already reported by you for this date/session, system will warn. You can still proceed for repeated/serious/urgent severity or confirm below.</p>
+                    <p class="mt-1">If the same issue for any selected student is already reported by you for this date/session, system will warn. You can still proceed for repeated/serious/urgent severity or confirm below.</p>
                     <label class="mt-3 inline-flex items-center gap-2">
                         <input type="checkbox" name="confirm_duplicate" value="1" @checked(old('confirm_duplicate')) class="h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500">
                         <span>Confirm duplicate entry if warning appears.</span>
@@ -150,6 +172,8 @@
             const endpoint = @json(route('teacher.discipline-reports.students.search'));
             const issueOptions = @json($issue_options);
             const teacherName = @json(auth()->user()?->name ?? 'Teacher');
+            const oldStudentIds = @json($oldStudentIds);
+            const oldSubjectId = @json(old('subject_id') !== null && old('subject_id') !== '' ? (int) old('subject_id') : null);
             const issueTemplates = {
                 late_to_class: '{student_name} of {class_section} was reported by {teacher_name} for being late to class.',
                 homework_not_completed: '{student_name} of {class_section} was reported by {teacher_name} for not completing homework in {subject_name}.',
@@ -168,42 +192,150 @@
 
             const searchInput = document.getElementById('student_search');
             const sessionInput = document.getElementById('session');
-            const studentIdInput = document.getElementById('student_id');
-            const selectedStudent = document.getElementById('selected_student');
+            const studentIdInputs = document.getElementById('student_id_inputs');
+            const selectedPanel = document.getElementById('selected_students_panel');
+            const selectedCount = document.getElementById('selected_students_count');
+            const selectedList = document.getElementById('selected_students');
             const resultBox = document.getElementById('student_results');
             const issueTypeInput = document.getElementById('issue_type');
             const subjectInput = document.getElementById('subject_id');
             const descriptionInput = document.getElementById('description');
             const previewBox = document.getElementById('auto_message_preview');
 
-            if (!searchInput || !sessionInput || !studentIdInput || !selectedStudent || !resultBox || !issueTypeInput || !subjectInput || !descriptionInput || !previewBox) {
+            if (
+                !searchInput ||
+                !sessionInput ||
+                !studentIdInputs ||
+                !selectedPanel ||
+                !selectedCount ||
+                !selectedList ||
+                !resultBox ||
+                !issueTypeInput ||
+                !subjectInput ||
+                !descriptionInput ||
+                !previewBox
+            ) {
                 return;
             }
 
-            let selected = null;
-            const oldSubjectId = @json((int) old('subject_id', 0));
+            const selectedById = new Map();
+            let shouldApplyOldSubject = oldSubjectId !== null;
+
+            const escapeHtml = (value) => window.NSMS.escapeHtml(String(value ?? ''));
 
             const hydrateSubjects = (subjects = []) => {
+                const currentSubjectValue = subjectInput.value;
                 const options = ['<option value="">Select subject</option>'];
+
                 for (const subject of subjects) {
-                    const selectedAttr = Number(subject.id) === oldSubjectId ? ' selected' : '';
-                    options.push(`<option value="${subject.id}"${selectedAttr}>${window.NSMS.escapeHtml(subject.name)}</option>`);
+                    options.push(`<option value="${subject.id}">${escapeHtml(subject.name)}</option>`);
                 }
+
+                if (subjects.length === 0 && shouldApplyOldSubject && oldSubjectId !== null) {
+                    options.push(`<option value="${oldSubjectId}" selected>Previously selected subject</option>`);
+                    subjectInput.innerHTML = options.join('');
+                    shouldApplyOldSubject = false;
+                    return;
+                }
+
                 subjectInput.innerHTML = options.join('');
-                if (subjects.length === 1 && !subjectInput.value) {
-                    subjectInput.value = String(subjects[0].id);
+
+                if (currentSubjectValue && subjects.some((subject) => String(subject.id) === String(currentSubjectValue))) {
+                    subjectInput.value = currentSubjectValue;
+                    return;
                 }
+
+                if (shouldApplyOldSubject && oldSubjectId !== null && subjects.some((subject) => Number(subject.id) === Number(oldSubjectId))) {
+                    subjectInput.value = String(oldSubjectId);
+                    shouldApplyOldSubject = false;
+                    return;
+                }
+
+                if (subjects.length === 1) {
+                    subjectInput.value = String(subjects[0].id);
+                    shouldApplyOldSubject = false;
+                }
+            };
+
+            const sharedSubjectOptions = () => {
+                const selectedStudents = Array.from(selectedById.values());
+                const withSubjects = selectedStudents.filter((student) => Array.isArray(student.subjects) && student.subjects.length > 0);
+                if (withSubjects.length === 0) {
+                    return [];
+                }
+
+                const first = withSubjects[0].subjects || [];
+                const common = new Map();
+                for (const subject of first) {
+                    common.set(Number(subject.id), String(subject.name || 'Subject'));
+                }
+
+                for (let index = 1; index < withSubjects.length; index += 1) {
+                    const ids = new Set((withSubjects[index].subjects || []).map((subject) => Number(subject.id)));
+                    for (const subjectId of Array.from(common.keys())) {
+                        if (!ids.has(subjectId)) {
+                            common.delete(subjectId);
+                        }
+                    }
+                }
+
+                return Array.from(common.entries())
+                    .map(([id, name]) => ({ id, name }))
+                    .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+            };
+
+            const syncStudentInputs = () => {
+                studentIdInputs.innerHTML = '';
+                for (const student of selectedById.values()) {
+                    const input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = 'student_ids[]';
+                    input.value = String(student.id);
+                    studentIdInputs.appendChild(input);
+                }
+            };
+
+            const renderSelectedStudents = () => {
+                const selectedStudents = Array.from(selectedById.values());
+                if (selectedStudents.length === 0) {
+                    selectedPanel.classList.add('hidden');
+                    selectedList.innerHTML = '';
+                    selectedCount.textContent = 'Selected students: 0';
+                    return;
+                }
+
+                selectedPanel.classList.remove('hidden');
+                selectedCount.textContent = `Selected students: ${selectedStudents.length}`;
+                selectedList.innerHTML = selectedStudents.map((student) => {
+                    const name = student.student_name || `Student #${student.id}`;
+                    const classInfo = student.class_section || '';
+                    return `
+                        <span class="inline-flex items-center gap-2 rounded-full border border-emerald-300 bg-white px-3 py-1 text-xs text-emerald-800">
+                            <span>${escapeHtml(name)}${classInfo ? ` | ${escapeHtml(classInfo)}` : ''}</span>
+                            <button type="button" class="text-emerald-700 hover:text-emerald-900" data-remove-student="${Number(student.id)}" aria-label="Remove student">&times;</button>
+                        </span>
+                    `;
+                }).join('');
             };
 
             const previewMessage = () => {
                 const issueType = issueTypeInput.value;
                 if (!issueType || !issueOptions[issueType]) {
-                    previewBox.textContent = 'Select student and issue type to preview auto message.';
+                    previewBox.textContent = 'Select students and issue type to preview auto message.';
                     return;
                 }
 
-                const studentName = selected?.student_name || 'Student';
-                const classSection = selected?.class_section || 'Unknown Class';
+                const selectedStudents = Array.from(selectedById.values());
+                if (selectedStudents.length === 0) {
+                    previewBox.textContent = 'Select students and issue type to preview auto message.';
+                    return;
+                }
+
+                const previewStudent = selectedStudents[0];
+                const studentName = selectedStudents.length === 1
+                    ? (previewStudent.student_name || 'Student')
+                    : `${selectedStudents.length} students`;
+                const classSection = previewStudent.class_section || 'Unknown Class';
                 const subjectName = subjectInput.selectedOptions[0]?.textContent?.trim() || 'the subject';
                 const template = issueTemplates[issueType] || issueTemplates.other;
                 let message = template
@@ -220,15 +352,29 @@
                 previewBox.textContent = message;
             };
 
-            const renderSelected = (student) => {
-                selected = student;
-                studentIdInput.value = String(student.id);
-                selectedStudent.innerHTML = `<strong>${window.NSMS.escapeHtml(student.student_name)}</strong> | ${window.NSMS.escapeHtml(student.admission_no)} | ${window.NSMS.escapeHtml(student.class_section)} | ${window.NSMS.escapeHtml(student.father_name || '-')}`;
-                selectedStudent.classList.remove('hidden');
+            const addStudent = (student) => {
+                const studentId = Number(student.id || 0);
+                if (studentId <= 0) {
+                    return;
+                }
+
+                selectedById.set(studentId, {
+                    id: studentId,
+                    student_name: String(student.student_name || ''),
+                    admission_no: String(student.admission_no || ''),
+                    class_section: String(student.class_section || ''),
+                    father_name: String(student.father_name || ''),
+                    subjects: Array.isArray(student.subjects) ? student.subjects : [],
+                });
+
+                syncStudentInputs();
+                renderSelectedStudents();
+                hydrateSubjects(sharedSubjectOptions());
+                previewMessage();
+
                 resultBox.classList.add('hidden');
                 resultBox.innerHTML = '';
-                hydrateSubjects(student.subjects || []);
-                previewMessage();
+                searchInput.value = '';
             };
 
             const renderResults = (students) => {
@@ -242,6 +388,7 @@
                     <button type="button" class="block w-full px-3 py-2 text-left hover:bg-slate-50" data-student='${JSON.stringify(student).replace(/'/g, '&#39;')}'>
                         <div class="text-sm font-semibold text-slate-900">${window.NSMS.escapeHtml(student.student_name)}</div>
                         <div class="text-xs text-slate-500">${window.NSMS.escapeHtml(student.admission_no)} | ${window.NSMS.escapeHtml(student.class_section)} | ${window.NSMS.escapeHtml(student.father_name || '-')}</div>
+                        <div class="mt-1 text-[11px] font-semibold text-emerald-700">${selectedById.has(Number(student.id)) ? 'Added' : 'Add to selection'}</div>
                     </button>
                 `).join('');
                 resultBox.classList.remove('hidden');
@@ -269,14 +416,17 @@
             }, 250);
 
             searchInput.addEventListener('input', () => {
-                if (searchInput.value.trim() === '') {
-                    selected = null;
-                    studentIdInput.value = '';
-                    selectedStudent.classList.add('hidden');
-                    selectedStudent.textContent = '';
-                    hydrateSubjects([]);
-                }
                 fetchStudents();
+            });
+
+            sessionInput.addEventListener('change', () => {
+                selectedById.clear();
+                syncStudentInputs();
+                renderSelectedStudents();
+                hydrateSubjects([]);
+                previewMessage();
+                resultBox.classList.add('hidden');
+                resultBox.innerHTML = '';
             });
 
             issueTypeInput.addEventListener('change', previewMessage);
@@ -291,10 +441,28 @@
 
                 try {
                     const student = JSON.parse(button.getAttribute('data-student'));
-                    renderSelected(student);
+                    addStudent(student);
                 } catch (_) {
                     // ignore malformed payload
                 }
+            });
+
+            selectedList.addEventListener('click', (event) => {
+                const removeButton = event.target.closest('button[data-remove-student]');
+                if (!removeButton) {
+                    return;
+                }
+
+                const studentId = Number(removeButton.getAttribute('data-remove-student') || 0);
+                if (studentId <= 0) {
+                    return;
+                }
+
+                selectedById.delete(studentId);
+                syncStudentInputs();
+                renderSelectedStudents();
+                hydrateSubjects(sharedSubjectOptions());
+                previewMessage();
             });
 
             document.addEventListener('click', (event) => {
@@ -303,14 +471,26 @@
                 }
             });
 
-            if (studentIdInput.value !== '') {
-                selectedStudent.classList.remove('hidden');
-                selectedStudent.textContent = 'Student selected from previous submission. Search again if you need to change.';
+            for (const studentId of oldStudentIds) {
+                const parsedId = Number(studentId || 0);
+                if (parsedId <= 0) {
+                    continue;
+                }
+
+                selectedById.set(parsedId, {
+                    id: parsedId,
+                    student_name: `Student #${parsedId}`,
+                    class_section: '',
+                    father_name: '',
+                    admission_no: '',
+                    subjects: [],
+                });
             }
 
-            hydrateSubjects([]);
+            syncStudentInputs();
+            renderSelectedStudents();
+            hydrateSubjects(sharedSubjectOptions());
             previewMessage();
         })();
     </script>
 </x-app-layout>
-
