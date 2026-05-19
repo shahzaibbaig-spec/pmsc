@@ -555,7 +555,6 @@ class DailyDiaryService
             ])
             ->where('session', (string) $normalized['session'])
             ->when($hostelClassIds !== [], fn ($query) => $query->whereIn('class_id', $hostelClassIds))
-            ->when($hostelClassIds === [], fn ($query) => $query->whereRaw('1 = 0'))
             ->when(isset($normalized['teacher_id']) && $normalized['teacher_id'] !== null, function ($query) use ($normalized): void {
                 $query->where('teacher_id', (int) $normalized['teacher_id']);
             })
@@ -604,7 +603,7 @@ class DailyDiaryService
             ->values()
             ->all();
 
-        if (! in_array((int) $dailyDiary->class_id, $allowedClassIds, true)) {
+        if ($allowedClassIds !== [] && ! in_array((int) $dailyDiary->class_id, $allowedClassIds, true)) {
             throw new RuntimeException('You are not allowed to access this diary entry.');
         }
 
@@ -998,7 +997,6 @@ class DailyDiaryService
             ->with('teacher.user:id,name')
             ->where('session', $session)
             ->when($classIds !== [], fn ($query) => $query->whereIn('class_id', $classIds))
-            ->when($classIds === [], fn ($query) => $query->whereRaw('1 = 0'))
             ->get(['teacher_id'])
             ->map(function (DailyDiary $diary): array {
                 return [
@@ -1023,7 +1021,6 @@ class DailyDiaryService
             ->with('classRoom:id,name,section')
             ->where('session', $session)
             ->when($classIds !== [], fn ($query) => $query->whereIn('class_id', $classIds))
-            ->when($classIds === [], fn ($query) => $query->whereRaw('1 = 0'))
             ->get(['class_id'])
             ->map(function (DailyDiary $diary): array {
                 return [
@@ -1047,7 +1044,6 @@ class DailyDiaryService
             ->with('subject:id,name')
             ->where('session', $session)
             ->when($classIds !== [], fn ($query) => $query->whereIn('class_id', $classIds))
-            ->when($classIds === [], fn ($query) => $query->whereRaw('1 = 0'))
             ->get(['subject_id'])
             ->map(function (DailyDiary $diary): array {
                 return [
