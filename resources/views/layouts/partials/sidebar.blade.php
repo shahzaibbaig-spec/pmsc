@@ -321,8 +321,11 @@
         if ($sidebarUser?->can('mark_attendance')) {
             $menuItems[] = ['route' => 'teacher.attendance.index', 'label' => 'Attendance'];
         }
-        if ($sidebarUser?->can('view_own_daily_diary_entries') || $sidebarUser?->can('create_daily_diary')) {
-            $menuItems[] = ['route' => 'teacher.daily-diary.index', 'label' => 'Daily Diary'];
+        if ($sidebarUser?->can('view_own_daily_diary_entries')) {
+            $menuItems[] = ['route' => 'teacher.daily-diary.my-entries', 'label' => 'My Diary Entries'];
+        }
+        if ($sidebarUser?->can('create_daily_diary')) {
+            $menuItems[] = ['route' => 'teacher.daily-diary.create', 'label' => 'Post Daily Diary'];
         }
         if ($sidebarUser?->can('enter_marks')) {
             $menuItems[] = ['route' => 'teacher.exams.index', 'label' => 'Marks Entry'];

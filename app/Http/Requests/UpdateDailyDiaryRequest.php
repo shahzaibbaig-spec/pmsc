@@ -38,7 +38,7 @@ class UpdateDailyDiaryRequest extends FormRequest
             'title' => trim((string) $this->input('title', '')) ?: null,
             'instructions' => trim((string) $this->input('instructions', '')) ?: null,
             'remove_attachment' => $this->has('remove_attachment') ? $this->boolean('remove_attachment') : false,
-            'is_published' => $this->has('is_published') ? $this->boolean('is_published') : false,
+            'is_published' => true,
         ]);
     }
 }

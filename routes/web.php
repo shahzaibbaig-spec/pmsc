@@ -1627,6 +1627,10 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
         ->middleware(['role:Teacher', 'permission:view_own_daily_diary_entries'])
         ->name('teacher.daily-diary.index');
 
+    Route::get('/teacher/daily-diary/my-entries', [DailyDiaryController::class, 'index'])
+        ->middleware(['role:Teacher', 'permission:view_own_daily_diary_entries'])
+        ->name('teacher.daily-diary.my-entries');
+
     Route::get('/teacher/daily-diary/create', [DailyDiaryController::class, 'create'])
         ->middleware(['role:Teacher', 'permission:create_daily_diary'])
         ->name('teacher.daily-diary.create');

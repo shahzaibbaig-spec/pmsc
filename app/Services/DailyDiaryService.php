@@ -60,9 +60,8 @@ class DailyDiaryService
             'title' => $this->normalizedNullableString($data['title'] ?? null),
             'homework_text' => trim((string) ($data['homework_text'] ?? '')),
             'instructions' => $this->normalizedNullableString($data['instructions'] ?? null),
-            'is_published' => array_key_exists('is_published', $data)
-                ? (bool) $data['is_published']
-                : true,
+            // Teacher diary entries should be visible immediately to all relevant roles.
+            'is_published' => true,
         ];
 
         /** @var DailyDiary $diary */

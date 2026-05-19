@@ -175,6 +175,16 @@
                                 {{ __('My Mark Entries') }}
                             </x-nav-link>
                         @endcan
+                        @can('view_own_daily_diary_entries')
+                            <x-nav-link :href="route('teacher.daily-diary.my-entries')" :active="request()->routeIs('teacher.daily-diary.my-entries') || request()->routeIs('teacher.daily-diary.index') || request()->routeIs('teacher.daily-diary.edit')">
+                                {{ __('My Diary Entries') }}
+                            </x-nav-link>
+                        @endcan
+                        @can('create_daily_diary')
+                            <x-nav-link :href="route('teacher.daily-diary.create')" :active="request()->routeIs('teacher.daily-diary.create')">
+                                {{ __('Post Daily Diary') }}
+                            </x-nav-link>
+                        @endcan
                         <x-nav-link :href="route('teacher.timetable.index')" :active="request()->routeIs('teacher.timetable.*')">
                             {{ __('Timetable') }}
                         </x-nav-link>
@@ -504,6 +514,16 @@
                 @can('view_own_mark_entries')
                     <x-responsive-nav-link :href="route('teacher.marks.entries.index')" :active="request()->routeIs('teacher.marks.entries.*')">
                         {{ __('My Mark Entries') }}
+                    </x-responsive-nav-link>
+                @endcan
+                @can('view_own_daily_diary_entries')
+                    <x-responsive-nav-link :href="route('teacher.daily-diary.my-entries')" :active="request()->routeIs('teacher.daily-diary.my-entries') || request()->routeIs('teacher.daily-diary.index') || request()->routeIs('teacher.daily-diary.edit')">
+                        {{ __('My Diary Entries') }}
+                    </x-responsive-nav-link>
+                @endcan
+                @can('create_daily_diary')
+                    <x-responsive-nav-link :href="route('teacher.daily-diary.create')" :active="request()->routeIs('teacher.daily-diary.create')">
+                        {{ __('Post Daily Diary') }}
                     </x-responsive-nav-link>
                 @endcan
                 <x-responsive-nav-link :href="route('teacher.timetable.index')" :active="request()->routeIs('teacher.timetable.*')">

@@ -180,18 +180,10 @@
         @endif
     </div>
 
-    <div class="flex flex-wrap items-center gap-3">
-        <label class="inline-flex items-center gap-2 text-sm font-medium text-slate-700">
-            <input
-                type="checkbox"
-                name="is_published"
-                value="1"
-                @checked((int) old('is_published', $dailyDiary?->is_published ?? 1) === 1)
-                class="rounded border-slate-300 text-slate-900 shadow-sm focus:ring-slate-500"
-            >
-            Publish immediately
-        </label>
+    <div class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+        This diary entry will be published immediately and visible to Principal, Warden, and relevant students.
     </div>
+    <input type="hidden" name="is_published" value="1">
 
     <div class="flex flex-wrap items-center gap-3">
         <button
@@ -201,7 +193,7 @@
             {{ $submitLabel ?? 'Save Diary Entry' }}
         </button>
         <a
-            href="{{ route('teacher.daily-diary.index') }}"
+            href="{{ route('teacher.daily-diary.my-entries') }}"
             class="inline-flex min-h-11 items-center rounded-xl border border-slate-300 bg-white px-5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
         >
             Cancel

@@ -75,10 +75,10 @@ class DailyDiaryController extends Controller
         }
 
         return redirect()
-            ->route('teacher.daily-diary.index', [
+            ->route('teacher.daily-diary.my-entries', [
                 'session' => $request->string('session')->toString(),
             ])
-            ->with('success', 'Daily diary entry saved successfully.');
+            ->with('success', 'Daily diary entry saved and published instantly for Principal, Wardens, and students.');
     }
 
     public function edit(DailyDiary $dailyDiary): View
@@ -118,10 +118,10 @@ class DailyDiaryController extends Controller
         }
 
         return redirect()
-            ->route('teacher.daily-diary.index', [
+            ->route('teacher.daily-diary.my-entries', [
                 'session' => $request->string('session')->toString(),
             ])
-            ->with('success', 'Daily diary entry updated successfully.');
+            ->with('success', 'Daily diary entry updated and published instantly for Principal, Wardens, and students.');
     }
 
     private function teacherFromAuth(): Teacher

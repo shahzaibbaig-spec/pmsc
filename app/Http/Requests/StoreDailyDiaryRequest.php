@@ -36,7 +36,7 @@ class StoreDailyDiaryRequest extends FormRequest
             'session' => trim((string) $this->input('session', '')),
             'title' => trim((string) $this->input('title', '')) ?: null,
             'instructions' => trim((string) $this->input('instructions', '')) ?: null,
-            'is_published' => $this->has('is_published') ? $this->boolean('is_published') : false,
+            'is_published' => true,
         ]);
     }
 }

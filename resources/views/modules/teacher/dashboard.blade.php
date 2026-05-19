@@ -18,6 +18,12 @@
 
     <x-ui.card class="mt-6" title="Quick Actions">
         <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            @can('create_daily_diary')
+                <x-ui.button href="{{ route('teacher.daily-diary.create', ['session' => $stats['assignment_session'] ?? null]) }}" variant="success">Post Daily Diary</x-ui.button>
+            @endcan
+            @can('view_own_daily_diary_entries')
+                <x-ui.button href="{{ route('teacher.daily-diary.my-entries', ['session' => $stats['assignment_session'] ?? null]) }}" variant="secondary">My Diary Entries</x-ui.button>
+            @endcan
             @can('mark_attendance')
                 <x-ui.button href="{{ route('teacher.attendance.index') }}">Mark Attendance</x-ui.button>
             @endcan
