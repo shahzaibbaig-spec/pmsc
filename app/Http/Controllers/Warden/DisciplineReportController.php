@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Warden;
 
 use App\Http\Controllers\Controller;
+use App\Models\Student;
 use App\Models\StudentDisciplineReport;
 use App\Services\StudentDisciplineReportService;
 use Illuminate\Database\Eloquent\Builder;
@@ -41,9 +42,22 @@ class DisciplineReportController extends Controller
 
     public function show(StudentDisciplineReport $report, Request $request): View
     {
+        $allowedClassIds = Student::query()
+            ->forWarden($request->user())
+            ->distinct()
+            ->pluck('class_id')
+            ->map(fn ($id): int => (int) $id)
+            ->filter(fn (int $id): bool => $id > 0)
+            ->values()
+            ->all();
+
         $allowed = StudentDisciplineReport::query()
             ->whereKey((int) $report->id)
-            ->whereHas('student', fn (Builder $query) => $query->forWarden($request->user()))
+            ->when(
+                $allowedClassIds !== [],
+                fn (Builder $reportQuery): Builder => $reportQuery
+                    ->whereHas('student', fn (Builder $studentQuery) => $studentQuery->forWarden($request->user()))
+            )
             ->exists();
 
         if (! $allowed) {
@@ -75,9 +89,22 @@ class DisciplineReportController extends Controller
             'warden_remarks' => ['nullable', 'string', 'max:1200'],
         ]);
 
+        $allowedClassIds = Student::query()
+            ->forWarden($request->user())
+            ->distinct()
+            ->pluck('class_id')
+            ->map(fn ($id): int => (int) $id)
+            ->filter(fn (int $id): bool => $id > 0)
+            ->values()
+            ->all();
+
         $allowed = StudentDisciplineReport::query()
             ->whereKey((int) $report->id)
-            ->whereHas('student', fn (Builder $query) => $query->forWarden($request->user()))
+            ->when(
+                $allowedClassIds !== [],
+                fn (Builder $reportQuery): Builder => $reportQuery
+                    ->whereHas('student', fn (Builder $studentQuery) => $studentQuery->forWarden($request->user()))
+            )
             ->exists();
 
         if (! $allowed) {

@@ -587,9 +587,14 @@ class StudentDisciplineReportService
             ->filter(fn (int $id): bool => $id > 0)
             ->values()
             ->all();
+        $hasWardenClassScope = $allowedClassIds !== [];
 
         $query = $this->baseReportQuery()
-            ->whereHas('student', fn (Builder $studentQuery) => $studentQuery->forWarden($warden));
+            ->when(
+                $hasWardenClassScope,
+                fn (Builder $reportQuery): Builder => $reportQuery
+                    ->whereHas('student', fn (Builder $studentQuery) => $studentQuery->forWarden($warden))
+            );
         $this->applyReportFilters($query, $normalized);
 
         $reports = $query
@@ -599,7 +604,11 @@ class StudentDisciplineReportService
             ->withQueryString();
 
         $summaryQuery = StudentDisciplineReport::query()
-            ->whereHas('student', fn (Builder $studentQuery) => $studentQuery->forWarden($warden));
+            ->when(
+                $hasWardenClassScope,
+                fn (Builder $reportQuery): Builder => $reportQuery
+                    ->whereHas('student', fn (Builder $studentQuery) => $studentQuery->forWarden($warden))
+            );
         $this->applyReportFilters($summaryQuery, $normalized);
 
         $cards = [
@@ -728,47 +737,47 @@ class StudentDisciplineReportService
     private function applyReportFilters(Builder $query, array $filters): void
     {
         if (isset($filters['session']) && $filters['session'] !== null) {
-            $query->where('session', (string) $filters['session']);
+            $query->where('student_discipline_reports.session', (string) $filters['session']);
         }
 
         if (isset($filters['date']) && $filters['date'] !== null) {
-            $query->whereDate('report_date', Carbon::parse((string) $filters['date'])->toDateString());
+            $query->whereDate('student_discipline_reports.report_date', Carbon::parse((string) $filters['date'])->toDateString());
         }
 
         if (isset($filters['date_from']) && $filters['date_from'] !== null) {
-            $query->whereDate('report_date', '>=', Carbon::parse((string) $filters['date_from'])->toDateString());
+            $query->whereDate('student_discipline_reports.report_date', '>=', Carbon::parse((string) $filters['date_from'])->toDateString());
         }
 
         if (isset($filters['date_to']) && $filters['date_to'] !== null) {
-            $query->whereDate('report_date', '<=', Carbon::parse((string) $filters['date_to'])->toDateString());
+            $query->whereDate('student_discipline_reports.report_date', '<=', Carbon::parse((string) $filters['date_to'])->toDateString());
         }
 
         if (isset($filters['class_id']) && $filters['class_id'] !== null) {
-            $query->where('class_id', (int) $filters['class_id']);
+            $query->where('student_discipline_reports.class_id', (int) $filters['class_id']);
         }
 
         if (isset($filters['student_id']) && $filters['student_id'] !== null) {
-            $query->where('student_id', (int) $filters['student_id']);
+            $query->where('student_discipline_reports.student_id', (int) $filters['student_id']);
         }
 
         if (isset($filters['teacher_id']) && $filters['teacher_id'] !== null) {
-            $query->where('teacher_id', (int) $filters['teacher_id']);
+            $query->where('student_discipline_reports.teacher_id', (int) $filters['teacher_id']);
         }
 
         if (isset($filters['subject_id']) && $filters['subject_id'] !== null) {
-            $query->where('subject_id', (int) $filters['subject_id']);
+            $query->where('student_discipline_reports.subject_id', (int) $filters['subject_id']);
         }
 
         if (isset($filters['issue_type']) && $filters['issue_type'] !== null) {
-            $query->where('issue_type', (string) $filters['issue_type']);
+            $query->where('student_discipline_reports.issue_type', (string) $filters['issue_type']);
         }
 
         if (isset($filters['severity']) && $filters['severity'] !== null) {
-            $query->where('severity', (string) $filters['severity']);
+            $query->where('student_discipline_reports.severity', (string) $filters['severity']);
         }
 
         if (isset($filters['status']) && $filters['status'] !== null) {
-            $query->where('status', (string) $filters['status']);
+            $query->where('student_discipline_reports.status', (string) $filters['status']);
         }
     }
 
