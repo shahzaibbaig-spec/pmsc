@@ -120,6 +120,8 @@ class RolePermissionSeeder extends Seeder
             'acknowledge_student_discipline_report',
             'resolve_student_discipline_report',
             'print_student_discipline_reports',
+            'view_school_psychiatrist_panel',
+            'submit_psychiatrist_feedback',
             'view_kcat_panel',
             'manage_kcat_tests',
             'manage_kcat_questions',
@@ -146,6 +148,7 @@ class RolePermissionSeeder extends Seeder
         $warden = Role::firstOrCreate(['name' => 'Warden', 'guard_name' => 'web']);
         $careerCounselor = Role::firstOrCreate(['name' => 'Career Counselor', 'guard_name' => 'web']);
         $sportsTeacher = Role::firstOrCreate(['name' => 'Sports Teacher', 'guard_name' => 'web']);
+        $psychiatrist = Role::firstOrCreate(['name' => 'School Psychiatrist', 'guard_name' => 'web']);
 
         $admin->syncPermissions($permissions);
         $principal->syncPermissions([
@@ -286,6 +289,12 @@ class RolePermissionSeeder extends Seeder
             'create_sports_observation',
             'view_own_sports_observations',
         ]);
+        $psychiatrist->syncPermissions([
+            'view_school_psychiatrist_panel',
+            'submit_psychiatrist_feedback',
+            'view_all_student_discipline_reports',
+            'view_all_sports_observations',
+        ]);
 
         $this->createUserWithRole('System Admin', 'admin@pmsc.edu.pk', 'Admin');
         $this->createUserWithRole('School Principal', 'principal@pmsc.edu.pk', 'Principal');
@@ -296,6 +305,7 @@ class RolePermissionSeeder extends Seeder
         $this->createUserWithRole('School Warden', 'warden@pmsc.edu.pk', 'Warden');
         $this->createUserWithRole('Career Counselor', 'career.counselor@pmsc.edu.pk', 'Career Counselor');
         $this->createUserWithRole('Sports Teacher', 'sports.teacher@pmsc.edu.pk', 'Sports Teacher');
+        $this->createUserWithRole('Maryam', 'maryam@kort.edu.pk', 'School Psychiatrist');
     }
 
     private function createUserWithRole(string $name, string $email, string $role): void

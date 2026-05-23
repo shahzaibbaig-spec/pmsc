@@ -69,6 +69,9 @@ class StudentSportsObservation extends Model
         'resolved_at',
         'resolved_by',
         'resolution_notes',
+        'psychiatrist_feedback',
+        'psychiatrist_reviewed_by',
+        'psychiatrist_reviewed_at',
         'notified_principal_at',
         'notified_wardens_at',
         'created_by',
@@ -82,10 +85,12 @@ class StudentSportsObservation extends Model
             'class_id' => 'integer',
             'sports_teacher_id' => 'integer',
             'resolved_by' => 'integer',
+            'psychiatrist_reviewed_by' => 'integer',
             'created_by' => 'integer',
             'updated_by' => 'integer',
             'observation_date' => 'date',
             'resolved_at' => 'datetime',
+            'psychiatrist_reviewed_at' => 'datetime',
             'notified_principal_at' => 'datetime',
             'notified_wardens_at' => 'datetime',
         ];
@@ -192,5 +197,10 @@ class StudentSportsObservation extends Model
     public function resolvedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'resolved_by');
+    }
+
+    public function psychiatristReviewedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'psychiatrist_reviewed_by');
     }
 }

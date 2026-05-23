@@ -288,6 +288,7 @@ class StudentDisciplineReportService
             'teacher:id,name',
             'acknowledgedBy:id,name',
             'resolvedBy:id,name',
+            'psychiatristReviewedBy:id,name',
             'createdBy:id,name',
             'updatedBy:id,name',
         ];
@@ -659,6 +660,7 @@ class StudentDisciplineReportService
             'teacher:id,name',
             'acknowledgedBy:id,name',
             'resolvedBy:id,name',
+            'psychiatristReviewedBy:id,name',
             'createdBy:id,name',
             'updatedBy:id,name',
         ]);
@@ -701,6 +703,34 @@ class StudentDisciplineReportService
             'teacher:id,name',
             'acknowledgedBy:id,name',
             'resolvedBy:id,name',
+            'psychiatristReviewedBy:id,name',
+            'createdBy:id,name',
+            'updatedBy:id,name',
+        ]);
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     */
+    public function updatePsychiatristFeedback(StudentDisciplineReport $report, array $data, User $user): StudentDisciplineReport
+    {
+        $feedback = trim((string) ($data['psychiatrist_feedback'] ?? ''));
+
+        $report->forceFill([
+            'psychiatrist_feedback' => $feedback !== '' ? $feedback : null,
+            'psychiatrist_reviewed_by' => (int) $user->id,
+            'psychiatrist_reviewed_at' => now(),
+            'updated_by' => (int) $user->id,
+        ])->save();
+
+        return $report->fresh([
+            'student.classRoom:id,name,section',
+            'classRoom:id,name,section',
+            'subject:id,name',
+            'teacher:id,name',
+            'acknowledgedBy:id,name',
+            'resolvedBy:id,name',
+            'psychiatristReviewedBy:id,name',
             'createdBy:id,name',
             'updatedBy:id,name',
         ]);
@@ -792,6 +822,7 @@ class StudentDisciplineReportService
                 'teacher:id,name',
                 'acknowledgedBy:id,name',
                 'resolvedBy:id,name',
+                'psychiatristReviewedBy:id,name',
                 'createdBy:id,name',
                 'updatedBy:id,name',
             ]);

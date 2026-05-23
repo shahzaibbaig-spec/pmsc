@@ -59,6 +59,9 @@ use App\Http\Controllers\Teacher\TeacherPromotionController;
 use App\Http\Controllers\SportsTeacher\DashboardController as SportsTeacherDashboardController;
 use App\Http\Controllers\SportsTeacher\SportsObservationController as SportsTeacherSportsObservationController;
 use App\Http\Controllers\SportsTeacher\StudentSearchController as SportsTeacherStudentSearchController;
+use App\Http\Controllers\Psychiatrist\DashboardController as PsychiatristDashboardController;
+use App\Http\Controllers\Psychiatrist\DisciplineReportController as PsychiatristDisciplineReportController;
+use App\Http\Controllers\Psychiatrist\SportsObservationController as PsychiatristSportsObservationController;
 use App\Http\Controllers\SectionHead\LessonObservationController as SectionHeadLessonObservationController;
 use App\Http\Controllers\SectionHead\NotebookObservationController as SectionHeadNotebookObservationController;
 use App\Http\Controllers\Warden\WardenDailyDiaryController;
@@ -1565,6 +1568,44 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
     Route::post('/api/timetable/entry/update', [TimetableEntryController::class, 'update'])
         ->middleware(['role:Principal'])
         ->name('api.timetable.entry.update');
+
+    Route::prefix('psychiatrist')
+        ->name('psychiatrist.')
+        ->middleware(['role:School Psychiatrist', 'permission:view_school_psychiatrist_panel'])
+        ->group(function (): void {
+            Route::get('/dashboard', PsychiatristDashboardController::class)
+                ->name('dashboard');
+
+            Route::prefix('discipline-reports')
+                ->name('discipline-reports.')
+                ->middleware('permission:view_all_student_discipline_reports')
+                ->group(function (): void {
+                    Route::get('/', [PsychiatristDisciplineReportController::class, 'index'])
+                        ->name('index');
+                    Route::get('/{report}', [PsychiatristDisciplineReportController::class, 'show'])
+                        ->whereNumber('report')
+                        ->name('show');
+                    Route::post('/{report}/feedback', [PsychiatristDisciplineReportController::class, 'feedback'])
+                        ->middleware('permission:submit_psychiatrist_feedback')
+                        ->whereNumber('report')
+                        ->name('feedback');
+                });
+
+            Route::prefix('sports-observations')
+                ->name('sports-observations.')
+                ->middleware('permission:view_all_sports_observations')
+                ->group(function (): void {
+                    Route::get('/', [PsychiatristSportsObservationController::class, 'index'])
+                        ->name('index');
+                    Route::get('/{observation}', [PsychiatristSportsObservationController::class, 'show'])
+                        ->whereNumber('observation')
+                        ->name('show');
+                    Route::post('/{observation}/feedback', [PsychiatristSportsObservationController::class, 'feedback'])
+                        ->middleware('permission:submit_psychiatrist_feedback')
+                        ->whereNumber('observation')
+                        ->name('feedback');
+                });
+        });
 
     Route::prefix('sports-teacher')
         ->name('sports-teacher.')

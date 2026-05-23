@@ -406,6 +406,18 @@
             $menuItems[] = ['route' => 'sports-teacher.observations.create', 'label' => 'New Observation'];
         }
         $menuItems[] = ['route' => 'notifications.index', 'label' => 'Notifications'];
+    } elseif ($sidebarUser?->hasRole('School Psychiatrist')) {
+        $menuItems = [
+            ['route' => 'psychiatrist.dashboard', 'label' => 'Dashboard'],
+        ];
+
+        if ($sidebarUser?->can('view_all_student_discipline_reports')) {
+            $menuItems[] = ['route' => 'psychiatrist.discipline-reports.index', 'label' => 'Class Discipline Reports'];
+        }
+        if ($sidebarUser?->can('view_all_sports_observations')) {
+            $menuItems[] = ['route' => 'psychiatrist.sports-observations.index', 'label' => 'Sports Observations'];
+        }
+        $menuItems[] = ['route' => 'notifications.index', 'label' => 'Notifications'];
     } elseif ($sidebarUser?->hasRole('Doctor')) {
         $menuItems = [
             ['route' => 'doctor.dashboard', 'label' => 'Dashboard'],

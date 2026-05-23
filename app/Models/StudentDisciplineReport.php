@@ -83,6 +83,9 @@ class StudentDisciplineReport extends Model
         'status',
         'principal_remarks',
         'warden_remarks',
+        'psychiatrist_feedback',
+        'psychiatrist_reviewed_by',
+        'psychiatrist_reviewed_at',
         'acknowledged_by',
         'acknowledged_at',
         'resolved_by',
@@ -99,10 +102,12 @@ class StudentDisciplineReport extends Model
             'subject_id' => 'integer',
             'teacher_id' => 'integer',
             'acknowledged_by' => 'integer',
+            'psychiatrist_reviewed_by' => 'integer',
             'resolved_by' => 'integer',
             'created_by' => 'integer',
             'updated_by' => 'integer',
             'report_date' => 'date',
+            'psychiatrist_reviewed_at' => 'datetime',
             'acknowledged_at' => 'datetime',
             'resolved_at' => 'datetime',
         ];
@@ -143,6 +148,11 @@ class StudentDisciplineReport extends Model
         return $this->belongsTo(User::class, 'resolved_by');
     }
 
+    public function psychiatristReviewedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'psychiatrist_reviewed_by');
+    }
+
     public function createdBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
@@ -153,4 +163,3 @@ class StudentDisciplineReport extends Model
         return $this->belongsTo(User::class, 'updated_by');
     }
 }
-

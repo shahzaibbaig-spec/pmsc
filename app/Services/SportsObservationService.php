@@ -476,6 +476,7 @@ class SportsObservationService
             'classRoom:id,name,section',
             'sportsTeacher:id,name',
             'updatedBy:id,name',
+            'psychiatristReviewedBy:id,name',
             'issues:id,student_sports_observation_id,issue_type,issue_label,auto_message',
         ]);
     }
@@ -501,6 +502,32 @@ class SportsObservationService
             'sportsTeacher:id,name',
             'resolvedBy:id,name',
             'updatedBy:id,name',
+            'psychiatristReviewedBy:id,name',
+            'issues:id,student_sports_observation_id,issue_type,issue_label,auto_message',
+        ]);
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     */
+    public function updatePsychiatristFeedback(StudentSportsObservation $observation, array $data, User $user): StudentSportsObservation
+    {
+        $feedback = trim((string) ($data['psychiatrist_feedback'] ?? ''));
+
+        $observation->forceFill([
+            'psychiatrist_feedback' => $feedback !== '' ? $feedback : null,
+            'psychiatrist_reviewed_by' => (int) $user->id,
+            'psychiatrist_reviewed_at' => now(),
+            'updated_by' => (int) $user->id,
+        ])->save();
+
+        return $observation->fresh([
+            'student.classRoom:id,name,section',
+            'classRoom:id,name,section',
+            'sportsTeacher:id,name',
+            'resolvedBy:id,name',
+            'updatedBy:id,name',
+            'psychiatristReviewedBy:id,name',
             'issues:id,student_sports_observation_id,issue_type,issue_label,auto_message',
         ]);
     }
@@ -592,6 +619,7 @@ class SportsObservationService
                 'createdBy:id,name',
                 'updatedBy:id,name',
                 'resolvedBy:id,name',
+                'psychiatristReviewedBy:id,name',
                 'issues:id,student_sports_observation_id,issue_type,issue_label,auto_message',
             ]);
     }

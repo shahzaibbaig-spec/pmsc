@@ -61,6 +61,7 @@ class DisciplineReportController extends Controller
             'teacher:id,name',
             'acknowledgedBy:id,name',
             'resolvedBy:id,name',
+            'psychiatristReviewedBy:id,name',
             'createdBy:id,name',
             'updatedBy:id,name',
         ]);
@@ -123,4 +124,3 @@ class DisciplineReportController extends Controller
         ]);
     }
 }
-

@@ -2,10 +2,10 @@
     <x-slot name="header">
         <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-                <h2 class="text-xl font-semibold text-slate-900">Discipline Report Detail</h2>
-                <p class="mt-1 text-sm text-slate-500">Full report details with acknowledgement and resolution actions.</p>
+                <h2 class="text-xl font-semibold text-slate-900">Discipline Case Review</h2>
+                <p class="mt-1 text-sm text-slate-500">Read-only case details with psychiatrist feedback note.</p>
             </div>
-            <a href="{{ route('principal.discipline-reports.index') }}" class="inline-flex min-h-11 items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+            <a href="{{ route('psychiatrist.discipline-reports.index') }}" class="inline-flex min-h-11 items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
                 Back to Reports
             </a>
         </div>
@@ -37,8 +37,8 @@
                 <p><span class="font-semibold text-slate-900">Date:</span> {{ optional($report->report_date)->format('d M Y') ?: '-' }}</p>
                 <p><span class="font-semibold text-slate-900">Session:</span> {{ $report->session }}</p>
                 <p><span class="font-semibold text-slate-900">Issue:</span> {{ $report->issue_label }}</p>
-                <p><span class="font-semibold text-slate-900">Severity:</span> {{ ucfirst($report->severity) }}</p>
-                <p><span class="font-semibold text-slate-900">Status:</span> {{ ucfirst($report->status) }}</p>
+                <p><span class="font-semibold text-slate-900">Severity:</span> {{ ucfirst((string) $report->severity) }}</p>
+                <p><span class="font-semibold text-slate-900">Status:</span> {{ ucfirst((string) $report->status) }}</p>
             </div>
         </section>
 
@@ -61,33 +61,29 @@
                 <p><span class="font-semibold text-slate-900">Resolved At:</span> {{ optional($report->resolved_at)->format('d M Y h:i A') ?: '-' }}</p>
                 <p><span class="font-semibold text-slate-900">Principal Remarks:</span> {{ $report->principal_remarks ?: '-' }}</p>
                 <p><span class="font-semibold text-slate-900">Warden Remarks:</span> {{ $report->warden_remarks ?: '-' }}</p>
-                <p><span class="font-semibold text-slate-900">Psychiatrist Feedback:</span> {{ $report->psychiatrist_feedback ?: '-' }}</p>
-                <p><span class="font-semibold text-slate-900">Psychiatrist Reviewed By:</span> {{ $report->psychiatristReviewedBy?->name ?? '-' }}</p>
-                <p><span class="font-semibold text-slate-900">Psychiatrist Reviewed At:</span> {{ optional($report->psychiatrist_reviewed_at)->format('d M Y h:i A') ?: '-' }}</p>
             </div>
         </section>
 
-        @if ($report->status !== 'resolved')
-            <section class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                <h4 class="text-sm font-semibold uppercase tracking-wide text-slate-500">Actions</h4>
-                <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-                    @if ($report->status === 'open')
-                        <form method="POST" action="{{ route('principal.discipline-reports.acknowledge', $report) }}" class="space-y-3 rounded-xl border border-indigo-200 bg-indigo-50 p-4">
-                            @csrf
-                            <label for="ack_principal_remarks" class="block text-xs font-semibold uppercase tracking-wide text-indigo-700">Principal Remarks (Optional)</label>
-                            <textarea id="ack_principal_remarks" name="principal_remarks" rows="3" class="block w-full rounded-lg border-indigo-200 text-sm" placeholder="Add acknowledgement remarks"></textarea>
-                            <button type="submit" class="inline-flex min-h-10 items-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">Mark Acknowledged</button>
-                        </form>
-                    @endif
+        <section class="rounded-2xl border border-cyan-200 bg-cyan-50 p-6 shadow-sm">
+            <h4 class="text-sm font-semibold uppercase tracking-wide text-cyan-800">Psychiatrist Feedback</h4>
+            <p class="mt-1 text-xs text-cyan-700">This note is visible to principal on report screens.</p>
 
-                    <form method="POST" action="{{ route('principal.discipline-reports.resolve', $report) }}" class="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-                        @csrf
-                        <label for="resolve_principal_remarks" class="block text-xs font-semibold uppercase tracking-wide text-emerald-700">Resolution Remarks (Optional)</label>
-                        <textarea id="resolve_principal_remarks" name="principal_remarks" rows="3" class="block w-full rounded-lg border-emerald-200 text-sm" placeholder="Add resolution remarks"></textarea>
-                        <button type="submit" class="inline-flex min-h-10 items-center rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">Mark Resolved</button>
-                    </form>
-                </div>
-            </section>
-        @endif
+            <div class="mt-4 rounded-xl border border-cyan-200 bg-white p-4 text-sm text-slate-700">
+                <p class="font-semibold text-slate-900">Latest Feedback</p>
+                <p class="mt-2 whitespace-pre-line">{{ $report->psychiatrist_feedback ?: 'No feedback added yet.' }}</p>
+                <p class="mt-2 text-xs text-slate-500">
+                    Reviewed by: {{ $report->psychiatristReviewedBy?->name ?? '-' }}
+                    • {{ optional($report->psychiatrist_reviewed_at)->format('d M Y h:i A') ?: '-' }}
+                </p>
+            </div>
+
+            <form method="POST" action="{{ route('psychiatrist.discipline-reports.feedback', $report) }}" class="mt-4 space-y-3">
+                @csrf
+                <label for="psychiatrist_feedback" class="block text-xs font-semibold uppercase tracking-wide text-cyan-800">Add / Update Feedback</label>
+                <textarea id="psychiatrist_feedback" name="psychiatrist_feedback" rows="5" class="block w-full rounded-lg border-cyan-200 text-sm" placeholder="Write your clinical/behavioral feedback for follow-up...">{{ old('psychiatrist_feedback', (string) $report->psychiatrist_feedback) }}</textarea>
+                <button type="submit" class="inline-flex min-h-10 items-center rounded-lg bg-cyan-700 px-4 py-2 text-sm font-semibold text-white hover:bg-cyan-800">Save Feedback</button>
+            </form>
+        </section>
     </div>
 </x-app-layout>
+

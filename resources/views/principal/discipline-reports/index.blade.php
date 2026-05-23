@@ -157,6 +157,7 @@
                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-blue-700">Teacher</th>
                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-blue-700">Message</th>
                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-blue-700">Status</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-blue-700">Psychiatrist Feedback</th>
                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-blue-700">Action</th>
                         </tr>
                     </thead>
@@ -179,6 +180,17 @@
                                     <span class="inline-flex rounded-full px-2 py-1 text-xs font-semibold {{ $report->status === 'resolved' ? 'bg-emerald-100 text-emerald-700' : ($report->status === 'acknowledged' ? 'bg-indigo-100 text-indigo-700' : 'bg-amber-100 text-amber-700') }}">
                                         {{ ucfirst($report->status) }}
                                     </span>
+                                </td>
+                                <td class="px-4 py-4 text-sm text-slate-700">
+                                    @if (! empty($report->psychiatrist_feedback))
+                                        <p>{{ \Illuminate\Support\Str::limit((string) $report->psychiatrist_feedback, 90) }}</p>
+                                        <p class="mt-1 text-xs text-slate-500">
+                                            {{ $report->psychiatristReviewedBy?->name ?? 'Psychiatrist' }}
+                                            • {{ optional($report->psychiatrist_reviewed_at)->format('d M Y h:i A') ?: '-' }}
+                                        </p>
+                                    @else
+                                        <span class="text-xs text-slate-500">-</span>
+                                    @endif
                                 </td>
                                 <td class="px-4 py-4 text-sm">
                                     <div class="flex flex-col gap-2">
@@ -204,7 +216,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="11" class="px-4 py-10 text-center text-sm text-slate-500">No discipline reports found for selected filters.</td>
+                                <td colspan="12" class="px-4 py-10 text-center text-sm text-slate-500">No discipline reports found for selected filters.</td>
                             </tr>
                         @endforelse
                     </tbody>

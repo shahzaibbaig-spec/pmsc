@@ -140,6 +140,7 @@
                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-blue-700">Message</th>
                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-blue-700">Sports Teacher</th>
                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-blue-700">Status</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-blue-700">Psychiatrist Feedback</th>
                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-blue-700">Action</th>
                         </tr>
                     </thead>
@@ -162,6 +163,17 @@
                                         {{ ucfirst($observation->status) }}
                                     </span>
                                 </td>
+                                <td class="px-4 py-4 text-sm text-slate-700">
+                                    @if (! empty($observation->psychiatrist_feedback))
+                                        <p>{{ \Illuminate\Support\Str::limit((string) $observation->psychiatrist_feedback, 90) }}</p>
+                                        <p class="mt-1 text-xs text-slate-500">
+                                            {{ $observation->psychiatristReviewedBy?->name ?? 'Psychiatrist' }}
+                                            • {{ optional($observation->psychiatrist_reviewed_at)->format('d M Y h:i A') ?: '-' }}
+                                        </p>
+                                    @else
+                                        <span class="text-xs text-slate-500">-</span>
+                                    @endif
+                                </td>
                                 <td class="px-4 py-4 text-sm">
                                     <div class="flex flex-col gap-2">
                                         @if ($observation->status === 'open')
@@ -182,7 +194,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="10" class="px-4 py-10 text-center text-sm text-slate-500">No observations found for selected filters.</td>
+                                <td colspan="11" class="px-4 py-10 text-center text-sm text-slate-500">No observations found for selected filters.</td>
                             </tr>
                         @endforelse
                     </tbody>
