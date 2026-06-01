@@ -129,6 +129,7 @@ use App\Modules\Students\Controllers\StudentQrProfileController;
 use App\Modules\Subjects\Controllers\StudentSubjectAssignmentMatrixController;
 use App\Modules\Subjects\Controllers\SubjectManagementController;
 use App\Modules\Teachers\Controllers\TeacherDashboardController;
+use App\Modules\Teachers\Controllers\TeacherObservationCommentController;
 use App\Modules\Teachers\Controllers\PrincipalTeacherListController;
 use App\Modules\Timetable\Controllers\SubjectPeriodRuleController;
 use App\Modules\Timetable\Controllers\TimetableEntryController;
@@ -1630,14 +1631,20 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
                 ->name('observations.show');
         });
 
-    Route::get('/teacher/dashboard', TeacherDashboardController::class)
-        ->middleware('role:Teacher')
-        ->name('teacher.dashboard');
+Route::get('/teacher/dashboard', TeacherDashboardController::class)
+    ->middleware('role:Teacher')
+    ->name('teacher.dashboard');
 
-    Route::prefix('teacher/discipline-reports')
-        ->name('teacher.discipline-reports.')
-        ->middleware(['role:Teacher'])
-        ->group(function (): void {
+Route::match(['get', 'post'], '/teacher/observations/{type}/{id}/comment', TeacherObservationCommentController::class)
+    ->middleware(['role:Teacher', 'force-password-change'])
+    ->whereIn('type', ['lesson', 'notebook'])
+    ->whereNumber('id')
+    ->name('teacher.observations.comment');
+
+Route::prefix('teacher/discipline-reports')
+    ->name('teacher.discipline-reports.')
+    ->middleware(['role:Teacher'])
+    ->group(function (): void {
             Route::get('/', [TeacherDisciplineReportController::class, 'index'])
                 ->middleware('permission:view_own_student_discipline_reports')
                 ->name('index');

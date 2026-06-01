@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Notifications\Concerns\SupportsOptionalWebPush;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Notification;
+use Illuminate\Support\Facades\Route;
 
 class ObservationPendingCommentNotification extends Notification
 {
@@ -44,10 +45,12 @@ class ObservationPendingCommentNotification extends Notification
             'observation_id' => (int) $this->observation->id,
             'observer_name' => (string) ($this->observer->name ?? 'Observer'),
             'observation_date' => $date,
-            'url' => route('teacher.observations.comment', [
-                'type' => $this->type,
-                'id' => (int) $this->observation->id,
-            ]),
+            'url' => Route::has('teacher.observations.comment')
+                ? route('teacher.observations.comment', [
+                    'type' => $this->type,
+                    'id' => (int) $this->observation->id,
+                ])
+                : route('teacher.dashboard'),
         ];
     }
 
