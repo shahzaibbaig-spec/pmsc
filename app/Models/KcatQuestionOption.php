@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\KcatVisualRenderer;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Facades\Storage;
@@ -26,7 +27,7 @@ class KcatQuestionOption extends Model
     {
         $path = trim((string) $this->option_image);
         if ($path === '') {
-            return null;
+            return $this->generatedOptionImageUrl();
         }
 
         if (Str::startsWith($path, ['http://', 'https://', '/', 'data:image/'])) {
@@ -41,6 +42,18 @@ class KcatQuestionOption extends Model
             return asset($path);
         }
 
-        return null;
+        return $this->generatedOptionImageUrl();
+    }
+
+    private function generatedOptionImageUrl(): ?string
+    {
+        if (! $this->relationLoaded('question')) {
+            return null;
+        }
+
+        return KcatVisualRenderer::optionDataUri(
+            (string) $this->question?->question_type,
+            (string) $this->option_text
+        );
     }
 }

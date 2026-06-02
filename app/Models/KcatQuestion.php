@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\KcatVisualRenderer;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -49,7 +50,10 @@ class KcatQuestion extends Model
     {
         $path = trim((string) $this->question_image);
         if ($path === '') {
-            return null;
+            return KcatVisualRenderer::questionDataUri(
+                (string) $this->question_type,
+                (string) $this->question_text
+            );
         }
 
         if (Str::startsWith($path, ['http://', 'https://', '/', 'data:image/'])) {
@@ -64,6 +68,9 @@ class KcatQuestion extends Model
             return asset($path);
         }
 
-        return null;
+        return KcatVisualRenderer::questionDataUri(
+            (string) $this->question_type,
+            (string) $this->question_text
+        );
     }
 }

@@ -21,6 +21,7 @@ class RbacMatrixController extends Controller
         'Teacher',
         'Doctor',
         'Warden',
+        'School Psychiatrist',
         'Student',
     ];
 
@@ -84,6 +85,7 @@ class RbacMatrixController extends Controller
         'view_all_daily_diary',
         'monitor_daily_diary',
         'view_student_discipline_reports',
+        'view_all_student_discipline_reports',
         'view_student_academic_records',
         'view_student_profiles_basic',
         'manage_hostel_rooms',
@@ -92,6 +94,9 @@ class RbacMatrixController extends Controller
         'manage_hostel_leave',
         'mark_night_attendance',
         'view_night_attendance',
+        'view_all_sports_observations',
+        'view_school_psychiatrist_panel',
+        'submit_psychiatrist_feedback',
         'take_cognitive_assessment',
         'view_own_cognitive_results',
         'view_cognitive_assessment_reports',

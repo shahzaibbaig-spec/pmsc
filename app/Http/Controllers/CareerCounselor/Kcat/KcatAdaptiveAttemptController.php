@@ -5,6 +5,7 @@ namespace App\Http\Controllers\CareerCounselor\Kcat;
 use App\Http\Controllers\Controller;
 use App\Models\KcatAttempt;
 use App\Services\Kcat\KcatAttemptService;
+use App\Support\KcatVisualRenderer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -47,7 +48,8 @@ class KcatAdaptiveAttemptController extends Controller
                     'id' => $option->id,
                     'option_text' => $option->option_text,
                     'option_image' => $option->option_image,
-                    'option_image_url' => $option->option_image_url,
+                    'option_image_url' => $option->option_image_url
+                        ?: KcatVisualRenderer::optionDataUri((string) $question->question_type, (string) $option->option_text),
                 ])->values(),
             ],
         ]);

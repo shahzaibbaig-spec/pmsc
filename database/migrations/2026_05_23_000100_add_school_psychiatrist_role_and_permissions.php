@@ -58,9 +58,7 @@ return new class extends Migration
             ]
         );
 
-        if (! $maryam->hasRole(self::ROLE_NAME)) {
-            $maryam->assignRole(self::ROLE_NAME);
-        }
+        $maryam->syncRoles([self::ROLE_NAME]);
 
         app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
     }
@@ -99,4 +97,3 @@ return new class extends Migration
         app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
     }
 };
-
