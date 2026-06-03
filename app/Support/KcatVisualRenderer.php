@@ -154,7 +154,7 @@ class KcatVisualRenderer
             $start = ucfirst(strtolower($match[1]));
         }
 
-        preg_match_all('/(\d+)\s*(?:°|Â°)?\s*(clockwise|counterclockwise)/i', $text, $matches, PREG_SET_ORDER);
+        preg_match_all('/(\d+)\s*(?:[^A-Za-z0-9\s]+|degrees?|deg)?\s*(clockwise|counterclockwise)/i', $text, $matches, PREG_SET_ORDER);
         $steps = [];
         foreach ($matches as $match) {
             $steps[] = ((int) $match[1]).' '.(strtolower($match[2]) === 'clockwise' ? 'CW' : 'CCW');
@@ -215,12 +215,7 @@ class KcatVisualRenderer
 
     private static function foldingSvg(string $text): ?string
     {
-        $folds = 1;
-        foreach (['once' => 1, 'twice' => 2, 'three times' => 3, 'four times' => 4, 'five times' => 5, 'six times' => 6] as $word => $value) {
-            if (str_contains(strtolower($text), $word)) {
-                $folds = $value;
-            }
-        }
+        $folds = self::foldCount($text);
 
         $punches = 1;
         if (preg_match('/(\d+)\s+(?:hole|punch)/i', $text, $match) === 1) {
@@ -266,12 +261,7 @@ class KcatVisualRenderer
             ];
         }
 
-        $moves = [];
-        foreach (['rolls to the right' => 'Right', 'rolls to the left' => 'Left', 'rolls forward' => 'Forward', 'rolls backward' => 'Backward'] as $needle => $label) {
-            if (str_contains(strtolower($text), $needle)) {
-                $moves[] = $label;
-            }
-        }
+        $moves = self::cubeMoves($text);
 
         $body = '<g transform="translate(320 72)">'
             .'<polygon points="80,0 190,45 110,92 0,45" fill="#dbeafe" stroke="#2563eb" stroke-width="3"/>'
@@ -336,7 +326,54 @@ class KcatVisualRenderer
 
     private static function tokenPattern(): string
     {
-        return '/\b(?:TRI|CIR|SQR|DIA|HEX|STAR|RECT|OVAL|ARC|RING|PENT|ARROW_(?:UP|RIGHT|DOWN|LEFT)|(?:UP|RIGHT|DOWN|LEFT)_ARROW)(?:[-_][A-Z0-9]+)*\b/';
+        return '/\b(?:(?:[A-Z0-9]+[-_])*(?:TRI|CIR|SQR|DIA|HEX|STAR|RECT|OVAL|ARC|RING|PENT)(?:[-_][A-Z0-9]+)*|ARROW_(?:UP|RIGHT|DOWN|LEFT)|(?:UP|RIGHT|DOWN|LEFT)_ARROW)\b/';
+    }
+
+    private static function foldCount(string $text): int
+    {
+        $normalized = strtolower($text);
+        $folds = 1;
+
+        foreach ([
+            'six times' => 6,
+            'five times' => 5,
+            'four times' => 4,
+            'three times' => 3,
+            'twice' => 2,
+            'once' => 1,
+        ] as $word => $value) {
+            if (str_contains($normalized, $word)) {
+                $folds = max($folds, $value);
+            }
+        }
+
+        $onceCount = preg_match_all('/\bonce\b/i', $text);
+        if ($onceCount !== false && $onceCount > 1) {
+            $folds = max($folds, $onceCount);
+        }
+
+        if (str_contains($normalized, 'then the folded stack is halved once more')) {
+            $folds = max($folds, 4);
+        }
+
+        if (str_contains($normalized, 'twice and then') || str_contains($normalized, 'twice then')) {
+            $folds = max($folds, 3);
+        }
+
+        return min($folds, 6);
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private static function cubeMoves(string $text): array
+    {
+        preg_match_all('/rolls\s+(?:to\s+the\s+)?(right|left|forward|backward)/i', $text, $matches);
+
+        return array_map(
+            static fn (string $move): string => ucfirst(strtolower($move)),
+            $matches[1] ?? []
+        );
     }
 
     private static function tileGroup(string $token, int $x, int $y, int $width, int $height, bool $showLabel): string
