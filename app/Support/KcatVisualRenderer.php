@@ -19,6 +19,19 @@ class KcatVisualRenderer
         'image_mcq',
     ];
 
+    /**
+     * @var array<string, string>
+     */
+    private const TOKEN_ALIASES = [
+        'CIRCLE' => 'CIR',
+        'SQUARE' => 'SQR',
+        'TRIANGLE' => 'TRI',
+        'RECTANGLE' => 'RECT',
+        'DIAMOND' => 'DIA',
+        'HEXAGON' => 'HEX',
+        'PENTAGON' => 'PENT',
+    ];
+
     public static function questionDataUri(string $questionType, string $questionText): ?string
     {
         $svg = self::questionSvg($questionType, $questionText);
@@ -31,7 +44,7 @@ class KcatVisualRenderer
         $questionType = strtolower(trim($questionType));
         $optionText = trim($optionText);
 
-        if ($optionText === '' || ! in_array($questionType, self::VISUAL_TYPES, true)) {
+        if ($optionText === '') {
             return null;
         }
 
@@ -40,11 +53,15 @@ class KcatVisualRenderer
             return 'data:image/svg+xml;base64,'.base64_encode(self::tileSvg($token, 128, true));
         }
 
+        if (! in_array($questionType, self::VISUAL_TYPES, true) && ! self::looksVisualOption($optionText)) {
+            return null;
+        }
+
         if (preg_match('/^\([^)]+\)$/', $optionText) === 1) {
             return 'data:image/svg+xml;base64,'.base64_encode(self::coordinateOptionSvg($optionText));
         }
 
-        if (preg_match('/^(North|East|South|West)$/i', $optionText) === 1) {
+        if (preg_match('/^(North|East|South|West|Up|Right|Down|Left)$/i', $optionText) === 1) {
             return 'data:image/svg+xml;base64,'.base64_encode(self::directionOptionSvg($optionText));
         }
 
@@ -56,8 +73,12 @@ class KcatVisualRenderer
         $questionType = strtolower(trim($questionType));
         $questionText = trim($questionText);
 
-        if ($questionText === '' || ! in_array($questionType, self::VISUAL_TYPES, true)) {
+        if ($questionText === '') {
             return null;
+        }
+
+        if (! in_array($questionType, self::VISUAL_TYPES, true)) {
+            return self::fallbackQuestionSvg($questionText);
         }
 
         return match ($questionType) {
@@ -101,6 +122,26 @@ class KcatVisualRenderer
         }
 
         return self::frameSvg($title, 'Choose the missing item that continues the visual pattern.', $tiles);
+    }
+
+    private static function fallbackQuestionSvg(string $text): ?string
+    {
+        $normalized = strtolower($text);
+
+        if (str_contains($normalized, 'arrow') && str_contains($normalized, 'rotat')) {
+            return self::rotationSvg($text);
+        }
+
+        if (str_contains($normalized, 'fold')) {
+            return self::foldingSvg($text);
+        }
+
+        $tokens = self::shapeTokens($text);
+        if (count($tokens) >= 2 && preg_match('/\b(pattern|sequence|series|matrix|shape)\b/i', $text) === 1) {
+            return self::sequenceSvg($text, 'Visual Pattern');
+        }
+
+        return null;
     }
 
     private static function matrixSvg(string $text): ?string
@@ -286,7 +327,7 @@ class KcatVisualRenderer
         }
 
         return array_values(array_filter(array_map(
-            static fn (string $token): string => strtoupper(trim($token)),
+            static fn (string $token): string => self::normalizeToken($token),
             preg_split('/\s*,\s*/', (string) $match[1]) ?: []
         ), static fn (string $token): bool => $token !== ''));
     }
@@ -314,19 +355,41 @@ class KcatVisualRenderer
      */
     private static function shapeTokens(string $text): array
     {
-        preg_match_all(self::tokenPattern(), strtoupper($text), $matches);
+        preg_match_all(self::tokenPattern(), self::normalizeText($text), $matches);
 
         return array_values(array_unique(array_map('trim', $matches[0] ?? [])));
     }
 
     private static function firstShapeToken(string $text): ?string
     {
-        return preg_match(self::tokenPattern(), strtoupper($text), $match) === 1 ? trim($match[0]) : null;
+        return preg_match(self::tokenPattern(), self::normalizeText($text), $match) === 1 ? trim($match[0]) : null;
     }
 
     private static function tokenPattern(): string
     {
-        return '/\b(?:(?:[A-Z0-9]+[-_])*(?:TRI|CIR|SQR|DIA|HEX|STAR|RECT|OVAL|ARC|RING|PENT)(?:[-_][A-Z0-9]+)*|ARROW_(?:UP|RIGHT|DOWN|LEFT)|(?:UP|RIGHT|DOWN|LEFT)_ARROW)\b/';
+        return '/\b(?:(?:[A-Z0-9]+[-_])*(?:TRI|CIR|SQR|DIA|HEX|STAR|RECT|OVAL|ARC|RING|PENT|LINE)(?:[-_][A-Z0-9]+)*|ARROW_(?:UP|RIGHT|DOWN|LEFT)|(?:UP|RIGHT|DOWN|LEFT)_ARROW)\b/';
+    }
+
+    private static function normalizeText(string $text): string
+    {
+        return preg_replace_callback(
+            '/\b(?:'.implode('|', array_keys(self::TOKEN_ALIASES)).')\b/i',
+            static fn (array $match): string => self::TOKEN_ALIASES[strtoupper($match[0])] ?? strtoupper($match[0]),
+            strtoupper($text)
+        ) ?? strtoupper($text);
+    }
+
+    private static function normalizeToken(string $token): string
+    {
+        $normalized = trim(self::normalizeText($token));
+
+        return $normalized === 'LINE' ? 'LINE' : $normalized;
+    }
+
+    private static function looksVisualOption(string $optionText): bool
+    {
+        return preg_match('/^\([^)]+\)$/', $optionText) === 1
+            || preg_match('/^(North|East|South|West|Up|Right|Down|Left)$/i', $optionText) === 1;
     }
 
     private static function foldCount(string $text): int
@@ -422,6 +485,7 @@ class KcatVisualRenderer
             'ARC' => '<path d="M10 42 A22 22 0 1 1 54 42" fill="none" stroke="#2563eb" stroke-width="8" stroke-linecap="round"/>',
             'RING' => '<circle cx="32" cy="32" r="20" fill="none" stroke="#2563eb" stroke-width="8"/>',
             'PENT' => '<polygon points="32,6 56,24 47,54 17,54 8,24" fill="#2563eb"/>',
+            'LINE' => '<line x1="10" y1="32" x2="54" y2="32" stroke="#2563eb" stroke-width="9" stroke-linecap="round"/>',
             'ARROW_UP' => '<polygon points="32,8 56,36 42,36 42,56 22,56 22,36 8,36" fill="#2563eb"/>',
             'ARROW_RIGHT' => '<polygon points="56,32 28,8 28,22 8,22 8,42 28,42 28,56" fill="#2563eb"/>',
             'ARROW_DOWN' => '<polygon points="32,56 56,28 42,28 42,8 22,8 22,28 8,28" fill="#2563eb"/>',
@@ -450,7 +514,7 @@ class KcatVisualRenderer
         }
 
         $parts = array_values(array_filter(preg_split('/[-_]/', $normalized) ?: []));
-        $knownShapes = ['TRI', 'CIR', 'SQR', 'DIA', 'HEX', 'STAR', 'RECT', 'OVAL', 'ARC', 'RING', 'PENT'];
+        $knownShapes = ['TRI', 'CIR', 'SQR', 'DIA', 'HEX', 'STAR', 'RECT', 'OVAL', 'ARC', 'RING', 'PENT', 'LINE'];
         $shape = 'UNKNOWN';
         $meta = [];
         foreach ($parts as $part) {
@@ -489,7 +553,15 @@ class KcatVisualRenderer
 
     private static function directionOptionSvg(string $direction): string
     {
-        return '<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128"><g transform="scale(.8) translate(16 16)">'.self::compassSvg(ucfirst(strtolower($direction)), 128).'</g></svg>';
+        $resolved = match (strtolower($direction)) {
+            'up' => 'North',
+            'right' => 'East',
+            'down' => 'South',
+            'left' => 'West',
+            default => ucfirst(strtolower($direction)),
+        };
+
+        return '<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128"><g transform="scale(.8) translate(16 16)">'.self::compassSvg($resolved, 128).'</g></svg>';
     }
 
     private static function coordinateOptionSvg(string $point): string

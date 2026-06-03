@@ -56,7 +56,7 @@ class KcatDefaultSeeder extends Seeder
                     $question = KcatQuestion::query()->create([
                         'kcat_test_id' => $test->id,
                         'kcat_section_id' => $section->id,
-                        'question_type' => $index === 0 ? 'analogy' : 'mcq',
+                        'question_type' => $this->demoQuestionType($code, $index),
                         'difficulty' => 'easy',
                         'question_text' => $text,
                         'marks' => 1,
@@ -87,5 +87,16 @@ class KcatDefaultSeeder extends Seeder
         $startYear = $now->month >= 7 ? $now->year : ($now->year - 1);
 
         return $startYear.'-'.($startYear + 1);
+    }
+
+    private function demoQuestionType(string $sectionCode, int $index): string
+    {
+        return match ($sectionCode) {
+            'verbal_reasoning' => $index === 0 ? 'analogy' : 'odd_one_out',
+            'quantitative_reasoning' => $index === 0 ? 'number_series' : 'ratio_logic',
+            'non_verbal_reasoning' => $index === 0 ? 'pattern_sequence' : 'matrix',
+            'spatial_reasoning' => $index === 0 ? 'rotation' : 'folding',
+            default => 'mcq',
+        };
     }
 }

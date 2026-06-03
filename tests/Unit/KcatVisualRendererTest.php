@@ -47,6 +47,22 @@ class KcatVisualRendererTest extends TestCase
         $this->assertStringContainsString('4-SQR', $svg);
     }
 
+    public function test_it_renders_existing_demo_shape_questions_with_plain_words(): void
+    {
+        $questionSvg = $this->decodeDataUri(KcatVisualRenderer::questionDataUri(
+            'analogy',
+            'Demo pattern: Circle, Square, Circle, Square, ___.'
+        ));
+        $optionSvg = $this->decodeDataUri(KcatVisualRenderer::optionDataUri('analogy', 'Circle'));
+        $lineOptionSvg = $this->decodeDataUri(KcatVisualRenderer::optionDataUri('analogy', 'Line'));
+
+        $this->assertStringContainsString('Visual Pattern', $questionSvg);
+        $this->assertStringContainsString('CIR', $questionSvg);
+        $this->assertStringContainsString('SQR', $questionSvg);
+        $this->assertStringContainsString('CIR', $optionSvg);
+        $this->assertStringContainsString('LINE', $lineOptionSvg);
+    }
+
     private function decodeDataUri(?string $dataUri): string
     {
         $this->assertNotNull($dataUri);
