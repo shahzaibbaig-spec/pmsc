@@ -2220,4 +2220,15 @@ Route::prefix('teacher/discipline-reports')
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
 
+Route::middleware(['auth', 'role:Principal'])
+    ->prefix('principal/senior-progress')->name('principal.senior-progress.')
+    ->controller(\App\Http\Controllers\Principal\SeniorProgressReportController::class)
+    ->group(function (): void {
+        Route::get('/', 'index')->name('index');
+        Route::post('/class-download', 'downloadClass')->name('class-download');
+        Route::get('/students/{student}', 'preview')->whereNumber('student')->name('preview');
+        Route::post('/students/{student}', 'save')->whereNumber('student')->name('save');
+        Route::get('/students/{student}/download', 'download')->whereNumber('student')->name('download');
+    });
+
 require __DIR__.'/auth.php';

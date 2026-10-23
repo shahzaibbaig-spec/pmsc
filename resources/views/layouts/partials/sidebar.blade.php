@@ -175,6 +175,9 @@
             ['route' => 'academic-calendar.index', 'label' => 'Academic Calendar'],
             ['route' => 'notifications.index', 'label' => 'Notifications'],
         ];
+        if (\App\Services\SeniorProgressReportService::enabled()) {
+            $menuItems[] = ['route' => 'principal.senior-progress.index', 'label' => 'Senior Progress Reports'];
+        }
         if ($sidebarUser?->can('manage_subject_assignments')) {
             $menuItems[] = ['route' => 'principal.subject-matrix.index', 'label' => 'Subject Matrix'];
         }
