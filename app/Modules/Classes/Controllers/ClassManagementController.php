@@ -10,6 +10,7 @@ use App\Modules\Classes\Requests\CopyClassSubjectsRequest;
 use App\Modules\Classes\Requests\StoreClassRequest;
 use App\Modules\Classes\Requests\UpdateClassRequest;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -17,6 +18,16 @@ use Illuminate\View\View;
 
 class ClassManagementController extends Controller
 {
+    public function adminIndex(Request $request): View
+    {
+        return view('modules.admin.classes.index', [
+            'classes' => SchoolClass::query()->orderBy('name')->orderBy('section')->paginate(20),
+            'editingClass' => $request->filled('edit')
+                ? SchoolClass::query()->findOrFail($request->input('edit'))
+                : null,
+        ]);
+    }
+
     public function index(): View
     {
         return view('modules.principal.classes.index');
@@ -97,7 +108,7 @@ class ClassManagementController extends Controller
         ]);
     }
 
-    public function store(StoreClassRequest $request): JsonResponse
+    public function store(StoreClassRequest $request): JsonResponse|RedirectResponse
     {
         $classRoom = SchoolClass::query()->create([
             'name' => $request->string('name')->toString(),
@@ -105,18 +116,26 @@ class ClassManagementController extends Controller
             'status' => 'active',
         ]);
 
+        if ($request->routeIs('admin.classes.*') && ! $request->expectsJson()) {
+            return redirect()->route('admin.classes.index')->with('status', 'Class created successfully.');
+        }
+
         return response()->json([
             'message' => 'Class created successfully.',
             'class_id' => $classRoom->id,
         ], 201);
     }
 
-    public function update(UpdateClassRequest $request, SchoolClass $schoolClass): JsonResponse
+    public function update(UpdateClassRequest $request, SchoolClass $schoolClass): JsonResponse|RedirectResponse
     {
         $schoolClass->update([
             'name' => $request->string('name')->toString(),
             'section' => $request->string('section')->toString() ?: null,
         ]);
+
+        if ($request->routeIs('admin.classes.*') && ! $request->expectsJson()) {
+            return redirect()->route('admin.classes.index')->with('status', 'Class updated successfully.');
+        }
 
         return response()->json(['message' => 'Class updated successfully.']);
     }

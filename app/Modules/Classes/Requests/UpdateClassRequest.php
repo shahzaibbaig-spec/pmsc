@@ -10,7 +10,7 @@ class UpdateClassRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->hasRole('Principal') ?? false;
+        return $this->user()?->hasAnyRole(['Admin', 'Principal']) ?? false;
     }
 
     public function rules(): array

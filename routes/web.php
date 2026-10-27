@@ -158,6 +158,12 @@ Route::get('/dashboard', DashboardRedirectController::class)
     ->name('dashboard');
 
 Route::middleware(['auth', 'force-password-change'])->group(function () {
+    Route::middleware('role:Admin')->prefix('admin/classes')->name('admin.classes.')->group(function () {
+        Route::get('/', [ClassManagementController::class, 'adminIndex'])->name('index');
+        Route::post('/', [ClassManagementController::class, 'store'])->name('store');
+        Route::put('/{schoolClass}', [ClassManagementController::class, 'update'])->name('update');
+    });
+
     Route::get('/daily-diary/{dailyDiary}/attachment', DailyDiaryAttachmentController::class)
         ->whereNumber('dailyDiary')
         ->name('daily-diary.attachment');

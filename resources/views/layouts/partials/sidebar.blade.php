@@ -17,6 +17,7 @@
             ['route' => 'admin.dashboard', 'label' => 'Dashboard'],
             ['route' => 'admin.users.index', 'label' => 'User Management'],
             ['route' => 'admin.students.index', 'label' => 'Students'],
+            ['route' => 'admin.classes.index', 'label' => 'Classes'],
             ['route' => 'admin.rbac-matrix.index', 'label' => 'RBAC Matrix'],
             ['route' => 'admin.settings.edit', 'label' => 'School Settings'],
             ['route' => 'principal.results.generator', 'label' => 'Results'],
