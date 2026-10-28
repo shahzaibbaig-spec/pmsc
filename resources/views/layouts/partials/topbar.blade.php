@@ -9,7 +9,7 @@
     if (! empty($topbarSchool?->logo_path)) {
         $logoUrl = str_starts_with($topbarSchool->logo_path, 'http')
             ? $topbarSchool->logo_path
-            : \Illuminate\Support\Facades\Storage::url($topbarSchool->logo_path);
+            : \Illuminate\Support\Facades\Storage::disk('public')->url($topbarSchool->logo_path);
     }
 @endphp
 

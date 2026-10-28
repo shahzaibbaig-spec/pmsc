@@ -8,6 +8,7 @@ use App\Modules\Admin\Requests\UpdateSchoolSettingRequest;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class SchoolSettingController extends Controller
@@ -71,15 +72,32 @@ class SchoolSettingController extends Controller
             $setting->block_id_card_for_defaulters = $request->boolean('block_id_card_for_defaulters');
         }
 
+        $previousLogoPath = $setting->logo_path;
+        $newLogoPath = null;
         if ($request->hasFile('logo')) {
-            if ($setting->logo_path) {
-                Storage::disk('public')->delete($setting->logo_path);
+            $newLogoPath = $request->file('logo')->store('school/logo', 'public');
+            if (! $newLogoPath) {
+                throw ValidationException::withMessages([
+                    'logo' => 'The logo could not be saved. Please check the server storage permissions and try again.',
+                ]);
             }
 
-            $setting->logo_path = $request->file('logo')->store('school/logo', 'public');
+            $setting->logo_path = $newLogoPath;
         }
 
-        $setting->save();
+        try {
+            $setting->save();
+        } catch (\Throwable $exception) {
+            if ($newLogoPath) {
+                Storage::disk('public')->delete($newLogoPath);
+            }
+
+            throw $exception;
+        }
+
+        if ($newLogoPath && $previousLogoPath && $previousLogoPath !== $newLogoPath) {
+            Storage::disk('public')->delete($previousLogoPath);
+        }
 
         return redirect()
             ->route('admin.settings.edit')
