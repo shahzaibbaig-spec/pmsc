@@ -3,6 +3,7 @@
         <div>
             <h2 class="text-xl font-semibold text-slate-900">Result Card Generator</h2>
             <p class="mt-1 text-sm text-slate-500">Generate, preview, print, publish, and download student result cards.</p>
+            <a href="{{ route('principal.results.class-tests') }}" class="mt-3 inline-flex rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">Class Test Sheet — All Subjects</a>
         </div>
     </x-slot>
 

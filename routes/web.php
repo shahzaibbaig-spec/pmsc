@@ -818,6 +818,10 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
         ->middleware(['role:Admin|Principal', 'permission:generate_results'])
         ->name('principal.results.gazette');
 
+    Route::get('/principal/results/class-tests', [ResultSheetController::class, 'classTests'])
+        ->middleware(['role:Admin|Principal', 'permission:generate_results'])
+        ->name('principal.results.class-tests');
+
     Route::get('/principal/results/tabulation', [ResultSheetController::class, 'tabulation'])
         ->middleware(['role:Admin|Principal', 'permission:generate_results'])
         ->name('principal.results.tabulation');

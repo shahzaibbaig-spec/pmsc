@@ -16,6 +16,30 @@ use RuntimeException;
 
 class ResultSheetController extends Controller
 {
+    public function classTests(Request $request, \App\Modules\Results\Services\ClassTestSheetService $service): View
+    {
+        $validated = $request->validate([
+            'class_id' => ['nullable', 'integer', 'exists:school_classes,id'],
+            'session' => ['nullable', 'string', 'max:20'],
+            'student_id' => ['nullable', 'integer', 'exists:students,id'],
+        ]);
+        $classes = $this->classes();
+        $sessions = $this->sessionOptions();
+        $filters = [
+            'class_id' => $validated['class_id'] ?? $classes->first()?->id,
+            'session' => $validated['session'] ?? $sessions[1],
+            'student_id' => $validated['student_id'] ?? null,
+        ];
+        if (! in_array($filters['session'], $sessions, true)) {
+            $sessions[] = $filters['session'];
+        }
+        $students = $filters['class_id'] ? $service->students((int) $filters['class_id'], $filters['session']) : collect();
+        $report = $filters['class_id'] ? $service->sheet((int) $filters['class_id'], $filters['session'],
+            $filters['student_id'] ? (int) $filters['student_id'] : null) : null;
+
+        return view('modules.principal.results.class-tests', compact('classes', 'sessions', 'filters', 'students', 'report'));
+    }
+
     public function __construct(
         private readonly ResultSheetService $resultSheetService,
         private readonly FeeDefaulterService $feeDefaulterService,
