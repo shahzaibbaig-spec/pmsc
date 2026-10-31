@@ -90,6 +90,19 @@ class ClassTestSheetTest extends TestCase
         $all = $service->sheet($class->id, '2026-2027', $students[0]->id);
         $this->assertCount(5, $all['columns']);
         $this->assertSame(20.0, $all['rows'][0]['progress']['change']);
+        $this->assertNull($sheet['analysis']);
+        $this->assertNotNull($all['analysis']);
+        $monthly = $service->sheet($class->id, '2026-2027', $students[0]->id, '2027-01');
+        $subjects = collect($monthly['analysis']['subjects'])->keyBy('name');
+        $this->assertSame('Priority support', $subjects['English']['priority']);
+        $this->assertSame(0.0, $subjects['English']['average']);
+        $this->assertSame(70.0, $subjects['Math']['average']);
+        $this->assertSame('Review lower-scoring tests', $subjects['Math']['priority']);
+        $this->assertStringContainsString('50.0% to 70.0%', $subjects['Math']['comment']);
+        $this->assertCount(1, $subjects['Math']['topics']);
+        $empty = $service->sheet($class->id, '2026-2027', $students[0]->id, '2027-02');
+        $this->assertSame([], $empty['analysis']['subjects']);
+        $this->assertStringContainsString('no usable numeric results', $empty['analysis']['summary']);
         $this->assertCount(0, $service->sheet($class->id, '2026-2027', null, '2027-02')['columns']);
 
         // With a gap, All tests compares available months; a selected month uses its calendar predecessor.
@@ -152,5 +165,8 @@ class ClassTestSheetTest extends TestCase
         $this->assertSame('A', $graded['rows'][0]['cells'][0]);
         $this->assertSame('A', $graded['rows'][0]['percentage_cells'][0]);
         $this->assertSame(20, $graded['rows'][0]['total']);
+        $this->assertStringContainsString('1 grade result(s)', $graded['analysis']['summary']);
+        $this->assertStringContainsString('2 test result(s) are not entered', $graded['analysis']['summary']);
+        $this->assertCount(1, $graded['analysis']['subjects']);
     }
 }

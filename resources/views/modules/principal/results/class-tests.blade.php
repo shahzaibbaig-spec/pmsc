@@ -142,6 +142,25 @@
                         </table>
                     </div>
                 @endif
+                @if($report['analysis'])
+                    <section class="student-analysis mt-6 border-t border-slate-200 pt-5" aria-labelledby="student-analysis-title">
+                        <h3 id="student-analysis-title" class="text-lg font-semibold">Teacher comments and intervention plan</h3>
+                        <p class="mt-1 text-sm font-semibold">{{ $report['rows']->first()['student']->name }} · {{ $report['periodLabel'] }}</p>
+                        <p class="mt-2 text-sm text-slate-700">{{ $report['analysis']['summary'] }}</p>
+                        <p class="mt-2 text-xs text-slate-500">Planning guide: below 50% suggests priority support; 50–69.99% suggests targeted practice. These are support prompts, not pass/fail rules. Subject averages give each test equal weight. Test scores highlight areas to investigate; confirm specific learning gaps from the marked work and classroom observation.</p>
+                        @foreach($report['analysis']['subjects'] as $subject)
+                            <article class="student-analysis-subject mt-4 rounded-lg border border-slate-200 p-4">
+                                <h4 class="font-semibold">{{ $subject['name'] }} — {{ $subject['priority'] }}</h4>
+                                <p class="mt-2 text-sm"><strong>Comment:</strong> {{ $subject['comment'] }}</p>
+                                @if(count($subject['topics']))
+                                    <p class="mt-2 text-sm"><strong>Tests / topics to review:</strong> {{ implode('; ', $subject['topics']) }}. These test-level scores do not identify which individual skills were missed.</p>
+                                @endif
+                                <p class="mt-2 text-sm"><strong>Area of intervention:</strong> {{ $subject['intervention'] }}</p>
+                                <p class="mt-2 text-sm"><strong>Teacher strategy:</strong> {{ $subject['strategy'] }}</p>
+                            </article>
+                        @endforeach
+                    </section>
+                @endif
             @else
                 <p>No classes available.</p>
             @endif
@@ -162,6 +181,7 @@
             .sheet-table { overflow: visible; }
             .class-test-report table { font-size: 9px; }
             .class-test-report th, .class-test-report td { min-width: 0; padding: 4px; }
+            .student-analysis-subject { break-inside: avoid; }
         }
     </style>
 </x-app-layout>

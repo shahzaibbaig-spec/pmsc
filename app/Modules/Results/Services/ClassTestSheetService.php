@@ -45,6 +45,7 @@ class ClassTestSheetService
         $numericExamIds = $allExams->filter(fn (Exam $exam) => $modeService->resolveMarkingMode($exam, $class) === AssessmentMarkingModeService::MODE_NUMERIC)->pluck('id')->all();
         $columns = $exams->map(fn (Exam $exam) => [
             'id' => $exam->id,
+            'subject_id' => $exam->subject_id,
             'subject' => $exam->subject?->name ?? 'Subject',
             'label' => $exam->display_name,
             'topic' => $exam->topic,
@@ -88,8 +89,11 @@ class ClassTestSheetService
         });
 
         $periodLabel = $month ? CarbonImmutable::parse($month.'-01')->format('F Y') : 'All tests';
+        $analysis = $studentId !== null && $rows->isNotEmpty()
+            ? app(ClassTestAnalysisService::class)->analyse($columns, $marks->get($studentId, collect()), $rows->first()['progress'])
+            : null;
 
-        return compact('class', 'session', 'columns', 'rows', 'months', 'periodLabel');
+        return compact('class', 'session', 'columns', 'rows', 'months', 'periodLabel', 'analysis');
     }
 
     private function progress(Collection $exams, Collection $marks, array $numericExamIds, ?string $month): array
@@ -117,7 +121,7 @@ class ClassTestSheetService
             }
             $before = array_sum($scores[$previous][$subjectId]) / count($scores[$previous][$subjectId]);
             $after = array_sum($values) / count($values);
-            $subjects[] = ['name' => $names[$subjectId], 'before' => round($before, 2), 'after' => round($after, 2),
+            $subjects[] = ['id' => $subjectId, 'name' => $names[$subjectId], 'before' => round($before, 2), 'after' => round($after, 2),
                 'change' => round($after - $before, 2)];
         }
         $change = count($subjects) ? round(collect($subjects)->avg('change'), 2) : null;
