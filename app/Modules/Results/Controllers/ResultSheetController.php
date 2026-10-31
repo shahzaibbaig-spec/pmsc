@@ -22,6 +22,8 @@ class ResultSheetController extends Controller
             'class_id' => ['nullable', 'integer', 'exists:school_classes,id'],
             'session' => ['nullable', 'string', 'max:20'],
             'student_id' => ['nullable', 'integer', 'exists:students,id'],
+            'month' => ['nullable', 'date_format:Y-m'],
+            'display' => ['nullable', 'in:marks,percentages'],
         ]);
         $classes = $this->classes();
         $sessions = $this->sessionOptions();
@@ -29,13 +31,15 @@ class ResultSheetController extends Controller
             'class_id' => $validated['class_id'] ?? $classes->first()?->id,
             'session' => $validated['session'] ?? $sessions[1],
             'student_id' => $validated['student_id'] ?? null,
+            'month' => $validated['month'] ?? null,
+            'display' => $validated['display'] ?? 'marks',
         ];
         if (! in_array($filters['session'], $sessions, true)) {
             $sessions[] = $filters['session'];
         }
         $students = $filters['class_id'] ? $service->students((int) $filters['class_id'], $filters['session']) : collect();
         $report = $filters['class_id'] ? $service->sheet((int) $filters['class_id'], $filters['session'],
-            $filters['student_id'] ? (int) $filters['student_id'] : null) : null;
+            $filters['student_id'] ? (int) $filters['student_id'] : null, $filters['month']) : null;
 
         return view('modules.principal.results.class-tests', compact('classes', 'sessions', 'filters', 'students', 'report'));
     }

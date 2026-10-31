@@ -4,11 +4,12 @@
         <p class="mt-1 text-sm text-slate-500">All class tests across all subjects for one student or the whole class.</p>
     </x-slot>
 
-    <div class="space-y-6">
-        <form method="GET" action="{{ route('principal.results.class-tests') }}" class="sheet-filters grid gap-4 rounded-2xl border bg-white p-5 md:grid-cols-4">
+    <div class="space-y-6" x-data="{ showPercentages: @js($filters['display'] === 'percentages') }">
+        <form method="GET" action="{{ route('principal.results.class-tests') }}" class="sheet-filters grid gap-4 rounded-2xl border bg-white p-5 md:grid-cols-5">
+            <input type="hidden" name="display" value="{{ $filters['display'] }}" :value="showPercentages ? 'percentages' : 'marks'">
             <div>
                 <label for="sheet_class" class="block text-sm font-medium">Class</label>
-                <select id="sheet_class" name="class_id" required onchange="this.form.student_id.value = ''; this.form.submit()" class="mt-1 w-full rounded-lg border-slate-300">
+                <select id="sheet_class" name="class_id" required onchange="this.form.student_id.value = ''; this.form.month.value = ''; this.form.submit()" class="mt-1 w-full rounded-lg border-slate-300">
                     @foreach($classes as $classRoom)
                         <option value="{{ $classRoom->id }}" @selected((string) $filters['class_id'] === (string) $classRoom->id)>{{ trim($classRoom->name.' '.$classRoom->section) }}</option>
                     @endforeach
@@ -16,7 +17,7 @@
             </div>
             <div>
                 <label for="sheet_session" class="block text-sm font-medium">Session</label>
-                <select id="sheet_session" name="session" onchange="this.form.student_id.value = ''; this.form.submit()" class="mt-1 w-full rounded-lg border-slate-300">
+                <select id="sheet_session" name="session" onchange="this.form.student_id.value = ''; this.form.month.value = ''; this.form.submit()" class="mt-1 w-full rounded-lg border-slate-300">
                     @foreach($sessions as $session)
                         <option @selected($filters['session'] === $session)>{{ $session }}</option>
                     @endforeach
@@ -31,7 +32,19 @@
                     @endforeach
                 </select>
             </div>
-            <div class="flex items-end gap-2">
+            <div>
+                <label for="sheet_month" class="block text-sm font-medium">Month</label>
+                <select id="sheet_month" name="month" class="mt-1 w-full rounded-lg border-slate-300">
+                    <option value="">All tests</option>
+                    @foreach($report['months'] ?? [] as $month)
+                        <option value="{{ $month['value'] }}" @selected($filters['month'] === $month['value'])>{{ $month['label'] }}</option>
+                    @endforeach
+                    @if($filters['month'] && $report && !$report['months']->contains('value', $filters['month']))
+                        <option value="{{ $filters['month'] }}" selected>{{ $report['periodLabel'] }}</option>
+                    @endif
+                </select>
+            </div>
+            <div class="flex flex-wrap items-end gap-2">
                 <button type="submit" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white">View Sheet</button>
                 @if($report && $report['columns']->isNotEmpty())
                     <button type="button" onclick="window.print()" class="rounded-lg border px-4 py-2 text-sm font-semibold">Print / Save PDF</button>
@@ -41,11 +54,27 @@
 
         <section class="class-test-report rounded-2xl border bg-white p-5 shadow-sm">
             @if($report)
+                <p class="mb-2 font-semibold text-indigo-700">{{ $report['periodLabel'] }}</p>
                 <h3 class="text-lg font-semibold">{{ trim($report['class']->name.' '.$report['class']->section) }} · {{ $report['session'] }} · Class Tests</h3>
                 <p class="my-2 text-sm text-slate-500">{{ $report['rows']->count() }} student(s) · {{ $report['columns']->count() }} test(s). — means marks have not been entered. Totals include recorded numeric results only.</p>
                 @if($report['columns']->isEmpty())
-                    <p class="py-6 text-sm text-slate-500">No class tests found for this class and session.</p>
+                    <p class="py-6 text-sm text-slate-500">No class tests found for the selected class, session and month.</p>
                 @else
+                    <div class="test-display-toggle mb-4 flex flex-wrap items-center gap-3">
+                        <span class="text-sm font-medium" id="test-display-label">Individual tests: Marks / Percentages</span>
+                        <button type="button" role="switch" aria-labelledby="test-display-label"
+                            :aria-checked="showPercentages.toString()" @click="showPercentages = !showPercentages"
+                            class="test-display-switch" :class="{ 'is-on': showPercentages }">
+                            <span aria-hidden="true"></span>
+                        </button>
+                    </div>
+                    <p class="mb-2 text-sm font-semibold" x-text="showPercentages ? 'Individual tests shown as percentages' : 'Individual tests shown as marks'">Individual tests shown as {{ $filters['display'] === 'percentages' ? 'percentages' : 'marks' }}</p>
+                    <p class="mb-3 text-xs text-slate-500">Grade results stay as grades. N/A means the test total is zero, so a percentage cannot be calculated.</p>
+                    <p class="mb-4 text-sm text-slate-500">
+                        Progress compares {{ $filters['month'] ? 'the selected month with the previous calendar month' : 'each student’s latest two months with recorded numeric results' }}.
+                        Each test is converted to a percentage, then averaged within its subject and month. Overall change is the average change across subjects present in both months, in percentage points (pp).
+                        Undated tests and grade-only results are excluded from progress. Undated tests appear under All tests only.
+                    </p>
                     <div class="sheet-table overflow-x-auto">
                         <table class="w-full border-collapse text-sm">
                             <thead>
@@ -57,6 +86,7 @@
                                     <th rowspan="2" class="border p-3">Recorded tests</th>
                                     <th rowspan="2" class="border p-3">Numeric total</th>
                                     <th rowspan="2" class="border p-3">Percentage</th>
+                                    <th rowspan="2" class="border p-3">Progress</th>
                                 </tr>
                                 <tr class="bg-slate-50">
                                     <th class="border p-3 text-left">Name / Student ID</th>
@@ -75,15 +105,38 @@
                                 @forelse($report['rows'] as $row)
                                     <tr>
                                         <td class="whitespace-nowrap border p-3">{{ $row['student']->name }}<span class="block text-xs text-slate-500">{{ $row['student']->student_id }}</span></td>
-                                        @foreach($row['cells'] as $cell)
-                                            <td class="whitespace-nowrap border p-3 text-center">{{ $cell }}</td>
+                                        @foreach($row['cells'] as $index => $cell)
+                                            <td class="whitespace-nowrap border p-3 text-center"
+                                                x-text="showPercentages ? @js($row['percentage_cells'][$index]) : @js($cell)">{{ $filters['display'] === 'percentages' ? $row['percentage_cells'][$index] : $cell }}</td>
                                         @endforeach
                                         <td class="border p-3 text-center">{{ $row['recorded'] }} / {{ $report['columns']->count() }}</td>
                                         <td class="border p-3 text-center">{{ $row['total'] > 0 ? $row['obtained'].' / '.$row['total'] : '—' }}</td>
                                         <td class="border p-3 text-center">{{ $row['percentage'] !== null ? number_format($row['percentage'], 2).'%' : '—' }}</td>
+                                        <td class="min-w-48 border p-3">
+                                            @php($progress = $row['progress'])
+                                            <span @class(['font-semibold', 'text-emerald-700' => $progress['change'] > 0, 'text-rose-700' => $progress['change'] < 0, 'text-slate-600' => $progress['change'] === null || $progress['change'] == 0])>{{ $progress['status'] }}</span>
+                                            @if($progress['change'] !== null)
+                                                <span class="block font-semibold">{{ $progress['change'] > 0 ? '+' : '' }}{{ number_format($progress['change'], 2) }} pp</span>
+                                            @endif
+                                            @if($progress['previous'] && $progress['current'])
+                                                <span class="block text-xs text-slate-500">{{ $progress['previous'] }} → {{ $progress['current'] }}</span>
+                                            @endif
+                                            @if(count($progress['subjects']))
+                                                <details class="mt-2 text-xs">
+                                                    <summary class="cursor-pointer">{{ count($progress['subjects']) }} comparable subject(s)</summary>
+                                                    @foreach($progress['subjects'] as $subject)
+                                                        <div class="mt-2">{{ $subject['name'] }}: {{ number_format($subject['before'], 2) }}% → {{ number_format($subject['after'], 2) }}%
+                                                            ({{ $subject['change'] > 0 ? '+' : '' }}{{ number_format($subject['change'], 2) }} pp)
+                                                        </div>
+                                                    @endforeach
+                                                </details>
+                                            @else
+                                                <span class="block text-xs text-slate-500">Needs numeric results for the same subject in both months.</span>
+                                            @endif
+                                        </td>
                                     </tr>
                                 @empty
-                                    <tr><td colspan="{{ $report['columns']->count() + 4 }}" class="p-6 text-slate-500">No students found for this class and session.</td></tr>
+                                    <tr><td colspan="{{ $report['columns']->count() + 5 }}" class="p-6 text-slate-500">No students found for this class and session.</td></tr>
                                 @endforelse
                             </tbody>
                         </table>
@@ -95,7 +148,13 @@
         </section>
     </div>
     <style>
+        .test-display-switch { width: 44px; height: 24px; padding: 3px; border-radius: 999px; background: #64748b; transition: background .15s; }
+        .test-display-switch span { display: block; width: 18px; height: 18px; border-radius: 50%; background: white; transition: transform .15s; }
+        .test-display-switch.is-on { background: #4f46e5; }
+        .test-display-switch.is-on span { transform: translateX(20px); }
+        .test-display-switch:focus-visible { outline: 2px solid #4f46e5; outline-offset: 3px; }
         @media print {
+            .test-display-toggle { display: none; }
             @page { size: landscape; margin: 10mm; }
             body * { visibility: hidden; }
             .class-test-report, .class-test-report * { visibility: visible; }

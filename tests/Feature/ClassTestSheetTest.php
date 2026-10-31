@@ -48,6 +48,56 @@ class ClassTestSheetTest extends TestCase
         });
     }
 
+    public function test_month_filters_and_progress_compare_matching_subjects_and_handle_missing_results(): void
+    {
+        $class = SchoolClass::create(['name' => '8', 'section' => 'A', 'status' => 'active']);
+        $teacher = Teacher::create(['teacher_id' => 'T-1', 'user_id' => User::factory()->create()->id]);
+        $students = collect(['Improved', 'Declined', 'Steady', 'Missing'])->map(fn ($name) => Student::create([
+            'student_id' => $name, 'name' => $name, 'class_id' => $class->id, 'status' => 'active',
+        ]));
+        $math = Subject::create(['name' => 'Math', 'code' => 'M']);
+        $english = Subject::create(['name' => 'English', 'code' => 'E']);
+        $add = function ($subject, $date, $total, $values) use ($class, $teacher, $students) {
+            $exam = Exam::create(['class_id' => $class->id, 'subject_id' => $subject->id, 'teacher_id' => $teacher->id,
+                'exam_type' => 'class_test', 'session' => '2026-2027', 'exam_date' => $date,
+                'total_marks' => $total, 'marking_mode' => 'numeric']);
+            foreach ($values as $index => $value) {
+                Mark::create(['exam_id' => $exam->id, 'student_id' => $students[$index]->id, 'teacher_id' => $teacher->id,
+                    'session' => '2026-2027', 'obtained_marks' => $value, 'total_marks' => $total]);
+            }
+        };
+        $add($math, '2026-12-10', 20, [10, 18, 10]);
+        $add($math, '2027-01-05', 100, [80, 60, 50, 70]);
+        $add($math, '2027-01-20', 10, [6, 6, 5]);
+        // A subject only present in January must not distort progress.
+        $add($english, '2027-01-10', 100, [0, 100, 100]);
+        // Undated tests stay in All tests but must not affect the trend.
+        $add($math, null, 100, [0, 0, 0]);
+        $service = app(ClassTestSheetService::class);
+        $sheet = $service->sheet($class->id, '2026-2027', null, '2027-01');
+        $this->assertCount(3, $sheet['columns']);
+        $this->assertSame(['2027-01', '2026-12'], $sheet['months']->pluck('value')->all());
+        $rows = $sheet['rows']->keyBy(fn ($row) => $row['student']->name);
+        $this->assertSame(['0.00%', '80.00%', '60.00%'], $rows['Improved']['percentage_cells']);
+        $this->assertSame('Improved', $rows['Improved']['progress']['status']);
+        $this->assertSame(20.0, $rows['Improved']['progress']['change']);
+        $this->assertSame(-30.0, $rows['Declined']['progress']['change']);
+        $this->assertSame('Declined', $rows['Declined']['progress']['status']);
+        $this->assertSame('Steady', $rows['Steady']['progress']['status']);
+        $this->assertSame('Not enough data', $rows['Missing']['progress']['status']);
+        $this->assertSame('Dec 2026', $rows['Improved']['progress']['previous']);
+        $this->assertCount(1, $rows['Improved']['progress']['subjects']);
+        $all = $service->sheet($class->id, '2026-2027', $students[0]->id);
+        $this->assertCount(5, $all['columns']);
+        $this->assertSame(20.0, $all['rows'][0]['progress']['change']);
+        $this->assertCount(0, $service->sheet($class->id, '2026-2027', null, '2027-02')['columns']);
+
+        // With a gap, All tests compares available months; a selected month uses its calendar predecessor.
+        $add($math, '2027-03-10', 100, [90]);
+        $this->assertSame(20.0, $service->sheet($class->id, '2026-2027', $students[0]->id)['rows'][0]['progress']['change']);
+        $this->assertNull($service->sheet($class->id, '2026-2027', $students[0]->id, '2027-03')['rows'][0]['progress']['change']);
+    }
+
     public function test_sheet_keeps_every_test_and_subject_and_can_select_one_student(): void
     {
         $class = SchoolClass::create(['name' => '8', 'section' => 'A', 'status' => 'active']);
@@ -75,6 +125,7 @@ class ClassTestSheetTest extends TestCase
         $this->assertCount(4, $sheet['columns']);
         $this->assertCount(2, $sheet['rows']);
         $this->assertSame(['0 / 20', '—', '0 / 20', '—'], $sheet['rows'][0]['cells']);
+        $this->assertSame(['0.00%', '—', '0.00%', '—'], $sheet['rows'][0]['percentage_cells']);
         $this->assertSame(40, $sheet['rows'][0]['total']);
         $this->assertSame(2, $sheet['rows'][0]['recorded']);
         $this->assertSame(0.0, $sheet['rows'][0]['percentage']);
@@ -99,6 +150,7 @@ class ClassTestSheetTest extends TestCase
         Mark::where('exam_id', $firstExam->id)->update(['obtained_marks' => null, 'grade' => 'A']);
         $graded = $service->sheet($class->id, '2026-2027', $alice->id);
         $this->assertSame('A', $graded['rows'][0]['cells'][0]);
+        $this->assertSame('A', $graded['rows'][0]['percentage_cells'][0]);
         $this->assertSame(20, $graded['rows'][0]['total']);
     }
 }
