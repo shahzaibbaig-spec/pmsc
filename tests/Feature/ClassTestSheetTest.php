@@ -13,12 +13,17 @@ class ClassTestSheetTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        config(['app.key' => 'base64:'.base64_encode(str_repeat('t', 32))]);
+        $this->withoutVite();
         // Keep this fixture isolated from legacy migrations that require MySQL.
         $this->assertSame('sqlite', config('database.default'));
         $this->assertSame(':memory:', config('database.connections.sqlite.database'));
         foreach (['0001_01_01_000000_create_users_table.php',
+            '2026_03_05_093953_create_permission_tables.php',
+            '2026_03_05_220000_create_notifications_table.php',
             '2026_03_05_130000_create_student_management_tables.php',
-            '2026_03_05_140000_create_teacher_module_tables.php'] as $migration) {
+            '2026_03_05_140000_create_teacher_module_tables.php',
+            '2026_05_14_000100_create_section_head_assignments_table.php'] as $migration) {
             (require database_path('migrations/'.$migration))->up();
         }
         Schema::create('student_class_histories', function (Blueprint $table) {
@@ -46,6 +51,55 @@ class ClassTestSheetTest extends TestCase
             $table->string('session');
             $table->timestamps();
         });
+    }
+
+    public function test_section_heads_can_view_only_their_assigned_section_and_session(): void
+    {
+        $classes = collect(['Prep', '4', '8'])->map(fn ($name) => SchoolClass::create([
+            'name' => $name, 'section' => 'A', 'status' => 'active',
+        ]));
+        foreach (\App\Models\SectionHeadAssignment::TYPE_SCOPE_MAP as $index => $scope) {
+            \Spatie\Permission\Models\Role::findOrCreate($index, 'web');
+            $user = User::factory()->create();
+            $user->assignRole($index);
+            $teacher = Teacher::create(['teacher_id' => 'T-'.$user->id, 'user_id' => $user->id]);
+            $assignment = \App\Models\SectionHeadAssignment::create([
+                'teacher_id' => $teacher->id, 'user_id' => $user->id, 'section_head_type' => $index,
+                'scope' => $scope, 'session' => '2026-2027', 'status' => 'active',
+            ]);
+            $position = array_search($scope, array_values(\App\Models\SectionHeadAssignment::TYPE_SCOPE_MAP), true);
+            $class = $classes[$position];
+            $url = route('section-head.results.class-tests', ['session' => '2026-2027', 'class_id' => $class->id]);
+            $this->actingAs($user)->get($url)->assertOk()
+                ->assertViewHas('classes', fn ($visible) => $visible->pluck('id')->all() === [$class->id])
+                ->assertViewHas('sheetRoute', 'section-head.results.class-tests')
+                ->assertSee('href="'.route('section-head.results.class-tests').'"', false)
+                ->assertSee('action="'.route('section-head.results.class-tests').'"', false);
+            $this->get(route('section-head.results.class-tests', ['session' => '2026-2027', 'class_id' => $classes[($position + 1) % 3]->id]))->assertForbidden();
+            $this->get(route('section-head.results.class-tests', ['session' => '2025-2026']))->assertOk()
+                ->assertViewHas('report', null);
+            $this->get(route('principal.results.class-tests'))->assertForbidden();
+            $this->post(route('principal.results.publish'), [])->assertForbidden();
+            $assignment->update(['status' => 'inactive']);
+            $this->get($url)->assertForbidden();
+        }
+    }
+
+    public function test_regular_teachers_cannot_access_section_head_sheets_and_admin_access_is_preserved(): void
+    {
+        \Spatie\Permission\Models\Role::findOrCreate('Teacher', 'web');
+        $teacher = User::factory()->create();
+        $teacher->assignRole('Teacher');
+        $this->actingAs($teacher)->get(route('section-head.results.class-tests'))->assertForbidden();
+        \Spatie\Permission\Models\Permission::findOrCreate('generate_results', 'web');
+        $class = SchoolClass::create(['name' => '8', 'status' => 'active']);
+        foreach (['Admin', 'Principal'] as $role) {
+            \Spatie\Permission\Models\Role::findOrCreate($role, 'web')->givePermissionTo('generate_results');
+            $user = User::factory()->create();
+            $user->assignRole($role);
+            $this->actingAs($user)->get(route('principal.results.class-tests', ['class_id' => $class->id]))->assertOk()
+                ->assertViewHas('sheetRoute', 'principal.results.class-tests');
+        }
     }
 
     public function test_month_filters_and_progress_compare_matching_subjects_and_handle_missing_results(): void

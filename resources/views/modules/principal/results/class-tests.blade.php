@@ -5,7 +5,7 @@
     </x-slot>
 
     <div class="space-y-6" x-data="{ showPercentages: @js($filters['display'] === 'percentages') }">
-        <form method="GET" action="{{ route('principal.results.class-tests') }}" class="sheet-filters grid gap-4 rounded-2xl border bg-white p-5 md:grid-cols-5">
+        <form method="GET" action="{{ route($sheetRoute) }}" class="sheet-filters grid gap-4 rounded-2xl border bg-white p-5 md:grid-cols-5">
             <input type="hidden" name="display" value="{{ $filters['display'] }}" :value="showPercentages ? 'percentages' : 'marks'">
             <div>
                 <label for="sheet_class" class="block text-sm font-medium">Class</label>
@@ -17,7 +17,7 @@
             </div>
             <div>
                 <label for="sheet_session" class="block text-sm font-medium">Session</label>
-                <select id="sheet_session" name="session" onchange="this.form.student_id.value = ''; this.form.month.value = ''; this.form.submit()" class="mt-1 w-full rounded-lg border-slate-300">
+                <select id="sheet_session" name="session" onchange="this.form.student_id.value = ''; this.form.month.value = ''; @if($sheetRoute === 'section-head.results.class-tests') this.form.class_id.value = ''; @endif this.form.submit()" class="mt-1 w-full rounded-lg border-slate-300">
                     @foreach($sessions as $session)
                         <option @selected($filters['session'] === $session)>{{ $session }}</option>
                     @endforeach
@@ -162,7 +162,7 @@
                     </section>
                 @endif
             @else
-                <p>No classes available.</p>
+                <p>No classes available for your access in this session. Section heads need an active section assignment for the selected session.</p>
             @endif
         </section>
     </div>

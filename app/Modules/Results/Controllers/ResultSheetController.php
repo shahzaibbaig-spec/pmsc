@@ -8,6 +8,8 @@ use App\Models\SchoolClass;
 use App\Modules\Fees\Services\FeeDefaulterService;
 use App\Modules\Reports\Services\ReportService;
 use App\Modules\Results\Services\ResultSheetService;
+use App\Services\SectionHeadAssignmentService;
+use App\Services\TeacherRankingService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -27,9 +29,20 @@ class ResultSheetController extends Controller
         ]);
         $classes = $this->classes();
         $sessions = $this->sessionOptions();
+        $session = $validated['session'] ?? $sessions[1];
+        if (! $request->user()->hasAnyRole(['Admin', 'Principal'])) {
+            $scopes = app(SectionHeadAssignmentService::class)->getObserverScopes($request->user(), $session);
+            $rankingService = app(TeacherRankingService::class);
+            $classes = $classes->filter(fn (SchoolClass $classRoom) => in_array(
+                $rankingService->resolveRankingGroupFromClass($classRoom), $scopes, true
+            ))->values();
+            if (isset($validated['class_id'])) {
+                abort_unless($classes->contains('id', (int) $validated['class_id']), 403, 'This class is outside your section assignment for the selected session.');
+            }
+        }
         $filters = [
             'class_id' => $validated['class_id'] ?? $classes->first()?->id,
-            'session' => $validated['session'] ?? $sessions[1],
+            'session' => $session,
             'student_id' => $validated['student_id'] ?? null,
             'month' => $validated['month'] ?? null,
             'display' => $validated['display'] ?? 'marks',
@@ -41,7 +54,10 @@ class ResultSheetController extends Controller
         $report = $filters['class_id'] ? $service->sheet((int) $filters['class_id'], $filters['session'],
             $filters['student_id'] ? (int) $filters['student_id'] : null, $filters['month']) : null;
 
-        return view('modules.principal.results.class-tests', compact('classes', 'sessions', 'filters', 'students', 'report'));
+        $sheetRoute = $request->routeIs('section-head.results.class-tests')
+            ? 'section-head.results.class-tests' : 'principal.results.class-tests';
+
+        return view('modules.principal.results.class-tests', compact('classes', 'sessions', 'filters', 'students', 'report', 'sheetRoute'));
     }
 
     public function __construct(

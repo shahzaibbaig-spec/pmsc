@@ -313,7 +313,7 @@
 
         $menuItems[] = ['route' => 'teacher.e-resources.index', 'label' => 'E Resources'];
         $menuItems[] = ['route' => 'notifications.index', 'label' => 'Notifications'];
-    } elseif ($sidebarUser?->hasRole('Teacher')) {
+    } elseif ($sidebarUser?->hasAnyRole(['Teacher', 'Early Years Section Head', 'Middle School Section Head', 'Senior School Section Head'])) {
         $isSectionHeadUser = $sidebarUser?->hasAnyRole([
             'Early Years Section Head',
             'Middle School Section Head',
@@ -349,6 +349,9 @@
         }
         if ($isSectionHeadUser && $sidebarUser?->can('view_lesson_observations')) {
             $menuItems[] = ['route' => 'section-head.lesson-observations.index', 'label' => 'Lesson Observations'];
+        }
+        if ($isSectionHeadUser) {
+            $menuItems[] = ['route' => 'section-head.results.class-tests', 'label' => 'Class Test Sheet'];
         }
         if ($isSectionHeadUser && $sidebarUser?->can('view_notebook_observations')) {
             $menuItems[] = ['route' => 'section-head.notebook-observations.index', 'label' => 'Notebook Observations'];
