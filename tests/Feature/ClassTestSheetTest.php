@@ -53,6 +53,30 @@ class ClassTestSheetTest extends TestCase
         });
     }
 
+    public function test_warden_can_view_class_and_student_reports_without_result_editing_access(): void
+    {
+        \Spatie\Permission\Models\Role::findOrCreate('Warden', 'web');
+        $permission = \Spatie\Permission\Models\Permission::findOrCreate('view_student_academic_records', 'web');
+        $warden = User::factory()->create();
+        $warden->assignRole('Warden');
+        $class = SchoolClass::create(['name' => '8', 'section' => 'A', 'status' => 'active']);
+        $student = Student::create(['student_id' => 'W-1', 'name' => 'Warden Report Student',
+            'class_id' => $class->id, 'status' => 'active']);
+        $url = route('warden.results.class-tests', ['class_id' => $class->id, 'session' => '2026-2027']);
+        $this->actingAs($warden)->get($url)->assertForbidden();
+        $warden->givePermissionTo($permission);
+        $this->get($url)->assertOk()
+            ->assertViewHas('classes', fn ($classes) => $classes->contains('id', $class->id))
+            ->assertViewHas('sheetRoute', 'warden.results.class-tests')
+            ->assertSee('Class Test Reports')
+            ->assertSee('Warden Report Student');
+        $this->get($url.'&student_id='.$student->id.'&month=2026-11&display=percentages')->assertOk()
+            ->assertViewHas('filters', fn ($filters) => (int) $filters['student_id'] === $student->id
+                && $filters['month'] === '2026-11' && $filters['display'] === 'percentages');
+        $this->get(route('principal.results.class-tests'))->assertForbidden();
+        $this->post(route('principal.results.publish'), [])->assertForbidden();
+    }
+
     public function test_section_heads_can_view_only_their_assigned_section_and_session(): void
     {
         $classes = collect(['Prep', '4', '8'])->map(fn ($name) => SchoolClass::create([

@@ -377,6 +377,9 @@
         if ($sidebarUser?->can('view_class_wise_student_lists')) {
             $menuItems[] = ['route' => 'principal.student-lists.index', 'label' => 'Class-wise Student Lists'];
         }
+        if ($sidebarUser?->can('view_student_academic_records')) {
+            $menuItems[] = ['route' => 'warden.results.class-tests', 'label' => 'Class Test Reports'];
+        }
         if ($sidebarUser?->can('view_all_daily_diary')) {
             $menuItems[] = ['route' => 'warden.daily-diary.index', 'label' => 'Daily Diary'];
         }

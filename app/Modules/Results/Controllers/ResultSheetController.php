@@ -30,7 +30,7 @@ class ResultSheetController extends Controller
         $classes = $this->classes();
         $sessions = $this->sessionOptions();
         $session = $validated['session'] ?? $sessions[1];
-        if (! $request->user()->hasAnyRole(['Admin', 'Principal'])) {
+        if (! $request->user()->hasAnyRole(['Admin', 'Principal', 'Warden'])) {
             $scopes = app(SectionHeadAssignmentService::class)->getObserverScopes($request->user(), $session);
             $rankingService = app(TeacherRankingService::class);
             $classes = $classes->filter(fn (SchoolClass $classRoom) => in_array(
@@ -54,8 +54,11 @@ class ResultSheetController extends Controller
         $report = $filters['class_id'] ? $service->sheet((int) $filters['class_id'], $filters['session'],
             $filters['student_id'] ? (int) $filters['student_id'] : null, $filters['month']) : null;
 
-        $sheetRoute = $request->routeIs('section-head.results.class-tests')
-            ? 'section-head.results.class-tests' : 'principal.results.class-tests';
+        $sheetRoute = match (true) {
+            $request->routeIs('warden.results.class-tests') => 'warden.results.class-tests',
+            $request->routeIs('section-head.results.class-tests') => 'section-head.results.class-tests',
+            default => 'principal.results.class-tests',
+        };
 
         return view('modules.principal.results.class-tests', compact('classes', 'sessions', 'filters', 'students', 'report', 'sheetRoute'));
     }
