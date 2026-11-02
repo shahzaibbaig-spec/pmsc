@@ -77,6 +77,37 @@ class ClassTestSheetTest extends TestCase
         $this->post(route('principal.results.publish'), [])->assertForbidden();
     }
 
+    public function test_existing_section_heads_receive_teacher_options_alongside_section_head_options(): void
+    {
+        $teacherRole = \Spatie\Permission\Models\Role::findOrCreate('Teacher', 'web');
+        foreach (['mark_attendance', 'enter_marks', 'create_daily_diary'] as $name) {
+            $teacherRole->givePermissionTo(\Spatie\Permission\Models\Permission::findOrCreate($name, 'web'));
+        }
+        $users = collect(array_keys(\App\Models\SectionHeadAssignment::TYPE_SCOPE_MAP))->map(function ($role) {
+            \Spatie\Permission\Models\Role::findOrCreate($role, 'web');
+            $user = User::factory()->create();
+            $user->assignRole($role);
+
+            return $user;
+        });
+        $migration = require database_path('migrations/2026_11_02_000200_restore_section_head_teacher_roles.php');
+        $migration->up();
+        $migration->up();
+
+        foreach ($users as $user) {
+            $user = $user->fresh();
+            $this->assertTrue($user->hasRole('Teacher'));
+            $this->assertCount(2, $user->roles);
+            $this->assertTrue($user->can('enter_marks'));
+            $this->actingAs($user)->get(route('section-head.results.class-tests'))
+                ->assertOk()
+                ->assertSee('href="'.route('teacher.attendance.index').'"', false)
+                ->assertSee('href="'.route('teacher.exams.index').'"', false)
+                ->assertSee('href="'.route('teacher.daily-diary.create').'"', false)
+                ->assertSee('href="'.route('section-head.results.class-tests').'"', false);
+        }
+    }
+
     public function test_section_heads_can_view_only_their_assigned_section_and_session(): void
     {
         $classes = collect(['Prep', '4', '8'])->map(fn ($name) => SchoolClass::create([
