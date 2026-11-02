@@ -252,6 +252,7 @@ class RolePermissionSeeder extends Seeder
             'view_payroll_reports',
         ]);
         $warden->syncPermissions([
+            'view_class_wise_student_lists',
             'view_all_daily_diary',
             'view_student_discipline_reports',
             'view_student_academic_records',

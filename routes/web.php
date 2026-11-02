@@ -483,11 +483,11 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
         ->name('principal.students.data');
 
     Route::get('/principal/student-lists', [PrincipalClassWiseStudentListController::class, 'index'])
-        ->middleware(['role:Principal,Admin', 'permission:view_class_wise_student_lists'])
+        ->middleware(['role:Principal,Admin,Warden', 'permission:view_class_wise_student_lists'])
         ->name('principal.student-lists.index');
 
     Route::get('/principal/student-lists/print', [PrincipalClassWiseStudentListController::class, 'print'])
-        ->middleware(['role:Principal,Admin', 'permission:view_class_wise_student_lists'])
+        ->middleware(['role:Principal,Admin,Warden', 'permission:view_class_wise_student_lists'])
         ->name('principal.student-lists.print');
 
     Route::get('/principal/students/{student}', [StudentManagementController::class, 'show'])
