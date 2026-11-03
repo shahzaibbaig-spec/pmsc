@@ -127,7 +127,7 @@ class HostelRoomAllocationController extends Controller
 
         return redirect()
             ->route('warden.hostel.allocations.index')
-            ->with('success', 'Student room shifted successfully.');
+            ->with('success', 'Student room allocation updated successfully.');
     }
 
     public function remove(Request $request, Student $student): RedirectResponse

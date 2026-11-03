@@ -1973,6 +1973,16 @@ Route::prefix('teacher/discipline-reports')
         ->whereNumber('room')
         ->name('warden.hostel.rooms.update');
 
+    Route::get('/warden/hostel/room-list/import', [\App\Http\Controllers\Warden\HostelRoomListImportController::class, 'index'])
+        ->middleware(['role:Warden,Admin', 'permission:manage_hostel_rooms', 'permission:assign_students_to_rooms'])
+        ->name('warden.hostel.import.index');
+    Route::post('/warden/hostel/room-list/preview', [\App\Http\Controllers\Warden\HostelRoomListImportController::class, 'preview'])
+        ->middleware(['role:Warden,Admin', 'permission:manage_hostel_rooms', 'permission:assign_students_to_rooms'])
+        ->name('warden.hostel.import.preview');
+    Route::post('/warden/hostel/room-list/import', [\App\Http\Controllers\Warden\HostelRoomListImportController::class, 'store'])
+        ->middleware(['role:Warden,Admin', 'permission:manage_hostel_rooms', 'permission:assign_students_to_rooms'])
+        ->name('warden.hostel.import.store');
+
     Route::get('/warden/hostel/allocations', [HostelRoomAllocationController::class, 'index'])
         ->middleware(['role:Warden,Admin', 'permission:view_hostel_room_allocations'])
         ->name('warden.hostel.allocations.index');

@@ -5,6 +5,11 @@
                 <h2 class="text-xl font-semibold text-slate-900">Hostel Rooms</h2>
                 <p class="mt-1 text-sm text-slate-500">Manage room inventory, capacity, and occupancy status.</p>
             </div>
+            @can('manage_hostel_rooms')
+                @can('assign_students_to_rooms')
+                <a href="{{ route('warden.hostel.import.index') }}" class="inline-flex min-h-11 items-center rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold">Import Room List</a>
+                @endcan
+                @endcan
             <a href="{{ route('warden.hostel.rooms.create') }}" class="inline-flex min-h-11 items-center rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800">
                 Add Room
             </a>

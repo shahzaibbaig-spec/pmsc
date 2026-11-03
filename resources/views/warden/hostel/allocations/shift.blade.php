@@ -2,8 +2,8 @@
     <x-slot name="header">
         <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-                <h2 class="text-xl font-semibold text-slate-900">Shift Student Room</h2>
-                <p class="mt-1 text-sm text-slate-500">Close the current room assignment and move the student to a new room.</p>
+                <h2 class="text-xl font-semibold text-slate-900">Edit Student Allocation</h2>
+                <p class="mt-1 text-sm text-slate-500">Edit allocation details or select a different room to move the student.</p>
             </div>
             <a href="{{ route('warden.hostel.allocations.index') }}" class="inline-flex min-h-11 items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
                 Back to Allocations
@@ -53,11 +53,11 @@
                 @method('PUT')
 
                 <div>
-                    <label for="hostel_room_id" class="mb-1 block text-sm font-medium text-slate-700">New Room</label>
+                    <label for="hostel_room_id" class="mb-1 block text-sm font-medium text-slate-700">Room</label>
                     <select id="hostel_room_id" name="hostel_room_id" required class="block min-h-11 w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-500">
                         <option value="">Select room</option>
                         @foreach ($availableRooms as $room)
-                            <option value="{{ $room['id'] }}" @selected((int) old('hostel_room_id') === (int) $room['id'])>
+                            <option value="{{ $room['id'] }}" @selected((int) old('hostel_room_id', $currentAllocation->hostel_room_id) === (int) $room['id'])>
                                 {{ $room['name'] }} | Capacity: {{ $room['capacity'] }} | Occupied: {{ $room['occupied_beds'] }} | Available: {{ $room['available_beds'] }}
                             </option>
                         @endforeach
@@ -65,18 +65,19 @@
                 </div>
 
                 <div>
-                    <label for="allocated_from" class="mb-1 block text-sm font-medium text-slate-700">New Allocation Start Date</label>
-                    <input id="allocated_from" type="date" name="allocated_from" value="{{ old('allocated_from', now()->toDateString()) }}" required class="block min-h-11 w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-500">
+                    <label for="allocated_from" class="mb-1 block text-sm font-medium text-slate-700">Allocation / Room Change Date</label>
+                    <input id="allocated_from" type="date" name="allocated_from" value="{{ old('allocated_from', optional($currentAllocation->allocated_from)->toDateString()) }}" required class="block min-h-11 w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-500">
+                    <p class="mt-1 text-sm text-slate-500">Keep the existing date when editing details. When moving rooms, enter the date of the move.</p>
                 </div>
 
                 <div>
                     <label for="remarks" class="mb-1 block text-sm font-medium text-slate-700">Remarks (Optional)</label>
-                    <textarea id="remarks" name="remarks" rows="4" class="block w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-500">{{ old('remarks') }}</textarea>
+                    <textarea id="remarks" name="remarks" rows="4" class="block w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-500">{{ old('remarks', $currentAllocation->remarks) }}</textarea>
                 </div>
 
                 <div class="flex flex-wrap items-center gap-3">
                     <button type="submit" class="inline-flex min-h-11 items-center rounded-xl bg-slate-900 px-5 py-2 text-sm font-semibold text-white hover:bg-slate-800">
-                        Shift Room
+                        Save Allocation
                     </button>
                     <a href="{{ route('warden.hostel.allocations.index') }}" class="inline-flex min-h-11 items-center rounded-xl border border-slate-300 bg-white px-5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
                         Cancel

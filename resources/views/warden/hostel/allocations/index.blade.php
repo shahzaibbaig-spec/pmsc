@@ -6,7 +6,12 @@
                 <p class="mt-1 text-sm text-slate-500">Manage current hostel room assignments and student shifts.</p>
             </div>
             <div class="flex flex-wrap items-center gap-2">
-                <a href="{{ route('warden.hostel.allocations.bulk.create') }}" class="inline-flex min-h-11 items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                @can('manage_hostel_rooms')
+                @can('assign_students_to_rooms')
+                <a href="{{ route('warden.hostel.import.index') }}" class="inline-flex min-h-11 items-center rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold">Import Room List</a>
+                @endcan
+                @endcan
+            <a href="{{ route('warden.hostel.allocations.bulk.create') }}" class="inline-flex min-h-11 items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
                     Bulk Allocate
                 </a>
                 <a href="{{ route('warden.hostel.allocations.create') }}" class="inline-flex min-h-11 items-center rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800">
@@ -126,7 +131,7 @@
                                         @if ($allocation->status === 'active')
                                             <div class="flex justify-end gap-2">
                                                 <a href="{{ route('warden.hostel.allocations.shift.edit', $allocation->student_id) }}" class="inline-flex min-h-10 items-center rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
-                                                    Shift
+                                                    Edit / Change Room
                                                 </a>
                                                 <button type="button" @click="openRemove = openRemove === {{ (int) $allocation->id }} ? null : {{ (int) $allocation->id }}" class="inline-flex min-h-10 items-center rounded-lg border border-rose-300 bg-white px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50">
                                                     Remove

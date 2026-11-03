@@ -42,7 +42,7 @@
                                 <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Room</th>
                                 <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Floor Number</th>
                                 <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Allocation Date</th>
-                                <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th><th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Actions</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-100 bg-white">
@@ -59,10 +59,11 @@
                                         {{ ! empty($allocation['allocated_from']) ? \Illuminate\Support\Carbon::parse($allocation['allocated_from'])->format('d M Y') : '-' }}
                                     </td>
                                     <td class="px-4 py-4 text-sm text-slate-700">{{ ucfirst($allocation['status']) }}</td>
+                                    <td class="px-4 py-4 text-sm">@can('assign_students_to_rooms')<a class="font-semibold text-indigo-700" href="{{ route('warden.hostel.allocations.shift.edit', $allocation['student_id']) }}">Edit / Change Room</a>@endcan</td>
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="6" class="px-4 py-10 text-center text-sm text-slate-500">No active students are currently allocated to this room.</td>
+                                    <td colspan="7" class="px-4 py-10 text-center text-sm text-slate-500">No active students are currently allocated to this room.</td>
                                 </tr>
                             @endforelse
                         </tbody>

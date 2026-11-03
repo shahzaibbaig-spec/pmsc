@@ -167,11 +167,21 @@ class HostelRoomAllocationService
                 throw new RuntimeException('No active room allocation exists for this student.');
             }
 
+            $this->assertAllocationBelongsToWarden($activeAllocation, $user);
+
             if ((int) $activeAllocation->hostel_room_id === $newRoomId) {
-                throw new RuntimeException('Student is already allocated to this room.');
+                $activeAllocation->forceFill([
+                    'allocated_from' => $newAllocatedFrom,
+                    'session' => $session,
+                    'remarks' => $remarks,
+                ])->save();
+
+                return $activeAllocation->refresh();
             }
 
-            $this->assertAllocationBelongsToWarden($activeAllocation, $user);
+            if ($newAllocatedFrom < $activeAllocation->allocated_from->toDateString()) {
+                throw new RuntimeException('The room change date cannot be before the current allocation start date.');
+            }
 
             $newRoom = HostelRoom::query()
                 ->lockForUpdate()
@@ -407,7 +417,6 @@ class HostelRoomAllocationService
         }
 
         $availableRooms = collect($this->activeRoomsWithOccupancy($user))
-            ->reject(fn (array $room): bool => (int) $room['id'] === (int) $currentAllocation->hostel_room_id)
             ->values()
             ->all();
 
