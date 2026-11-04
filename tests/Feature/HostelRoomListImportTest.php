@@ -189,6 +189,38 @@ class HostelRoomListImportTest extends TestCase
         $this->assertSame(1, HostelRoomAllocation::active()->count());
     }
 
+    public function test_room_inventory_includes_residents_without_creating_school_allocations(): void
+    {
+        Schema::create('users', fn (Blueprint $table) => $table->id());
+        (require database_path('migrations/2026_11_04_000100_create_hostel_residents_table.php'))->up();
+        $hostel = Hostel::create(['name' => 'Jinnah House']);
+        $otherHostel = Hostel::create(['name' => 'Other House']);
+        $student = $this->student('School Boy', '2012-01-01');
+        $user = $this->actor($hostel->id);
+        app(HostelRoomListImportService::class)->import($this->roomGroups(), [['floor' => 0, 'capacity' => 2, 'students' => [$student->id]]], $hostel->id, '2026-11-03', $user);
+        $room = HostelRoom::first();
+        $residentService = app(\App\Services\HostelResidentService::class);
+        $residentService->import([['name' => 'Resident Boy', 'date_of_birth' => '2012-01-01', 'room_group' => $room->room_name]], $hostel);
+        $residentService->import([['name' => 'Other Hostel Boy', 'date_of_birth' => '2012-01-01', 'room_group' => $room->room_name]], $otherHostel);
+        $rooms = app(\App\Services\HostelRoomService::class)->getRoomList([], $user)['rooms'];
+        $this->assertSame(2, $rooms->first()->occupied_beds);
+        $summary = app(\App\Services\HostelRoomService::class)->getRoomOccupancySummary($room->id, $user);
+        $this->assertSame(2, $summary['occupied_beds']);
+        $this->assertSame(0, $summary['available_beds']);
+        $this->assertCount(2, app(HostelRoomAllocationService::class)->getRoomStudents($room->id, $user));
+        $this->assertSame(1, HostelRoomAllocation::count());
+        $this->assertSame(1, Student::count());
+        $another = $this->student('Another School Boy', '2013-01-01');
+        try {
+            app(HostelRoomAllocationService::class)->allocateStudentToRoom($another->id, $room->id, ['allocated_from' => '2026-11-04'], $user);
+            $this->fail('Residents must consume available room capacity.');
+        } catch (RuntimeException $exception) {
+            $this->assertStringContainsString('no available beds', $exception->getMessage());
+        }
+        \App\Models\HostelResident::where('hostel_id', $hostel->id)->update(['room_group' => 'J 5-6']);
+        $this->assertSame(1, app(\App\Services\HostelRoomService::class)->getRoomOccupancySummary($room->id, $user)['occupied_beds']);
+    }
+
     private function actor(int $hostelId): User
     {
         $user = Mockery::mock(User::class)->makePartial();

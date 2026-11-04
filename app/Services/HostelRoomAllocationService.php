@@ -2,9 +2,9 @@
 
 namespace App\Services;
 
+use App\Models\Hostel;
 use App\Models\HostelRoom;
 use App\Models\HostelRoomAllocation;
-use App\Models\Hostel;
 use App\Models\SchoolClass;
 use App\Models\Student;
 use App\Models\User;
@@ -17,7 +17,7 @@ use RuntimeException;
 class HostelRoomAllocationService
 {
     /**
-     * @param array<int, int> $studentIds
+     * @param  array<int, int>  $studentIds
      */
     public function allocateStudentsToHostelInBulk(array $studentIds, int $hostelId, array $data, ?User $user = null): int
     {
@@ -572,8 +572,9 @@ class HostelRoomAllocationService
     public function getRoomStudents(int $roomId, ?User $user = null): array
     {
         $user = $this->resolveUser($user);
+        $room = HostelRoom::query()->forWarden($user)->findOrFail($roomId);
 
-        return HostelRoomAllocation::query()
+        $students = HostelRoomAllocation::query()
             ->forWarden($user)
             ->with([
                 'student:id,name,student_id,class_id',
@@ -599,6 +600,23 @@ class HostelRoomAllocationService
             })
             ->values()
             ->all();
+
+        foreach ($room->activeResidents() as $resident) {
+            $students[] = [
+                'allocation_id' => 0,
+                'student_id' => 0,
+                'resident_id' => $resident->id,
+                'student_name' => $resident->name,
+                'student_code' => 'Resident #'.$resident->id,
+                'class_name' => 'Hostel resident',
+                'room_name' => $room->room_name,
+                'floor_number' => $room->floor_number,
+                'allocated_from' => null,
+                'status' => 'active',
+            ];
+        }
+
+        return $students;
     }
 
     private function ensureRoomCanReceiveStudent(HostelRoom $room): void
@@ -613,13 +631,15 @@ class HostelRoomAllocationService
             ->lockForUpdate()
             ->count();
 
+        $activeCount += $room->activeResidents()->count();
+
         if ($activeCount >= (int) $room->capacity) {
             throw new RuntimeException('Selected room has no available beds.');
         }
     }
 
     /**
-     * @param array<string, mixed> $filters
+     * @param  array<string, mixed>  $filters
      * @return array{search:?string,room_id:?int,class_id:?int,status:?string,date:?string,per_page:int}
      */
     private function normalizeFilters(array $filters): array
@@ -677,6 +697,7 @@ class HostelRoomAllocationService
             ->withCount([
                 'activeAllocations as occupied_beds' => fn (Builder $query) => $query->where('status', HostelRoomAllocation::STATUS_ACTIVE),
             ])
+            ->withResidentCount()
             ->where('is_active', true)
             ->orderBy('floor_number')
             ->orderBy('room_name')

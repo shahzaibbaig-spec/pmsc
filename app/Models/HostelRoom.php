@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Schema;
 
 class HostelRoom extends Model
 {
@@ -75,5 +76,35 @@ class HostelRoom extends Model
         return $hostelId > 0
             ? $query->where('hostel_id', $hostelId)
             : $query->whereRaw('1 = 0');
+    }
+
+    public function scopeWithResidentCount(Builder $query): Builder
+    {
+        if (! Schema::hasTable('hostel_residents')) {
+            return $query->selectRaw('0 as resident_beds');
+        }
+
+        return $query->selectSub(
+            HostelResident::query()->selectRaw('COUNT(*)')
+                ->whereColumn('hostel_residents.hostel_id', 'hostel_rooms.hostel_id')
+                ->whereColumn('hostel_residents.room_group', 'hostel_rooms.room_name')
+                ->where('is_active', true),
+            'resident_beds'
+        );
+    }
+
+    public function getOccupiedBedsAttribute($value): int
+    {
+        return (int) $value + (int) ($this->attributes['resident_beds'] ?? 0);
+    }
+
+    public function activeResidents(): \Illuminate\Support\Collection
+    {
+        if (! Schema::hasTable('hostel_residents')) {
+            return collect();
+        }
+
+        return HostelResident::query()->where('hostel_id', $this->hostel_id)
+            ->where('room_group', $this->room_name)->where('is_active', true)->orderBy('name')->get();
     }
 }

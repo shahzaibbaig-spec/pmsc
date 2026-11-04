@@ -63,7 +63,7 @@ class HostelRoomService
     }
 
     /**
-     * @param array<string, mixed> $filters
+     * @param  array<string, mixed>  $filters
      * @return array{
      *     rooms:LengthAwarePaginator,
      *     filters:array{search:?string,floor_number:?int,is_active:?bool,gender:?string,per_page:int},
@@ -81,6 +81,7 @@ class HostelRoomService
             ->withCount([
                 'activeAllocations as occupied_beds' => fn (Builder $query) => $query->where('status', HostelRoomAllocation::STATUS_ACTIVE),
             ])
+            ->withResidentCount()
             ->when($normalized['search'] !== null, function (Builder $query) use ($normalized): void {
                 $search = (string) $normalized['search'];
 
@@ -149,7 +150,8 @@ class HostelRoomService
             ])
             ->findOrFail($roomId);
 
-        $occupiedBeds = (int) $room->activeAllocations->count();
+        $residents = $room->activeResidents();
+        $occupiedBeds = (int) $room->activeAllocations->count() + $residents->count();
         $capacity = max(1, (int) $room->capacity);
         $availableBeds = max(0, $capacity - $occupiedBeds);
         $occupancyPercentage = round(($occupiedBeds / $capacity) * 100, 2);
@@ -168,6 +170,17 @@ class HostelRoomService
             })
             ->all();
 
+        foreach ($residents as $resident) {
+            $currentStudents[] = [
+                'student_id' => 0,
+                'resident_id' => $resident->id,
+                'student_name' => $resident->name,
+                'student_code' => 'Resident #'.$resident->id,
+                'class_name' => 'Hostel resident',
+                'allocated_from' => null,
+            ];
+        }
+
         return [
             'room' => $room,
             'occupied_beds' => $occupiedBeds,
@@ -178,7 +191,7 @@ class HostelRoomService
     }
 
     /**
-     * @param array<string, mixed> $data
+     * @param  array<string, mixed>  $data
      * @return array{
      *     room_name:string,
      *     floor_number:int,
@@ -226,7 +239,7 @@ class HostelRoomService
     }
 
     /**
-     * @param array<string, mixed> $filters
+     * @param  array<string, mixed>  $filters
      * @return array{search:?string,floor_number:?int,is_active:?bool,gender:?string,per_page:int}
      */
     private function normalizeFilters(array $filters): array

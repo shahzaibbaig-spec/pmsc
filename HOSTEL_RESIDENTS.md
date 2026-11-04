@@ -4,7 +4,7 @@ The 62 remaining spreadsheet entries belong in `hostel_residents`, a separate ac
 
 Wardens can open **Hostel Residents** from their sidebar or the Hostel Rooms / Room Allocations screens. The list supports search, CSV import, adding residents, editing details and room groups, and marking residents inactive. Wardens can see and change only their own hostel's residents. Existing `view_hostel_room_allocations` and `assign_students_to_rooms` permissions govern access.
 
-Room groups are accommodation labels from the spreadsheet. They do not reserve individual beds or contribute to school-student room occupancy, night attendance, or leave screens. Those screens continue to use school-student allocations.
+Room groups identify accommodation from the spreadsheet. Active residents count toward room occupancy and appear in the room's occupant list when their hostel and room-group label match an inventory room. Moving a resident's room group updates those counts. School-student allocations also count toward room capacity, but importing residents does not create school-student allocations. Night attendance and leave screens continue to use school-student allocations.
 
 ## Deploy and import
 

@@ -59,7 +59,7 @@
                                         {{ ! empty($allocation['allocated_from']) ? \Illuminate\Support\Carbon::parse($allocation['allocated_from'])->format('d M Y') : '-' }}
                                     </td>
                                     <td class="px-4 py-4 text-sm text-slate-700">{{ ucfirst($allocation['status']) }}</td>
-                                    <td class="px-4 py-4 text-sm">@can('assign_students_to_rooms')<a class="font-semibold text-indigo-700" href="{{ route('warden.hostel.allocations.shift.edit', $allocation['student_id']) }}">Edit / Change Room</a>@endcan</td>
+                                    <td class="px-4 py-4 text-sm">@can('assign_students_to_rooms')<a class="font-semibold text-indigo-700" href="{{ ! empty($allocation['resident_id']) ? route('warden.hostel.residents.edit', $allocation['resident_id']) : route('warden.hostel.allocations.shift.edit', $allocation['student_id']) }}">Edit / Change Room</a>@endcan</td>
                                 </tr>
                             @empty
                                 <tr>
