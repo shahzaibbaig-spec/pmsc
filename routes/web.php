@@ -1973,6 +1973,18 @@ Route::prefix('teacher/discipline-reports')
         ->whereNumber('room')
         ->name('warden.hostel.rooms.update');
 
+    Route::prefix('warden/hostel/residents')->name('warden.hostel.residents.')->middleware('role:Warden,Admin')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Warden\HostelResidentController::class, 'index'])
+            ->middleware('permission:view_hostel_room_allocations')->name('index');
+        Route::middleware('permission:assign_students_to_rooms')->group(function () {
+            Route::get('/create', [\App\Http\Controllers\Warden\HostelResidentController::class, 'create'])->name('create');
+            Route::post('/', [\App\Http\Controllers\Warden\HostelResidentController::class, 'store'])->name('store');
+            Route::post('/import', [\App\Http\Controllers\Warden\HostelResidentController::class, 'import'])->name('import');
+            Route::get('/{resident}/edit', [\App\Http\Controllers\Warden\HostelResidentController::class, 'edit'])->whereNumber('resident')->name('edit');
+            Route::put('/{resident}', [\App\Http\Controllers\Warden\HostelResidentController::class, 'update'])->whereNumber('resident')->name('update');
+        });
+    });
+
     Route::get('/warden/hostel/room-list/import', [\App\Http\Controllers\Warden\HostelRoomListImportController::class, 'index'])
         ->middleware(['role:Warden,Admin', 'permission:manage_hostel_rooms', 'permission:assign_students_to_rooms'])
         ->name('warden.hostel.import.index');

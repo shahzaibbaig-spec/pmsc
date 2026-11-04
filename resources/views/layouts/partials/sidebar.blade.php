@@ -394,6 +394,7 @@
         }
         if ($sidebarUser?->can('view_hostel_room_allocations') || $sidebarUser?->can('assign_students_to_rooms')) {
             $menuItems[] = ['route' => 'warden.hostel.allocations.index', 'label' => 'Room Allocations'];
+            $menuItems[] = ['route' => 'warden.hostel.residents.index', 'label' => 'Hostel Residents'];
         }
         if ($sidebarUser?->can('manage_hostel_leave')) {
             $menuItems[] = ['route' => 'warden.hostel.leaves.index', 'label' => 'Hostel Leave'];
