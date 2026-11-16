@@ -24,6 +24,7 @@ class ResultSheetController extends Controller
             'class_id' => ['nullable', 'integer', 'exists:school_classes,id'],
             'session' => ['nullable', 'string', 'max:20'],
             'student_id' => ['nullable', 'integer', 'exists:students,id'],
+            'subject_id' => ['nullable', 'integer', 'exists:subjects,id'],
             'month' => ['nullable', 'date_format:Y-m'],
             'display' => ['nullable', 'in:marks,percentages'],
         ]);
@@ -41,9 +42,10 @@ class ResultSheetController extends Controller
             }
         }
         $filters = [
-            'class_id' => $validated['class_id'] ?? $classes->first()?->id,
+            'class_id' => $request->has('class_id') ? ($validated['class_id'] ?? null) : $classes->first()?->id,
             'session' => $session,
             'student_id' => $validated['student_id'] ?? null,
+            'subject_id' => $validated['subject_id'] ?? null,
             'month' => $validated['month'] ?? null,
             'display' => $validated['display'] ?? 'marks',
         ];
@@ -51,8 +53,24 @@ class ResultSheetController extends Controller
             $sessions[] = $filters['session'];
         }
         $students = $filters['class_id'] ? $service->students((int) $filters['class_id'], $filters['session']) : collect();
-        $report = $filters['class_id'] ? $service->sheet((int) $filters['class_id'], $filters['session'],
-            $filters['student_id'] ? (int) $filters['student_id'] : null, $filters['month']) : null;
+        if (! $filters['class_id']) {
+            $filters['student_id'] = null;
+        }
+        $reportClasses = $filters['class_id']
+            ? $classes->where('id', (int) $filters['class_id']) : $classes;
+        $subjects = \App\Models\Subject::query()->whereIn('id', \App\Models\Exam::query()
+            ->select('subject_id')->whereIn('class_id', $reportClasses->pluck('id'))
+            ->where('session', $filters['session'])->where('exam_type', 'class_test'))
+            ->orderBy('name')->get(['id', 'name']);
+        $reports = $reportClasses->map(fn (SchoolClass $classRoom) => $service->sheet(
+            $classRoom->id, $filters['session'],
+            $filters['student_id'] ? (int) $filters['student_id'] : null,
+            $filters['month'], $filters['subject_id'] ? (int) $filters['subject_id'] : null
+        ))->values();
+        $report = $reports->first();
+        $months = $reports->flatMap(fn ($sheet) => $sheet['months'])->unique('value')->sortByDesc('value')->values();
+        $subjectLabel = $filters['subject_id']
+            ? \App\Models\Subject::find($filters['subject_id'])?->name : 'All subjects';
 
         $sheetRoute = match (true) {
             $request->routeIs('warden.results.class-tests') => 'warden.results.class-tests',
@@ -60,7 +78,7 @@ class ResultSheetController extends Controller
             default => 'principal.results.class-tests',
         };
 
-        return view('modules.principal.results.class-tests', compact('classes', 'sessions', 'filters', 'students', 'report', 'sheetRoute'));
+        return view('modules.principal.results.class-tests', compact('classes', 'sessions', 'filters', 'students', 'report', 'reports', 'months', 'subjects', 'subjectLabel', 'sheetRoute'));
     }
 
     public function __construct(

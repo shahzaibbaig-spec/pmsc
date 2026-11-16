@@ -53,6 +53,48 @@ class ClassTestSheetTest extends TestCase
         });
     }
 
+    public function test_subject_filters_apply_to_tests_totals_progress_and_all_classes(): void
+    {
+        \Spatie\Permission\Models\Role::findOrCreate('Warden', 'web')
+            ->givePermissionTo(\Spatie\Permission\Models\Permission::findOrCreate('view_student_academic_records', 'web'));
+        $user = User::factory()->create();
+        $user->assignRole('Warden');
+        $teacher = Teacher::create(['teacher_id' => 'FILTER-T', 'user_id' => $user->id]);
+        $math = Subject::create(['name' => 'Math', 'code' => 'FILTER-M']);
+        $english = Subject::create(['name' => 'English', 'code' => 'FILTER-E']);
+        $classes = collect(['7', '8'])->map(fn ($name) => SchoolClass::create(['name' => $name, 'status' => 'active']));
+        foreach ($classes as $class) {
+            $student = Student::create(['student_id' => 'FILTER-'.$class->id, 'name' => 'Student '.$class->name,
+                'class_id' => $class->id, 'status' => 'active']);
+            foreach ([[$math, '2026-10-01', 40], [$math, '2026-11-01', 80],
+                [$english, '2026-10-01', 100], [$english, '2026-11-01', 0]] as [$subject, $date, $score]) {
+                $exam = Exam::create(['class_id' => $class->id, 'subject_id' => $subject->id,
+                    'teacher_id' => $teacher->id, 'exam_type' => 'class_test', 'session' => '2026-2027',
+                    'exam_date' => $date, 'total_marks' => 100, 'marking_mode' => 'numeric']);
+                Mark::create(['exam_id' => $exam->id, 'student_id' => $student->id, 'teacher_id' => $teacher->id,
+                    'session' => '2026-2027', 'obtained_marks' => $score, 'total_marks' => 100]);
+            }
+        }
+        $url = route('warden.results.class-tests');
+        $this->actingAs($user)->get($url.'?class_id=&session=2026-2027&subject_id='.$math->id.'&month=2026-11')
+            ->assertOk()->assertSee('All classes')->assertSee('All subjects')
+            ->assertViewHas('reports', function ($reports) use ($math) {
+                $this->assertCount(2, $reports);
+                foreach ($reports as $report) {
+                    $this->assertSame([$math->id], $report['columns']->pluck('subject_id')->all());
+                    $this->assertSame(80, $report['rows'][0]['obtained']);
+                    $this->assertSame(40.0, $report['rows'][0]['progress']['change']);
+                }
+                return true;
+            });
+        $this->get($url.'?class_id='.$classes[0]->id.'&session=2026-2027&subject_id='.$english->id)
+            ->assertOk()->assertViewHas('reports', fn ($reports) => $reports->count() === 1
+                && $reports[0]['rows'][0]['progress']['change'] === -100.0);
+        $this->get($url.'?class_id=&session=2026-2027')->assertOk()
+            ->assertViewHas('reports', fn ($reports) => $reports->count() === 2 && $reports[0]['columns']->count() === 4);
+        $this->get($url.'?subject_id=99999')->assertSessionHasErrors('subject_id');
+    }
+
     public function test_warden_can_view_class_and_student_reports_without_result_editing_access(): void
     {
         \Spatie\Permission\Models\Role::findOrCreate('Warden', 'web');
@@ -130,6 +172,8 @@ class ClassTestSheetTest extends TestCase
                 ->assertViewHas('sheetRoute', 'section-head.results.class-tests')
                 ->assertSee('href="'.route('section-head.results.class-tests').'"', false)
                 ->assertSee('action="'.route('section-head.results.class-tests').'"', false);
+            $this->get(route('section-head.results.class-tests', ['session' => '2026-2027']).'&class_id=')->assertOk()
+                ->assertViewHas('reports', fn ($reports) => $reports->count() === 1 && $reports[0]['class']->id === $class->id);
             $this->get(route('section-head.results.class-tests', ['session' => '2026-2027', 'class_id' => $classes[($position + 1) % 3]->id]))->assertForbidden();
             $this->get(route('section-head.results.class-tests', ['session' => '2025-2026']))->assertOk()
                 ->assertViewHas('report', null);

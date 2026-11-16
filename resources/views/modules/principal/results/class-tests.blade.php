@@ -1,15 +1,16 @@
 <x-app-layout>
     <x-slot name="header">
         <h2 class="text-xl font-semibold text-slate-900">Class Test Sheet</h2>
-        <p class="mt-1 text-sm text-slate-500">All class tests across all subjects for one student or the whole class.</p>
+        <p class="mt-1 text-sm text-slate-500">View tests and progress for all subjects or a specific subject, across all classes or a selected class.</p>
     </x-slot>
 
     <div class="space-y-6" x-data="{ showPercentages: @js($filters['display'] === 'percentages') }">
-        <form method="GET" action="{{ route($sheetRoute) }}" class="sheet-filters grid gap-4 rounded-2xl border bg-white p-5 md:grid-cols-5">
+        <form method="GET" action="{{ route($sheetRoute) }}" class="sheet-filters grid gap-4 rounded-2xl border bg-white p-5 md:grid-cols-3 xl:grid-cols-6">
             <input type="hidden" name="display" value="{{ $filters['display'] }}" :value="showPercentages ? 'percentages' : 'marks'">
             <div>
                 <label for="sheet_class" class="block text-sm font-medium">Class</label>
-                <select id="sheet_class" name="class_id" required onchange="this.form.student_id.value = ''; this.form.month.value = ''; this.form.submit()" class="mt-1 w-full rounded-lg border-slate-300">
+                <select id="sheet_class" name="class_id" onchange="this.form.student_id.value = ''; this.form.month.value = ''; this.form.submit()" class="mt-1 w-full rounded-lg border-slate-300">
+                    <option value="" @selected(!$filters['class_id'])>All classes</option>
                     @foreach($classes as $classRoom)
                         <option value="{{ $classRoom->id }}" @selected((string) $filters['class_id'] === (string) $classRoom->id)>{{ trim($classRoom->name.' '.$classRoom->section) }}</option>
                     @endforeach
@@ -24,9 +25,21 @@
                 </select>
             </div>
             <div>
+                <label for="sheet_subject" class="block text-sm font-medium">Subject</label>
+                <select id="sheet_subject" name="subject_id" onchange="this.form.month.value = ''; this.form.submit()" class="mt-1 w-full rounded-lg border-slate-300">
+                    <option value="">All subjects</option>
+                    @foreach($subjects as $subject)
+                        <option value="{{ $subject->id }}" @selected((string) $filters['subject_id'] === (string) $subject->id)>{{ $subject->name }}</option>
+                    @endforeach
+                    @if($filters['subject_id'] && !$subjects->contains('id', (int) $filters['subject_id']))
+                        <option value="{{ $filters['subject_id'] }}" selected>{{ $subjectLabel }}</option>
+                    @endif
+                </select>
+            </div>
+            <div>
                 <label for="sheet_student" class="block text-sm font-medium">Student</label>
-                <select id="sheet_student" name="student_id" class="mt-1 w-full rounded-lg border-slate-300">
-                    <option value="">Whole class</option>
+                <select id="sheet_student" name="student_id" @disabled(!$filters['class_id']) class="mt-1 w-full rounded-lg border-slate-300">
+                    <option value="">{{ $filters['class_id'] ? 'Whole class' : 'All students' }}</option>
                     @foreach($students as $student)
                         <option value="{{ $student->id }}" @selected((string) $filters['student_id'] === (string) $student->id)>{{ $student->name }} ({{ $student->student_id }})</option>
                     @endforeach
@@ -36,29 +49,30 @@
                 <label for="sheet_month" class="block text-sm font-medium">Month</label>
                 <select id="sheet_month" name="month" class="mt-1 w-full rounded-lg border-slate-300">
                     <option value="">All tests</option>
-                    @foreach($report['months'] ?? [] as $month)
+                    @foreach($months as $month)
                         <option value="{{ $month['value'] }}" @selected($filters['month'] === $month['value'])>{{ $month['label'] }}</option>
                     @endforeach
-                    @if($filters['month'] && $report && !$report['months']->contains('value', $filters['month']))
+                    @if($filters['month'] && $report && !$months->contains('value', $filters['month']))
                         <option value="{{ $filters['month'] }}" selected>{{ $report['periodLabel'] }}</option>
                     @endif
                 </select>
             </div>
             <div class="flex flex-wrap items-end gap-2">
                 <button type="submit" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white">View Sheet</button>
-                @if($report && $report['columns']->isNotEmpty())
+                @if($reports->contains(fn ($sheet) => $sheet['columns']->isNotEmpty()))
                     <button type="button" onclick="window.print()" class="rounded-lg border px-4 py-2 text-sm font-semibold">Print / Save PDF</button>
                 @endif
             </div>
         </form>
 
         <section class="class-test-report rounded-2xl border bg-white p-5 shadow-sm">
-            @if($report)
-                <p class="mb-2 font-semibold text-indigo-700">{{ $report['periodLabel'] }}</p>
+            @forelse($reports as $report)
+                <div class="mb-8">
+                <p class="mb-2 font-semibold text-indigo-700">{{ $report['periodLabel'] }} &middot; {{ $subjectLabel }}</p>
                 <h3 class="text-lg font-semibold">{{ trim($report['class']->name.' '.$report['class']->section) }} · {{ $report['session'] }} · Class Tests</h3>
                 <p class="my-2 text-sm text-slate-500">{{ $report['rows']->count() }} student(s) · {{ $report['columns']->count() }} test(s). — means marks have not been entered. Totals include recorded numeric results only.</p>
                 @if($report['columns']->isEmpty())
-                    <p class="py-6 text-sm text-slate-500">No class tests found for the selected class, session and month.</p>
+                    <p class="py-6 text-sm text-slate-500">No class tests found for the selected class, subject, session and month.</p>
                 @else
                     <div class="test-display-toggle mb-4 flex flex-wrap items-center gap-3">
                         <span class="text-sm font-medium" id="test-display-label">Individual tests: Marks / Percentages</span>
@@ -161,9 +175,10 @@
                         @endforeach
                     </section>
                 @endif
-            @else
+                </div>
+            @empty
                 <p>No classes available for your access in this session. Section heads need an active section assignment for the selected session.</p>
-            @endif
+            @endforelse
         </section>
     </div>
     <style>

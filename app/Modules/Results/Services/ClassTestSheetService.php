@@ -24,7 +24,7 @@ class ClassTestSheetService
             ->orderBy('name')->orderBy('student_id')->get(['id', 'name', 'student_id']);
     }
 
-    public function sheet(int $classId, string $session, ?int $studentId = null, ?string $month = null): array
+    public function sheet(int $classId, string $session, ?int $studentId = null, ?string $month = null, ?int $subjectId = null): array
     {
         $class = SchoolClass::query()->findOrFail($classId);
         $students = $this->students($classId, $session);
@@ -35,6 +35,7 @@ class ClassTestSheetService
 
         $allExams = Exam::query()->with('subject:id,name')->where('class_id', $classId)
             ->where('session', $session)->where('exam_type', 'class_test')
+            ->when($subjectId !== null, fn ($query) => $query->where('subject_id', $subjectId))
             ->orderBy('exam_date')->orderBy('id')->get()
             ->sortBy(fn (Exam $exam) => $exam->subject?->name, SORT_NATURAL | SORT_FLAG_CASE)->values();
         $months = $allExams->filter(fn (Exam $exam) => $exam->exam_date !== null)
