@@ -5,6 +5,8 @@
         $metrics = $payload['metrics'];
         $narrative = $payload['narrative'];
         $scores = $payload['scores'];
+        $attendanceScore = data_get(collect($scores)->firstWhere('label', 'Attendance & punctuality'), 'score', 0);
+        $pdScore = data_get(collect($scores)->firstWhere('label', 'Professional development'), 'score', 0);
         $conductScore = data_get(collect($scores)->firstWhere('label', 'Conduct / classroom behavior'), 'score', 0);
         $principalScore = data_get(collect($scores)->firstWhere('label', 'Principal review score'), 'score', 0);
         $isFinalized = ($acr['status'] ?? '') === 'finalized';
@@ -198,6 +200,19 @@
                     @method('PUT')
 
                     <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <div>
+                            <label for="attendance_score" class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Attendance Marks (0-15)</label>
+                            <input id="attendance_score" type="number" step="0.01" min="0" max="15" name="attendance_score" value="{{ old('attendance_score', $attendanceScore) }}" required @disabled($isFinalized) class="mt-1 block min-h-11 w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-500 disabled:cursor-not-allowed disabled:bg-slate-100">
+                        </div>
+                        <div>
+                            <label for="trainings_attended" class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Number of Professional Trainings</label>
+                            <input id="trainings_attended" type="number" step="1" min="0" max="2147483647" name="trainings_attended" value="{{ old('trainings_attended', $metrics['trainings_attended']) }}" required @disabled($isFinalized) class="mt-1 block min-h-11 w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-500 disabled:cursor-not-allowed disabled:bg-slate-100">
+                        </div>
+                        <div>
+                            <label for="pd_score" class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Professional Training Marks (0-10)</label>
+                            <input id="pd_score" type="number" step="0.01" min="0" max="10" name="pd_score" value="{{ old('pd_score', $pdScore) }}" required @disabled($isFinalized) class="mt-1 block min-h-11 w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-500 disabled:cursor-not-allowed disabled:bg-slate-100">
+                        </div>
+
                         <div>
                             <label for="conduct_score" class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Conduct Score (0-15)</label>
                             <input id="conduct_score" type="number" step="0.01" min="0" max="15" name="conduct_score" value="{{ old('conduct_score', $conductScore) }}" @disabled($isFinalized) class="mt-1 block min-h-11 w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-500 disabled:cursor-not-allowed disabled:bg-slate-100">

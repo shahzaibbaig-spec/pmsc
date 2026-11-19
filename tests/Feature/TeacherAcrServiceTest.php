@@ -143,6 +143,57 @@ class TeacherAcrServiceTest extends TestCase
         $this->assertSame('Ready for broader leadership tasks.', $acr->confidential_remarks);
     }
 
+    public function test_principal_marks_and_training_count_survive_refresh_and_regeneration(): void
+    {
+        $service = app(TeacherAcrService::class);
+        $teacher = $this->createTeacher('Manual Review');
+        $principal = User::factory()->create();
+        $result = $service->generateDraftAcr($teacher->id, '2025-2026');
+        $acr = TeacherAcr::findOrFail($result['acr_id']);
+
+        $service->savePrincipalReview($acr->id, [
+            'attendance_score' => 13.25,
+            'pd_score' => 8.5,
+            'trainings_attended' => 4,
+            'conduct_score' => 12,
+            'principal_score' => 14,
+        ], $principal->id);
+
+        foreach (['saved', 'refreshed', 'regenerated', 'finalized_refresh'] as $stage) {
+            if ($stage === 'refreshed') {
+                $service->refreshCalculatedFields($acr->id);
+            } elseif ($stage === 'regenerated') {
+                $service->generateDraftAcr($teacher->id, '2025-2026');
+            } elseif ($stage === 'finalized_refresh') {
+                $service->finalizeAcr($acr->id, $principal->id);
+                $service->refreshCalculatedFieldsFromLatestResults($acr->id);
+            }
+            $acr->refresh()->load('metric');
+            $this->assertSame(13.25, (float) $acr->attendance_score, $stage);
+            $this->assertSame(8.5, (float) $acr->pd_score, $stage);
+            $this->assertSame(4, $acr->metric->trainings_attended, $stage);
+            $expected = 13.25 + 8.5 + 12 + 14 + (float) $acr->academic_score + (float) $acr->improvement_score;
+            $this->assertEqualsWithDelta($expected, (float) $acr->total_score, 0.01, $stage);
+        }
+    }
+
+    public function test_review_rejects_invalid_attendance_and_training_inputs(): void
+    {
+        $rules = (new \App\Http\Requests\Principal\UpdateTeacherAcrRequest())->rules();
+        $validator = \Illuminate\Support\Facades\Validator::make([
+            'attendance_score' => 15.01,
+            'pd_score' => 10.01,
+            'trainings_attended' => 1.5,
+            'conduct_score' => 12,
+            'principal_score' => 14,
+        ], $rules);
+
+        $this->assertTrue($validator->fails());
+        foreach (['attendance_score', 'pd_score', 'trainings_attended'] as $field) {
+            $this->assertTrue($validator->errors()->has($field));
+        }
+    }
+
     private function createClass(string $name, string $section): SchoolClass
     {
         return SchoolClass::query()->create([

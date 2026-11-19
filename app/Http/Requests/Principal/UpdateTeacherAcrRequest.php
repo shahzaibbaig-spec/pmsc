@@ -18,6 +18,9 @@ class UpdateTeacherAcrRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'attendance_score' => ['required', 'numeric', 'min:0', 'max:15'],
+            'trainings_attended' => ['required', 'integer', 'min:0', 'max:2147483647'],
+            'pd_score' => ['required', 'numeric', 'min:0', 'max:10'],
             'conduct_score' => ['required', 'numeric', 'min:0', 'max:15'],
             'principal_score' => ['required', 'numeric', 'min:0', 'max:15'],
             'strengths' => ['nullable', 'string', 'max:5000'],

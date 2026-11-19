@@ -183,6 +183,21 @@ class TeacherAcrService
                 throw new RuntimeException('A finalized ACR cannot be reviewed again.');
             }
 
+            $metric = $acr->metric()->firstOrCreate(['acr_id' => $acr->id]);
+            $meta = $metric->meta ?? [];
+            foreach (['attendance_score' => self::ATTENDANCE_WEIGHT, 'pd_score' => self::PD_WEIGHT] as $field => $weight) {
+                if (array_key_exists($field, $data)) {
+                    $acr->{$field} = $this->normalizeWeightedScore((float) $data[$field], $weight);
+                    $meta['principal_overrides'][$field] = (float) $acr->{$field};
+                }
+            }
+            if (array_key_exists('trainings_attended', $data)) {
+                $metric->trainings_attended = max(0, (int) $data['trainings_attended']);
+                $meta['principal_overrides']['trainings_attended'] = $metric->trainings_attended;
+            }
+            $metric->meta = $meta;
+            $metric->save();
+
             $acr->conduct_score = $this->normalizeWeightedScore(
                 (float) ($data['conduct_score'] ?? 0),
                 self::CONDUCT_WEIGHT
@@ -506,6 +521,8 @@ class TeacherAcrService
                 return;
             }
 
+            $draftPayload = $this->preservePrincipalOverrides($acr, $draftPayload);
+
             $acr->session = $resolvedSession;
             $acr->attendance_score = $draftPayload['scores']['attendance_score'];
             $acr->academic_score = $draftPayload['scores']['academic_score'];
@@ -522,6 +539,24 @@ class TeacherAcrService
                 $draftPayload['metric']
             );
         });
+    }
+
+    private function preservePrincipalOverrides(TeacherAcr $acr, array $payload): array
+    {
+        $overrides = $acr->metric?->meta['principal_overrides'] ?? [];
+        foreach (['attendance_score', 'pd_score'] as $field) {
+            if (array_key_exists($field, $overrides)) {
+                $payload['scores'][$field] = $overrides[$field];
+            }
+        }
+        if (array_key_exists('trainings_attended', $overrides)) {
+            $payload['metric']['trainings_attended'] = $overrides['trainings_attended'];
+        }
+        if ($overrides !== []) {
+            $payload['metric']['meta']['principal_overrides'] = $overrides;
+        }
+
+        return $payload;
     }
 
     private function printableScoreRows(
@@ -615,13 +650,13 @@ class TeacherAcrService
                 'session' => $session,
             ]);
 
+            $draftPayload = $this->preservePrincipalOverrides($acr, $draftPayload);
+
             $acr->attendance_score = $draftPayload['scores']['attendance_score'];
             $acr->academic_score = $draftPayload['scores']['academic_score'];
             $acr->improvement_score = $draftPayload['scores']['improvement_score'];
             $acr->pd_score = $draftPayload['scores']['pd_score'];
-            $acr->total_score = $draftPayload['scores']['total_score']
-                + (float) ($existing?->conduct_score ?? 0)
-                + (float) ($existing?->principal_score ?? 0);
+            $acr->total_score = $this->recalculateTotalScore($acr);
             $acr->prepared_by = Auth::id() ?: $acr->prepared_by;
 
             if ($existing === null) {
