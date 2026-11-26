@@ -367,7 +367,7 @@ class TeacherAnalyticsService
                         END
                     ) * 100.0
                 ) / NULLIF(COUNT(*), 0) as pass_rate
-            ", [self::PASS_PERCENTAGE])
+            ", [\App\Models\SchoolSetting::examPassPercentage(self::PASS_PERCENTAGE)])
             ->groupBy('marks.teacher_id')
             ->get();
 
@@ -578,7 +578,7 @@ class TeacherAnalyticsService
 
             $percentages = $rows->map(fn ($row): float => $this->percentage((float) $row->obtained_marks, (float) $row->total_marks));
             $averageScores[] = round($percentages->avg() ?? 0, 2);
-            $passRates[] = round(($percentages->filter(fn (float $value): bool => $value >= self::PASS_PERCENTAGE)->count() / $percentages->count()) * 100, 2);
+            $passRates[] = round(($percentages->filter(fn (float $value): bool => $value >= \App\Models\SchoolSetting::examPassPercentage(self::PASS_PERCENTAGE))->count() / $percentages->count()) * 100, 2);
         }
 
         return [
@@ -638,7 +638,7 @@ class TeacherAnalyticsService
                 $percentages = $rows->map(fn ($row): float => $this->percentage((float) $row->obtained_marks, (float) $row->total_marks));
                 $avgScore = round($percentages->avg() ?? 0, 2);
                 $passRate = $percentages->count() > 0
-                    ? round(($percentages->filter(fn (float $value): bool => $value >= self::PASS_PERCENTAGE)->count() / $percentages->count()) * 100, 2)
+                    ? round(($percentages->filter(fn (float $value): bool => $value >= \App\Models\SchoolSetting::examPassPercentage(self::PASS_PERCENTAGE))->count() / $percentages->count()) * 100, 2)
                     : 0.0;
 
                 return [

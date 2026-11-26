@@ -17,7 +17,7 @@ use Illuminate\View\View;
 
 class ClassResultAnalyzerController extends Controller
 {
-    private const PASS_PERCENTAGE = 60.0;
+    private const PASS_PERCENTAGE = 40.0;
     private const RISK_LOW_THRESHOLD = 40.0;
     private const RISK_HIGH_THRESHOLD = 70.0;
 
@@ -94,7 +94,7 @@ class ClassResultAnalyzerController extends Controller
             'selectedSession' => $selectedSession,
             'selectedExamType' => $selectedExamType,
             'selectedClassLabel' => $selectedClass ? trim($selectedClass->name.' '.($selectedClass->section ?? '')) : null,
-            'passPercentageThreshold' => self::PASS_PERCENTAGE,
+            'passPercentageThreshold' => \App\Models\SchoolSetting::examPassPercentage(self::PASS_PERCENTAGE),
             'analysis' => $analysis,
         ]);
     }
@@ -311,7 +311,7 @@ class ClassResultAnalyzerController extends Controller
             $percentages = $rows->map(fn (Mark $mark): float => $this->markPercentage($mark, $selectedExamLookup));
 
             $avg = $percentages->isEmpty() ? 0.0 : round((float) $percentages->avg(), 2);
-            $passCount = $percentages->filter(fn (float $value): bool => $value >= self::PASS_PERCENTAGE)->count();
+            $passCount = $percentages->filter(fn (float $value): bool => $value >= \App\Models\SchoolSetting::examPassPercentage(self::PASS_PERCENTAGE))->count();
             $passPercentage = $percentages->count() > 0
                 ? round(($passCount / $percentages->count()) * 100, 2)
                 : 0.0;
@@ -364,7 +364,7 @@ class ClassResultAnalyzerController extends Controller
             $obtainedMarks = (float) $rows->sum(fn (Mark $mark): float => (float) $mark->obtained_marks);
             $percentage = $totalMarks > 0 ? round(($obtainedMarks / $totalMarks) * 100, 2) : 0.0;
             $failedSubjectsCount = $subjectPercentages
-                ->filter(fn (float $value): bool => $value < self::PASS_PERCENTAGE)
+                ->filter(fn (float $value): bool => $value < \App\Models\SchoolSetting::examPassPercentage(self::PASS_PERCENTAGE))
                 ->count();
             $attendancePercentage = (float) ($attendanceByStudent[(int) $student->id]['attendance_percentage'] ?? 0.0);
             $riskScore = $this->riskScore($percentage, $attendancePercentage, $failedSubjectsCount, $totalSubjects);
@@ -378,7 +378,7 @@ class ClassResultAnalyzerController extends Controller
                 'obtained_marks' => $obtainedMarks,
                 'percentage' => $percentage,
                 'grade' => $this->grade($percentage),
-                'is_pass' => $percentage >= self::PASS_PERCENTAGE,
+                'is_pass' => $percentage >= \App\Models\SchoolSetting::examPassPercentage(self::PASS_PERCENTAGE),
                 'attendance_percentage' => $attendancePercentage,
                 'failed_subjects_count' => $failedSubjectsCount,
                 'risk_score' => $riskScore,
@@ -401,7 +401,7 @@ class ClassResultAnalyzerController extends Controller
             ->all();
 
         $weakStudents = $studentRows
-            ->filter(fn (array $row): bool => (float) $row['percentage'] < self::PASS_PERCENTAGE)
+            ->filter(fn (array $row): bool => (float) $row['percentage'] < \App\Models\SchoolSetting::examPassPercentage(self::PASS_PERCENTAGE))
             ->sortBy('percentage')
             ->values()
             ->all();
@@ -453,7 +453,7 @@ class ClassResultAnalyzerController extends Controller
                     ? round((float) $selectedPercentages->avg(), 2)
                     : 0.0;
                 $passRate = $selectedPercentages->isNotEmpty()
-                    ? round(($selectedPercentages->filter(fn (float $value): bool => $value >= self::PASS_PERCENTAGE)->count() / $selectedPercentages->count()) * 100, 2)
+                    ? round(($selectedPercentages->filter(fn (float $value): bool => $value >= \App\Models\SchoolSetting::examPassPercentage(self::PASS_PERCENTAGE))->count() / $selectedPercentages->count()) * 100, 2)
                     : 0.0;
                 $improvement = $this->teacherImprovement(
                     $sessionPercentagesByTeacherExamType[$teacherId] ?? [],
@@ -724,20 +724,7 @@ class ClassResultAnalyzerController extends Controller
 
     private function grade(float $percentage): string
     {
-        if ($percentage >= 90) {
-            return 'A*';
-        }
-        if ($percentage >= 80) {
-            return 'A';
-        }
-        if ($percentage >= 70) {
-            return 'B+';
-        }
-        if ($percentage >= 60) {
-            return 'B';
-        }
-
-        return 'Fail';
+        return app(\App\Services\FederalBoardGradingService::class)->grade($percentage);
     }
 
     private function examTypeValue(mixed $examType): string

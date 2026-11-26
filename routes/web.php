@@ -806,6 +806,11 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
                 ->name('device-declarations.review');
         });
 
+    Route::get('/principal/exams/settings', [\App\Modules\Exams\Controllers\ExamSettingsController::class, 'edit'])
+        ->middleware('role:Admin|Principal')->name('principal.exams.settings.edit');
+    Route::post('/principal/exams/settings', [\App\Modules\Exams\Controllers\ExamSettingsController::class, 'update'])
+        ->middleware('role:Admin|Principal')->name('principal.exams.settings.update');
+
     Route::get('/principal/results', [PrincipalResultController::class, 'index'])
         ->middleware(['role:Admin|Principal', 'permission:generate_results'])
         ->name('principal.results.index');

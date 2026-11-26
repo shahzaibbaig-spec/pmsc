@@ -11,6 +11,7 @@ class SchoolSetting extends Model
     public const CACHE_KEY = 'school_settings_single';
 
     protected $fillable = [
+        'exam_pass_percentage',
         'school_name',
         'logo_path',
         'address',
@@ -24,6 +25,7 @@ class SchoolSetting extends Model
     protected function casts(): array
     {
         return [
+            'exam_pass_percentage' => 'decimal:2',
             'block_results_for_defaulters' => 'boolean',
             'block_admit_card_for_defaulters' => 'boolean',
             'block_id_card_for_defaulters' => 'boolean',
@@ -36,6 +38,11 @@ class SchoolSetting extends Model
         static::deleted(fn () => Cache::forget(self::CACHE_KEY));
     }
 
+    public static function examPassPercentage(float $default = 40.0): float
+    {
+        return (float) (self::cached()?->exam_pass_percentage ?? $default);
+    }
+
     public static function cached(): ?self
     {
         $payload = Cache::remember(self::CACHE_KEY, now()->addMinutes(60), function (): ?array {
@@ -46,6 +53,7 @@ class SchoolSetting extends Model
             $columns = ['id', 'school_name', 'logo_path', 'address', 'phone', 'email'];
 
             foreach ([
+                'exam_pass_percentage',
                 'block_results_for_defaulters',
                 'block_admit_card_for_defaulters',
                 'block_id_card_for_defaulters',

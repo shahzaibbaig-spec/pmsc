@@ -19,7 +19,7 @@ use RuntimeException;
 
 class AnalyticsService
 {
-    private const PASS_PERCENTAGE = 60.0;
+    private const PASS_PERCENTAGE = 40.0;
     private const EXAM_TYPES = ['class_test', 'bimonthly_test', 'first_term', 'final_term'];
 
     public function __construct(private readonly TeacherRankingService $teacherRankingService)
@@ -256,7 +256,7 @@ class AnalyticsService
                     ) * 100.0
                 ) / NULLIF(COUNT(*), 0) as pass_percentage,
                 COUNT(*) as entries
-            ", [self::PASS_PERCENTAGE])
+            ", [\App\Models\SchoolSetting::examPassPercentage(self::PASS_PERCENTAGE)])
             ->groupBy('e.class_id', 'c.name', 'c.section', 'e.subject_id', 'sub.name')
             ->orderBy('c.name')
             ->orderBy('c.section')
@@ -405,7 +405,7 @@ class AnalyticsService
                     ) * 100.0
                 ) / NULLIF(COUNT(*), 0) as pass_percentage,
                 COUNT(*) as entries
-            ", [self::PASS_PERCENTAGE])
+            ", [\App\Models\SchoolSetting::examPassPercentage(self::PASS_PERCENTAGE)])
             ->groupBy('e.subject_id', 'sub.name', 'sub.code')
             ->orderBy('sub.name')
             ->get()
@@ -529,7 +529,7 @@ class AnalyticsService
             $pass = $studentsWithResults > 0
                 ? round(
                     (
-                        $resultRows->filter(fn (array $row): bool => (float) $row['percentage'] >= self::PASS_PERCENTAGE)->count()
+                        $resultRows->filter(fn (array $row): bool => (float) $row['percentage'] >= \App\Models\SchoolSetting::examPassPercentage(self::PASS_PERCENTAGE))->count()
                         * 100.0
                     ) / $studentsWithResults,
                     2
@@ -632,7 +632,7 @@ class AnalyticsService
                         END
                     ) * 100.0
                 ) / NULLIF(COUNT(*), 0) as pass_percentage
-            ", [self::PASS_PERCENTAGE])
+            ", [\App\Models\SchoolSetting::examPassPercentage(self::PASS_PERCENTAGE)])
             ->groupBy('e.exam_type')
             ->get()
             ->keyBy('exam_type');
@@ -686,7 +686,7 @@ class AnalyticsService
         $passRate = null;
         if ($resultValues->isNotEmpty()) {
             $passRate = round(
-                ($resultValues->filter(fn (float $value): bool => $value >= self::PASS_PERCENTAGE)->count() * 100.0)
+                ($resultValues->filter(fn (float $value): bool => $value >= \App\Models\SchoolSetting::examPassPercentage(self::PASS_PERCENTAGE))->count() * 100.0)
                 / $resultValues->count(),
                 2
             );

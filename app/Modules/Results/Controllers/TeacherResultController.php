@@ -405,20 +405,7 @@ class TeacherResultController extends Controller
 
     private function grade(float $percentage): string
     {
-        if ($percentage >= 90) {
-            return 'A*';
-        }
-        if ($percentage >= 80) {
-            return 'A';
-        }
-        if ($percentage >= 70) {
-            return 'B+';
-        }
-        if ($percentage >= 60) {
-            return 'B';
-        }
-
-        return 'Fail';
+        return app(\App\Services\FederalBoardGradingService::class)->grade($percentage);
     }
 
     private function sessionOptions(int $backward = 1, int $forward = 3): array

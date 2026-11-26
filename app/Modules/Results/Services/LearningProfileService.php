@@ -13,7 +13,7 @@ use Carbon\Carbon;
 
 class LearningProfileService
 {
-    private const PASS_PERCENTAGE = 60.0;
+    private const PASS_PERCENTAGE = 40.0;
 
     public function generateProfilesForClass(int $classId, string $session): array
     {
@@ -180,7 +180,7 @@ class LearningProfileService
             : round(array_sum($allPercentages) / count($allPercentages), 2);
 
         $failedSubjects = collect($subjectAverages)
-            ->filter(fn (float $score): bool => $score < self::PASS_PERCENTAGE)
+            ->filter(fn (float $score): bool => $score < \App\Models\SchoolSetting::examPassPercentage(self::PASS_PERCENTAGE))
             ->keys()
             ->map(fn (string $key): string => (string) ($subjectNameByKey[$key] ?? $key))
             ->values()
@@ -300,7 +300,7 @@ class LearningProfileService
     private function supportSubjects(array $subjectAverages, array $subjectNameByKey): array
     {
         $support = collect($subjectAverages)
-            ->filter(fn (float $score): bool => $score < self::PASS_PERCENTAGE)
+            ->filter(fn (float $score): bool => $score < \App\Models\SchoolSetting::examPassPercentage(self::PASS_PERCENTAGE))
             ->sortBy(fn (float $score): float => $score)
             ->keys()
             ->map(fn (string $key): string => (string) ($subjectNameByKey[$key] ?? $key))

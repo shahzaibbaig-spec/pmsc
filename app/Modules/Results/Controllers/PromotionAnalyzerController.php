@@ -13,7 +13,7 @@ use Illuminate\View\View;
 
 class PromotionAnalyzerController extends Controller
 {
-    private const PASS_PERCENTAGE = 60.0;
+    private const PASS_PERCENTAGE = 40.0;
 
     public function index(Request $request): View
     {
@@ -207,7 +207,7 @@ class PromotionAnalyzerController extends Controller
                     'percentage' => $subjectPercentage,
                 ];
 
-                if ($subjectPercentage < self::PASS_PERCENTAGE) {
+                if ($subjectPercentage < \App\Models\SchoolSetting::examPassPercentage(self::PASS_PERCENTAGE)) {
                     $failedSubjects[] = $subjectName;
                 }
             }

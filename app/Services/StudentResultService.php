@@ -147,13 +147,6 @@ class StudentResultService
 
     private function gradeFromPercentage(float $percentage): string
     {
-        return match (true) {
-            $percentage >= 90 => 'A+',
-            $percentage >= 80 => 'A',
-            $percentage >= 70 => 'B',
-            $percentage >= 60 => 'C',
-            $percentage >= 50 => 'D',
-            default => 'F',
-        };
+        return app(\App\Services\FederalBoardGradingService::class)->grade($percentage);
     }
 };

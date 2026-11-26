@@ -21,7 +21,7 @@ use RuntimeException;
 
 class PromotionService
 {
-    private const PASS_PERCENTAGE = 60.0;
+    private const PASS_PERCENTAGE = 40.0;
     private const PROMOTION_STAGE_FLOW = [
         'playgroup' => 'nursery',
         'nursery' => 'prep',
@@ -1149,7 +1149,7 @@ class PromotionService
         return [
             'percentage' => $percentage,
             'grade' => $grade,
-            'is_passed' => $percentage !== null && $percentage >= self::PASS_PERCENTAGE,
+            'is_passed' => $percentage !== null && $percentage >= \App\Models\SchoolSetting::examPassPercentage(self::PASS_PERCENTAGE),
         ];
     }
 
@@ -1190,7 +1190,7 @@ class PromotionService
         return [
             'percentage' => $percentageEquivalent,
             'grade' => $dominantGrade,
-            'is_passed' => $percentageEquivalent >= self::PASS_PERCENTAGE,
+            'is_passed' => $percentageEquivalent >= \App\Models\SchoolSetting::examPassPercentage(self::PASS_PERCENTAGE),
         ];
     }
 

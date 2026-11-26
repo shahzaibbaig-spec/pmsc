@@ -683,7 +683,7 @@ class TeacherRankingService
                 $averagePercentage = $studentCount > 0 ? round((float) ($rows->avg('student_percentage') ?? 0), 2) : 0.0;
                 $usesGradeSystem = (bool) ($first['uses_grade_system'] ?? false);
                 $passCount = $rows
-                    ->filter(fn (array $row): bool => (float) $row['student_percentage'] >= self::PASS_PERCENTAGE)
+                    ->filter(fn (array $row): bool => (float) $row['student_percentage'] >= \App\Models\SchoolSetting::examPassPercentage(self::PASS_PERCENTAGE))
                     ->count();
                 $passPercentage = $studentCount > 0 ? round(($passCount * 100) / $studentCount, 2) : 0.0;
                 $cgpa = $usesGradeSystem
