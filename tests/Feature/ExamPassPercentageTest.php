@@ -69,4 +69,23 @@ class ExamPassPercentageTest extends TestCase
         $this->actingAs($user)->get(route('principal.exams.settings.edit'))->assertForbidden();
         $this->post(route('principal.exams.settings.update'), ['exam_pass_percentage' => 20])->assertForbidden();
     }
+
+    public function test_missing_migration_returns_a_helpful_error_instead_of_a_server_error(): void
+    {
+        (require database_path('migrations/2026_11_26_000100_add_exam_pass_percentage_to_school_settings.php'))->down();
+        $user = User::factory()->create();
+        $user->assignRole(Role::findOrCreate('Principal', 'web'));
+
+        $this->actingAs($user)->get(route('principal.exams.settings.edit'))->assertOk();
+        $this->from(route('principal.exams.settings.edit'))
+            ->post(route('principal.exams.settings.update'), ['exam_pass_percentage' => 40])
+            ->assertRedirect(route('principal.exams.settings.edit'))
+            ->assertSessionHasErrors('exam_pass_percentage');
+        $this->assertDatabaseCount('school_settings', 0);
+
+        (require database_path('migrations/2026_11_26_000100_add_exam_pass_percentage_to_school_settings.php'))->up();
+        $this->post(route('principal.exams.settings.update'), ['exam_pass_percentage' => 45])
+            ->assertSessionHasNoErrors();
+        $this->assertSame(45.0, SchoolSetting::examPassPercentage());
+    }
 }
