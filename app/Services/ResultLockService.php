@@ -318,12 +318,13 @@ class ResultLockService
     /**
      * @return EloquentCollection<int, Exam>
      */
-    public function examOptions(string $session, ?int $classId = null): EloquentCollection
+    public function examOptions(string $session, ?int $classId = null, ?int $subjectId = null): EloquentCollection
     {
         return Exam::query()
             ->with(['subject:id,name'])
             ->where('session', $session)
             ->when($classId !== null, fn ($query) => $query->where('class_id', $classId))
+            ->when($subjectId !== null, fn ($query) => $query->where('subject_id', $subjectId))
             ->orderBy('exam_type')
             ->orderBy('sequence_number')
             ->orderBy('exam_label')

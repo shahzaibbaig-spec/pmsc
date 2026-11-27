@@ -213,4 +213,40 @@ class PrepGradeSavingTest extends TestCase
         $this->postJson(route('principal.result-locks.corrections.open'), $window)->assertUnprocessable();
         $this->assertFalse($exam->fresh()->correctionsAreOpen());
     }
+
+    public function test_subject_filters_and_recent_unlocks_allow_relocking_only_the_selected_exam(): void
+    {
+        [$payload, $student, $teacher] = $this->context();
+        $principal = $this->principal();
+        $otherSubject = Subject::create(['name' => 'Math', 'code' => 'RECENT-M']);
+        $exams = collect([$payload['subject_id'], $otherSubject->id])->map(fn ($subjectId) => Exam::create([
+            'class_id' => $payload['class_id'], 'subject_id' => $subjectId, 'teacher_id' => $teacher->id,
+            'session' => $payload['session'], 'exam_type' => 'class_test', 'exam_label' => 'Subject Test '.$subjectId,
+            'marking_mode' => 'grade', 'locked_at' => now(),
+        ]));
+        foreach ($exams as $exam) {
+            $this->actingAs($principal)->post(route('principal.result-locks.corrections.open'), [
+                'session' => $payload['session'], 'class_id' => $payload['class_id'], 'exam_id' => $exam->id,
+                'reason' => 'Subject corrections', 'correction_minutes' => 60,
+            ])->assertSessionHasNoErrors();
+        }
+        $filters = ['session' => $payload['session'], 'class_id' => $payload['class_id'], 'subject_id' => $payload['subject_id']];
+        $this->get(route('principal.result-locks.index', $filters))->assertOk()->assertSee('Recently unlocked exams and tests')
+            ->assertSee('Lock again')->assertViewHas('exams', fn ($list) => $list->count() === 1 && $list[0]->id === $exams[0]->id)
+            ->assertViewHas('recentUnlocks', fn ($list) => $list->count() === 1 && $list->first()['log']->exam_id === $exams[0]->id);
+        $this->get(route('principal.result-locks.index', $filters + ['exam_id' => $exams[1]->id]))->assertOk()
+            ->assertViewHas('correctionExam', null)->assertViewHas('filters', fn ($values) => $values['exam_id'] === null)
+            ->assertDontSee('action="'.route('principal.result-locks.lock').'"', false);
+        $this->get(route('principal.result-locks.index', $filters + ['exam_id' => $exams[0]->id]))->assertOk()
+            ->assertViewHas('correctionExam', fn ($exam) => $exam->id === $exams[0]->id);
+        $this->postJson(route('principal.result-locks.lock'), $filters + ['lock_type' => 'final'])->assertUnprocessable();
+        $this->post(route('principal.result-locks.corrections.close'), $filters + ['exam_id' => $exams[0]->id, 'reason' => 'Checked'])
+            ->assertSessionHasNoErrors()->assertRedirect(route('principal.result-locks.index', [
+                'session' => $payload['session'], 'class_id' => $payload['class_id'], 'exam_id' => $exams[0]->id, 'subject_id' => $payload['subject_id'],
+            ]));
+        $this->assertTrue($exams[0]->fresh()->entriesAreLocked());
+        $this->assertTrue($exams[1]->fresh()->correctionsAreOpen());
+        $this->get(route('principal.result-locks.index', $filters))->assertOk()->assertSee('Locked')->assertDontSee('Lock again');
+        $this->getJson(route('principal.result-locks.index', ['subject_id' => 999999]))->assertUnprocessable();
+    }
 }

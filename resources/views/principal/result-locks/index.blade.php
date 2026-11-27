@@ -28,7 +28,7 @@
             <form method="GET" action="{{ route('principal.result-locks.index') }}" class="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-4">
                 <div>
                     <label for="session" class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Session</label>
-                    <select id="session" name="session" class="mt-1 block min-h-11 w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                    <select id="session" name="session" onchange="this.form.exam_id.value = ''; this.form.subject_id.value = ''; this.form.requestSubmit()" class="mt-1 block min-h-11 w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                         @foreach($sessions as $session)
                             <option value="{{ $session }}" @selected($filters['session'] === $session)>{{ $session }}</option>
                         @endforeach
@@ -37,7 +37,7 @@
 
                 <div>
                     <label for="class_id" class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Class</label>
-                    <select id="class_id" name="class_id" class="mt-1 block min-h-11 w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                    <select id="class_id" name="class_id" onchange="this.form.exam_id.value = ''; this.form.subject_id.value = ''; this.form.requestSubmit()" class="mt-1 block min-h-11 w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                         <option value="">Select class</option>
                         @foreach($classes as $classRoom)
                             <option value="{{ $classRoom->id }}" @selected((string) $filters['class_id'] === (string) $classRoom->id)>
@@ -48,9 +48,18 @@
                 </div>
 
                 <div>
+                    <label for="subject_id" class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Subject</label>
+                    <select id="subject_id" name="subject_id" onchange="this.form.exam_id.value = ''; this.form.requestSubmit()" class="mt-1 block min-h-11 w-full rounded-xl border-slate-300 text-sm">
+                        <option value="">All subjects</option>
+                        @foreach($subjects as $subject)
+                            <option value="{{ $subject->id }}" @selected((string) $filters['subject_id'] === (string) $subject->id)>{{ $subject->name }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div>
                     <label for="exam_id" class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Exam</label>
                     <select id="exam_id" name="exam_id" class="mt-1 block min-h-11 w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                        <option value="">Whole class result scope</option>
+                        <option value="">{{ $filters['subject_id'] ? 'Select an exam or test' : 'Whole class result scope' }}</option>
                         @foreach($exams as $exam)
                             <option value="{{ $exam->id }}" @selected((string) $filters['exam_id'] === (string) $exam->id)>
                                 {{ $examLabelResolver($exam) }}
@@ -70,7 +79,53 @@
             </form>
         </section>
 
-        @if ($filters['class_id'])
+        <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h3 class="font-semibold text-slate-900">Recently unlocked exams and tests</h3>
+            <p class="mt-1 text-xs text-slate-500">Latest unlock for each exam, up to 25, matching the session, class and subject filters. Current status includes correction timers and class-wide locks.</p>
+            <div class="mt-4 overflow-x-auto">
+                <table class="w-full text-left text-sm">
+                    <thead class="bg-slate-50"><tr><th class="p-2">Class / Exam</th><th class="p-2">Unlocked by</th><th class="p-2">Unlocked at</th><th class="p-2">Current status / Deadline</th><th class="p-2">Action</th></tr></thead>
+                    <tbody>
+                        @forelse($recentUnlocks as $item)
+                            @php($log = $item['log'])
+                            @php($exam = $log->exam)
+                            <tr class="border-b border-slate-100">
+                                <td class="p-2 align-top">{{ trim(($exam->classRoom?->name ?? '').' '.($exam->classRoom?->section ?? '')) }}<br>{{ $examLabelResolver($exam) }}</td>
+                                <td class="p-2 align-top">{{ $log->performer?->name ?? 'Unknown user' }}</td>
+                                <td class="p-2 align-top">{{ $log->created_at->timezone('Asia/Karachi')->format('d M Y, h:i A') }} PKT</td>
+                                <td class="p-2 align-top">
+                                    @if($item['status']['is_locked'])
+                                        Locked{{ $exam->correctionWindowExpired() ? ' — timer expired' : '' }}
+                                    @elseif($exam->correctionsAreOpen())
+                                        Corrections open<br>{{ $exam->corrections_close_at ? 'Locks '.$exam->corrections_close_at->timezone('Asia/Karachi')->format('d M Y, h:i A').' PKT' : 'Until manually locked' }}
+                                    @else
+                                        Open
+                                    @endif
+                                </td>
+                                <td class="p-2 align-top">
+                                    <a class="text-indigo-600 underline" href="{{ route('principal.result-locks.index', ['session' => $log->session, 'class_id' => $log->class_id, 'subject_id' => $exam->subject_id, 'exam_id' => $exam->id]) }}">Manage test</a>
+                                    @if(! $item['status']['is_locked'])
+                                        <form method="POST" action="{{ route('principal.result-locks.corrections.close') }}" class="mt-2 space-y-2">
+                                            @csrf
+                                            <input type="hidden" name="session" value="{{ $log->session }}">
+                                            <input type="hidden" name="class_id" value="{{ $log->class_id }}">
+                                            <input type="hidden" name="subject_id" value="{{ $exam->subject_id }}">
+                                            <input type="hidden" name="exam_id" value="{{ $exam->id }}">
+                                            <input name="reason" required maxlength="2000" aria-label="Reason for locking {{ $examLabelResolver($exam) }}" placeholder="Reason for locking" class="w-full rounded-lg border-slate-300 text-sm">
+                                            <x-ui.button type="submit">Lock again</x-ui.button>
+                                        </form>
+                                    @endif
+                                </td>
+                            </tr>
+                        @empty
+                            <tr><td colspan="5" class="p-4 text-slate-500">No recently unlocked exams match these filters.</td></tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        @if ($filters['class_id'] && (! $filters['subject_id'] || $filters['exam_id']))
             <section class="rounded-2xl border border-indigo-200 bg-white p-5 shadow-sm">
                 <h3 class="font-semibold text-slate-900">Exam correction window</h3>
                 <p class="mt-1 text-sm text-slate-600">Select a specific exam above and press Apply. Reopen it to let its assigned teachers correct grades or marks, including entries older than seven days. Class-wide locks must be unlocked separately.</p>
@@ -95,6 +150,7 @@
                         <input type="hidden" name="session" value="{{ $filters['session'] }}">
                         <input type="hidden" name="class_id" value="{{ $filters['class_id'] }}">
                         <input type="hidden" name="exam_id" value="{{ $filters['exam_id'] }}">
+                                <input type="hidden" name="subject_id" value="{{ $filters['subject_id'] }}">
                         <x-ui.input name="reason" id="correction_reason" label="Reason for corrections" required maxlength="2000" />
                         <div>
                             <x-ui.input name="correction_minutes" label="Automatically lock again after (minutes)" type="number" min="1" max="43200" :value="old('correction_minutes')" />
@@ -107,6 +163,7 @@
                         <input type="hidden" name="session" value="{{ $filters['session'] }}">
                         <input type="hidden" name="class_id" value="{{ $filters['class_id'] }}">
                         <input type="hidden" name="exam_id" value="{{ $filters['exam_id'] }}">
+                                <input type="hidden" name="subject_id" value="{{ $filters['subject_id'] }}">
                         <x-ui.input name="reason" id="relock_reason" label="Reason for locking again" required maxlength="2000" />
                         <x-ui.button type="submit">Lock exam now</x-ui.button>
                     </form>
@@ -141,6 +198,7 @@
                                 <input type="hidden" name="session" value="{{ $filters['session'] }}">
                                 <input type="hidden" name="class_id" value="{{ $filters['class_id'] }}">
                                 <input type="hidden" name="exam_id" value="{{ $filters['exam_id'] }}">
+                                <input type="hidden" name="subject_id" value="{{ $filters['subject_id'] }}">
                                 <input type="hidden" name="lock_type" value="soft">
                                 <button type="submit" class="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600">
                                     Soft Lock Results
@@ -152,6 +210,7 @@
                                 <input type="hidden" name="session" value="{{ $filters['session'] }}">
                                 <input type="hidden" name="class_id" value="{{ $filters['class_id'] }}">
                                 <input type="hidden" name="exam_id" value="{{ $filters['exam_id'] }}">
+                                <input type="hidden" name="subject_id" value="{{ $filters['subject_id'] }}">
                                 <input type="hidden" name="lock_type" value="final">
                                 <div class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
                                     This action will permanently freeze results. No edits will be allowed.
@@ -174,6 +233,7 @@
                                 <input type="hidden" name="session" value="{{ $filters['session'] }}">
                                 <input type="hidden" name="class_id" value="{{ $filters['class_id'] }}">
                                 <input type="hidden" name="exam_id" value="{{ $filters['exam_id'] }}">
+                                <input type="hidden" name="subject_id" value="{{ $filters['subject_id'] }}">
                                 <div>
                                     <label for="reason" class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Unlock Reason</label>
                                     <textarea id="reason" name="reason" rows="3" required class="mt-1 block w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="Why is this result scope being reopened?">{{ old('reason') }}</textarea>
@@ -256,7 +316,7 @@
             </div>
         @else
             <div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                Select a class first to manage result locking for a session or exam scope.
+                Select a class and, when filtering by subject, a specific exam or test to manage its lock.
             </div>
         @endif
     </div>

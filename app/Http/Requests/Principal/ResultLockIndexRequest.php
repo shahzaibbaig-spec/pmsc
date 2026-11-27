@@ -21,6 +21,7 @@ class ResultLockIndexRequest extends FormRequest
             'session' => ['nullable', 'regex:/^\d{4}-\d{4}$/'],
             'class_id' => ['nullable', 'integer', 'exists:school_classes,id'],
             'exam_id' => ['nullable', 'integer', 'exists:exams,id'],
+            'subject_id' => ['nullable', 'integer', 'exists:subjects,id'],
         ];
     }
 
@@ -29,6 +30,7 @@ class ResultLockIndexRequest extends FormRequest
         $this->merge([
             'session' => trim((string) $this->input('session', '')) ?: null,
             'class_id' => $this->filled('class_id') ? (int) $this->input('class_id') : null,
+            'subject_id' => $this->filled('subject_id') ? (int) $this->input('subject_id') : null,
             'exam_id' => $this->filled('exam_id') ? (int) $this->input('exam_id') : null,
         ]);
     }

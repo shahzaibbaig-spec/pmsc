@@ -20,7 +20,8 @@ class ResultUnlockRequest extends FormRequest
         return [
             'session' => ['required', 'regex:/^\d{4}-\d{4}$/'],
             'class_id' => ['required', 'integer', 'exists:school_classes,id'],
-            'exam_id' => ['nullable', 'integer', 'exists:exams,id'],
+            'exam_id' => ['required_with:subject_id', 'nullable', 'integer', 'exists:exams,id'],
+            'subject_id' => ['nullable', 'integer', 'exists:subjects,id'],
             'reason' => ['required', 'string', 'max:2000'],
             'correction_minutes' => ['nullable', 'integer', 'min:1', 'max:43200'],
         ];
