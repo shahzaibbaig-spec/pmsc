@@ -73,7 +73,10 @@ class AssessmentMarkingModeService
      */
     public function validateEntryPayloadByMode(array $data, string $markingMode): array
     {
-        $resolvedMode = $this->normalizeMarkingMode($markingMode);
+        // The caller already resolved this assessment's mode using its class.
+        // Re-resolving without that context would turn grade mode into numeric
+        // and discard grades (or delete existing entries during an update).
+        $resolvedMode = $this->normalizeRawMode($markingMode) ?? self::MODE_NUMERIC;
         $grade = $this->classAssessmentModeService->normalizeGrade(
             is_string($data['grade'] ?? null) ? (string) $data['grade'] : null
         );
