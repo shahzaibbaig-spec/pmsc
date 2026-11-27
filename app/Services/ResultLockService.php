@@ -44,7 +44,7 @@ class ResultLockService
         $this->assertValidLockType($type);
 
         return DB::transaction(function () use ($session, $classId, $examId, $type, $userId, $reason): ResultLock {
-            $this->ensureExamBelongsToClass($classId, $examId);
+            $this->ensureExamBelongsToClass($classId, $examId, $session);
 
             $lock = ResultLock::query()
                 ->where('session', $session)
@@ -83,6 +83,13 @@ class ResultLockService
                 ])->save();
             }
 
+            if (\Illuminate\Support\Facades\Schema::hasColumn('exams', 'corrections_opened_at')) {
+                Exam::where('session', $session)->where('class_id', $classId)
+                    ->when($examId !== null, fn ($query) => $query->whereKey($examId))
+                    ->update(['corrections_opened_at' => null, 'corrections_close_at' => null,
+                        'corrections_opened_by' => null, 'locked_at' => $now]);
+            }
+
             if ($type === ResultLock::TYPE_FINAL) {
                 $this->setStudentResultLockedFlag($session, $classId, $examId, true);
             }
@@ -109,7 +116,7 @@ class ResultLockService
         }
 
         DB::transaction(function () use ($session, $classId, $examId, $userId, $reason): void {
-            $this->ensureExamBelongsToClass($classId, $examId);
+            $this->ensureExamBelongsToClass($classId, $examId, $session);
 
             $locks = ResultLock::query()
                 ->where('session', $session)
@@ -161,6 +168,9 @@ class ResultLockService
 
     public function canEditResult(User $user, string $session, int $classId, ?int $examId): bool
     {
+        if ($examId !== null && Exam::whereKey($examId)->first()?->correctionWindowExpired()) {
+            return false;
+        }
         $lock = $this->activeLockForScope($session, $classId, $examId);
         if (! $lock) {
             return $user->hasAnyRole(['Admin', 'Principal', 'Teacher']);
@@ -186,6 +196,11 @@ class ResultLockService
     {
         $lock = $this->activeLockForScope($session, $classId, $examId);
         if (! $lock) {
+            $exam = $examId !== null ? Exam::whereKey($examId)->first() : null;
+            if ($exam?->entriesAreLocked()) {
+                return ['is_locked' => true, 'lock_type' => 'edit_window', 'lock_level' => 'exam',
+                    'message' => $exam->correctionWindowExpired() ? 'The correction timer has expired. Entries are locked again.' : 'Exam entries are locked. Open a correction window to allow changes.', 'lock' => null];
+            }
             return [
                 'is_locked' => false,
                 'lock_type' => null,
@@ -353,7 +368,7 @@ class ResultLockService
         }
     }
 
-    private function ensureExamBelongsToClass(int $classId, ?int $examId): void
+    private function ensureExamBelongsToClass(int $classId, ?int $examId, string $session): void
     {
         if ($examId === null) {
             return;
@@ -362,11 +377,12 @@ class ResultLockService
         $belongsToClass = Exam::query()
             ->where('id', $examId)
             ->where('class_id', $classId)
+            ->where('session', $session)
             ->exists();
 
         if (! $belongsToClass) {
             throw ValidationException::withMessages([
-                'exam_id' => 'Selected exam does not belong to the chosen class.',
+                'exam_id' => 'Selected exam does not belong to the chosen class and session.',
             ]);
         }
     }

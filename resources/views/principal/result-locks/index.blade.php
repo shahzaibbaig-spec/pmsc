@@ -71,6 +71,47 @@
         </section>
 
         @if ($filters['class_id'])
+            <section class="rounded-2xl border border-indigo-200 bg-white p-5 shadow-sm">
+                <h3 class="font-semibold text-slate-900">Exam correction window</h3>
+                <p class="mt-1 text-sm text-slate-600">Select a specific exam above and press Apply. Reopen it to let its assigned teachers correct grades or marks, including entries older than seven days. Class-wide locks must be unlocked separately.</p>
+                @if($correctionExam)
+                    <p class="mt-3 text-sm font-medium">
+                        {{ $examLabelResolver($correctionExam) }}:
+                        @if($correctionExam->correctionsAreOpen())
+                            Corrections open
+                            @if($correctionExam->corrections_close_at)
+                                until {{ $correctionExam->corrections_close_at->timezone('Asia/Karachi')->format('d M Y, h:i A') }} (Pakistan time).
+                            @else
+                                until manually locked.
+                            @endif
+                        @elseif($correctionExam->correctionWindowExpired())
+                            Timer expired — entries are locked again.
+                        @else
+                            {{ $correctionExam->entriesAreLocked() ? 'Entries locked.' : 'Within the normal editing period.' }}
+                        @endif
+                    </p>
+                    <form method="POST" action="{{ route('principal.result-locks.corrections.open') }}" class="mt-4 grid gap-4 md:grid-cols-3">
+                        @csrf
+                        <input type="hidden" name="session" value="{{ $filters['session'] }}">
+                        <input type="hidden" name="class_id" value="{{ $filters['class_id'] }}">
+                        <input type="hidden" name="exam_id" value="{{ $filters['exam_id'] }}">
+                        <x-ui.input name="reason" id="correction_reason" label="Reason for corrections" required maxlength="2000" />
+                        <div>
+                            <x-ui.input name="correction_minutes" label="Automatically lock again after (minutes)" type="number" min="1" max="43200" :value="old('correction_minutes')" />
+                            <p class="mt-1 text-xs text-slate-500">Leave empty to keep open until manually locked. Maximum 30 days.</p>
+                        </div>
+                        <div class="flex items-end"><x-ui.button type="submit">Reopen for corrections</x-ui.button></div>
+                    </form>
+                    <form method="POST" action="{{ route('principal.result-locks.corrections.close') }}" class="mt-4 flex flex-wrap items-end gap-3">
+                        @csrf
+                        <input type="hidden" name="session" value="{{ $filters['session'] }}">
+                        <input type="hidden" name="class_id" value="{{ $filters['class_id'] }}">
+                        <input type="hidden" name="exam_id" value="{{ $filters['exam_id'] }}">
+                        <x-ui.input name="reason" id="relock_reason" label="Reason for locking again" required maxlength="2000" />
+                        <x-ui.button type="submit">Lock exam now</x-ui.button>
+                    </form>
+                @endif
+            </section>
             <div class="grid grid-cols-1 gap-6 xl:grid-cols-12">
                 <section class="space-y-6 xl:col-span-4">
                     <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -83,6 +124,8 @@
                                 <span class="inline-flex rounded-full bg-rose-100 px-3 py-1 text-xs font-semibold text-rose-700">Final Locked</span>
                             @elseif (($status['lock_type'] ?? null) === 'soft')
                                 <span class="inline-flex rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">Soft Locked</span>
+                            @elseif ($status['is_locked'] ?? false)
+                                <span class="inline-flex rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">Entry Locked</span>
                             @else
                                 <span class="inline-flex rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">Not Locked</span>
                             @endif

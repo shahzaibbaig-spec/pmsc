@@ -386,7 +386,7 @@ class ExamService
         $lockedByEditWindow = $exam ? $this->isExamLocked($exam) : false;
         $lockedMessage = $lockedByResultLock
             ? $lockStatus['message']
-            : (($exam && $lockedByEditWindow) ? 'This exam is locked. Edit window (7 days) has expired.' : null);
+            : (($exam && $lockedByEditWindow) ? 'This exam is locked. Ask the Principal to open a correction window.' : null);
 
         return [
             'exam' => [
@@ -529,7 +529,7 @@ class ExamService
             $usesGradeSystem = $markingMode === AssessmentMarkingModeService::MODE_GRADE;
 
             if ($this->isExamLocked($exam)) {
-                throw new RuntimeException('Exam is locked after 7 days. You cannot edit marks.');
+                throw new RuntimeException('Exam entries are locked. Ask the Principal to open a correction window.');
             }
 
             $examUpdates = [];
@@ -573,7 +573,7 @@ class ExamService
                     ->where('student_id', $studentId)
                     ->first();
 
-                if ($existingMark && $existingMark->created_at && $existingMark->created_at->lt(now()->subDays(7))) {
+                if (! $exam->correctionsAreOpen() && $existingMark && $existingMark->created_at && $existingMark->created_at->lt(now()->subDays(7))) {
                     throw new RuntimeException('Some marks are older than 7 days and cannot be edited.');
                 }
 
@@ -729,7 +729,13 @@ class ExamService
                 }
             }
 
-            if (! $exam->locked_at && $exam->created_at && $exam->created_at->lt(now()->subDays(7))) {
+            if ($exam->correctionWindowExpired()) {
+                throw ValidationException::withMessages([
+                    'error' => 'The correction timer expired while saving. No changes were saved. Ask the Principal to reopen the exam.',
+                ]);
+            }
+
+            if (! $exam->correctionsAreOpen() && ! $exam->locked_at && $exam->created_at && $exam->created_at->lt(now()->subDays(7))) {
                 $exam->forceFill(['locked_at' => now()])->save();
             }
         });
@@ -774,13 +780,7 @@ class ExamService
 
     private function isExamLocked(Exam $exam): bool
     {
-        if ($exam->locked_at !== null) {
-            return true;
-        }
-
-        $createdAt = $exam->created_at instanceof Carbon ? $exam->created_at : Carbon::parse($exam->created_at);
-
-        return $createdAt->lt(now()->subDays(7));
+        return $exam->entriesAreLocked();
     }
 
     /**

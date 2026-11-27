@@ -59,8 +59,14 @@ class PrepGradeSavingTest extends TestCase
         Schema::table('teacher_assignments', function (Blueprint $table) {
             $table->softDeletes();
         });
+        Schema::table('student_results', function (Blueprint $table) {
+            $table->integer('class_id')->nullable();
+            $table->integer('exam_id')->nullable();
+            $table->string('session')->nullable();
+        });
         foreach (['2026_04_14_000700_create_teacher_result_entry_logs_table.php',
-            '2026_04_23_000200_create_result_lock_tables.php'] as $migration) {
+            '2026_04_23_000200_create_result_lock_tables.php',
+            '2026_11_27_000200_add_exam_correction_windows.php'] as $migration) {
             (require database_path('migrations/'.$migration))->up();
         }
         $this->mock(\App\Services\TeacherPerformanceSyncService::class, function ($mock) {
@@ -129,5 +135,82 @@ class PrepGradeSavingTest extends TestCase
         $payload['exam_id'] = $exam->id;
         $this->postJson(route('teacher.exams.save'), $payload)->assertUnprocessable();
         $this->assertDatabaseCount('marks', 0);
+    }
+
+    private function principal(): User
+    {
+        Role::findOrCreate('Principal', 'web')->givePermissionTo(Permission::findOrCreate('generate_results', 'web'));
+        $user = User::factory()->create();
+        $user->assignRole('Principal');
+        return $user;
+    }
+
+    public function test_principal_can_reopen_old_entries_and_timer_blocks_saves_at_the_deadline(): void
+    {
+        [$payload, $student, $teacher] = $this->context();
+        $exam = Exam::create(['class_id' => $payload['class_id'], 'subject_id' => $payload['subject_id'], 'teacher_id' => $teacher->id,
+            'session' => $payload['session'], 'exam_type' => 'first_term', 'exam_label' => 'Midterm', 'marking_mode' => 'grade',
+            'locked_at' => now()->subDays(10), 'created_at' => now()->subDays(20)]);
+        $mark = Mark::create(['exam_id' => $exam->id, 'student_id' => $student->id, 'teacher_id' => $teacher->id,
+            'session' => $payload['session'], 'grade' => 'B', 'created_at' => now()->subDays(20)]);
+        $exam->forceFill(['created_at' => now()->subDays(20)])->save();
+        $mark->forceFill(['created_at' => now()->subDays(20)])->save();
+        $payload['exam_id'] = $exam->id;
+        $this->postJson(route('teacher.exams.save'), $payload)->assertUnprocessable();
+        $principal = $this->principal();
+        $window = ['session' => $payload['session'], 'class_id' => $payload['class_id'], 'exam_id' => $exam->id,
+            'reason' => 'Correct transcribed grade', 'correction_minutes' => 30];
+        $this->actingAs($principal)->post(route('principal.result-locks.corrections.open'), $window)->assertSessionHasNoErrors()->assertRedirect();
+        $this->assertTrue($exam->fresh()->correctionsAreOpen());
+        $this->get(route('principal.result-locks.index', collect($window)->only(['session', 'class_id', 'exam_id'])->all()))
+            ->assertOk()->assertSee('Corrections open')->assertSee('Pakistan time');
+        $this->actingAs($teacher->user)->postJson(route('teacher.exams.save'), $payload)->assertOk();
+        $this->assertSame('A', $mark->fresh()->grade);
+        $this->assertTrue($mark->fresh()->created_at->lt(now()->subDays(7)));
+        $this->travelTo($exam->fresh()->corrections_close_at);
+        $payload['records'][0]['grade'] = 'C';
+        $this->postJson(route('teacher.exams.save'), $payload)->assertUnprocessable();
+        $this->assertSame('A', $mark->fresh()->grade);
+        $this->assertTrue($exam->fresh()->entriesAreLocked());
+        $this->assertDatabaseHas('result_lock_logs', ['action' => 'unlock', 'exam_id' => $exam->id, 'performed_by' => $principal->id]);
+        $this->travelBack();
+    }
+
+    public function test_indefinite_correction_window_can_be_closed_and_reopened_after_a_final_lock(): void
+    {
+        [$payload, $student, $teacher] = $this->context();
+        $this->postJson(route('teacher.exams.save'), $payload)->assertOk();
+        $exam = Exam::first();
+        $principal = $this->principal();
+        $window = ['session' => $payload['session'], 'class_id' => $payload['class_id'], 'exam_id' => $exam->id, 'reason' => 'Review corrections'];
+        $this->actingAs($principal)->post(route('principal.result-locks.corrections.open'), $window)->assertSessionHasNoErrors();
+        $this->assertNull($exam->fresh()->corrections_close_at);
+        $this->travel(10)->days();
+        $this->assertTrue($exam->fresh()->correctionsAreOpen());
+        $this->post(route('principal.result-locks.corrections.close'), $window)->assertSessionHasNoErrors();
+        $this->assertFalse($exam->fresh()->correctionsAreOpen());
+        $this->assertTrue($exam->fresh()->entriesAreLocked());
+        $this->assertDatabaseHas('result_locks', ['exam_id' => $exam->id, 'lock_type' => 'final', 'unlocked_at' => null]);
+        $this->actingAs($teacher->user)->postJson(route('teacher.exams.save'), $payload)->assertUnprocessable();
+        $this->actingAs($principal)->post(route('principal.result-locks.corrections.open'), $window)->assertSessionHasNoErrors();
+        $this->assertTrue($exam->fresh()->correctionsAreOpen());
+        $this->actingAs($teacher->user)->postJson(route('teacher.exams.save'), $payload)->assertOk();
+        $this->travelBack();
+    }
+
+    public function test_correction_controls_reject_teachers_invalid_scopes_and_class_wide_locks(): void
+    {
+        [$payload, $student, $teacher] = $this->context();
+        $this->postJson(route('teacher.exams.save'), $payload)->assertOk();
+        $exam = Exam::first();
+        $window = ['session' => $payload['session'], 'class_id' => $payload['class_id'], 'exam_id' => $exam->id, 'reason' => 'Correction'];
+        $this->postJson(route('principal.result-locks.corrections.open'), $window)->assertForbidden();
+        $principal = $this->principal();
+        $this->actingAs($principal)->postJson(route('principal.result-locks.corrections.open'), array_merge($window, ['session' => '2020-2021']))->assertUnprocessable();
+        $this->postJson(route('principal.result-locks.corrections.open'), $window + ['correction_minutes' => -1])->assertUnprocessable();
+        $this->postJson(route('principal.result-locks.corrections.open'), array_merge($window, ['reason' => '']))->assertUnprocessable();
+        $this->post(route('principal.result-locks.lock'), ['session' => $payload['session'], 'class_id' => $payload['class_id'], 'lock_type' => 'final'])->assertSessionHasNoErrors();
+        $this->postJson(route('principal.result-locks.corrections.open'), $window)->assertUnprocessable();
+        $this->assertFalse($exam->fresh()->correctionsAreOpen());
     }
 }

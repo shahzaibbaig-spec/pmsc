@@ -30,6 +30,7 @@ class ResultLockController extends Controller
         }
 
         return view('principal.result-locks.index', [
+            'correctionExam' => $examId !== null ? \App\Models\Exam::whereKey($examId)->where('class_id', $classId)->where('session', $session)->first() : null,
             'filters' => [
                 'session' => $session,
                 'class_id' => $classId,
@@ -96,5 +97,24 @@ class ResultLockController extends Controller
                 'exam_id' => $request->filled('exam_id') ? (int) $request->input('exam_id') : null,
             ])
             ->with('status', 'Result scope unlocked successfully. Audit log recorded.');
+    }
+
+    public function openCorrections(ResultUnlockRequest $request, \App\Services\ExamCorrectionService $service): RedirectResponse
+    {
+        $request->validate(['exam_id' => ['required', 'integer', 'exists:exams,id']]);
+        $service->open($request->user(), $request->input('session'), (int) $request->input('class_id'),
+            (int) $request->input('exam_id'), $request->input('reason'),
+            $request->filled('correction_minutes') ? (int) $request->input('correction_minutes') : null);
+        return redirect()->route('principal.result-locks.index', $request->only(['session', 'class_id', 'exam_id']))
+            ->with('status', 'Exam reopened for corrections. The timer, if set, is enforced automatically by the server.');
+    }
+
+    public function closeCorrections(ResultUnlockRequest $request, \App\Services\ExamCorrectionService $service): RedirectResponse
+    {
+        $request->validate(['exam_id' => ['required', 'integer', 'exists:exams,id']]);
+        $service->close($request->user(), $request->input('session'), (int) $request->input('class_id'),
+            (int) $request->input('exam_id'), $request->input('reason'));
+        return redirect()->route('principal.result-locks.index', $request->only(['session', 'class_id', 'exam_id']))
+            ->with('status', 'Exam locked again. Correction access has ended.');
     }
 }

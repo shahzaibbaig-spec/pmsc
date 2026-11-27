@@ -33,12 +33,36 @@ class Exam extends Model
             'exam_date' => 'date',
             'total_marks' => 'integer',
             'locked_at' => 'datetime',
+            'corrections_opened_at' => 'datetime',
+            'corrections_close_at' => 'datetime',
         ];
     }
 
     protected $appends = [
         'display_name',
     ];
+
+    public function correctionsAreOpen(): bool
+    {
+        return $this->corrections_opened_at !== null
+            && ($this->corrections_close_at === null || $this->corrections_close_at->isFuture());
+    }
+
+    public function correctionWindowExpired(): bool
+    {
+        return $this->corrections_opened_at !== null
+            && $this->corrections_close_at !== null && ! $this->corrections_close_at->isFuture();
+    }
+
+    public function entriesAreLocked(): bool
+    {
+        if ($this->correctionsAreOpen()) {
+            return false;
+        }
+
+        return $this->correctionWindowExpired() || $this->locked_at !== null
+            || ($this->created_at !== null && $this->created_at->lt(now()->subDays(7)));
+    }
 
     public function classRoom(): BelongsTo
     {

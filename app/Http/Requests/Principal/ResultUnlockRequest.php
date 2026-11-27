@@ -22,6 +22,7 @@ class ResultUnlockRequest extends FormRequest
             'class_id' => ['required', 'integer', 'exists:school_classes,id'],
             'exam_id' => ['nullable', 'integer', 'exists:exams,id'],
             'reason' => ['required', 'string', 'max:2000'],
+            'correction_minutes' => ['nullable', 'integer', 'min:1', 'max:43200'],
         ];
     }
 

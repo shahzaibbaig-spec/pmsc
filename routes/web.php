@@ -870,6 +870,11 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
         ->middleware(['role:Admin|Principal', 'permission:generate_results'])
         ->name('principal.result-locks.lock');
 
+    Route::post('/principal/result-locks/corrections/open', [ResultLockController::class, 'openCorrections'])
+        ->middleware(['role:Admin|Principal', 'permission:generate_results'])->name('principal.result-locks.corrections.open');
+    Route::post('/principal/result-locks/corrections/close', [ResultLockController::class, 'closeCorrections'])
+        ->middleware(['role:Admin|Principal', 'permission:generate_results'])->name('principal.result-locks.corrections.close');
+
     Route::post('/principal/result-locks/unlock', [ResultLockController::class, 'unlock'])
         ->middleware(['role:Admin|Principal', 'permission:generate_results'])
         ->name('principal.result-locks.unlock');
