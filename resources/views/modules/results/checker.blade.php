@@ -46,7 +46,7 @@
         </form>
         <div class="overflow-x-auto rounded-xl bg-white p-4">
             <table class="w-full text-left text-sm">
-                <thead><tr class="border-b"><th class="p-2">Student</th><th class="p-2">Class</th><th class="p-2">Session</th><th class="p-2">Exam</th><th class="p-2">Subject</th><th class="p-2">Marks</th><th class="p-2">Grade</th></tr></thead>
+                <thead><tr class="border-b"><th class="p-2">Student</th><th class="p-2">Class</th><th class="p-2">Session</th><th class="p-2">Exam</th><th class="p-2">Subject</th><th class="p-2">Marks</th><th class="p-2">Grade</th><th class="p-2">Result Card</th></tr></thead>
                 <tbody>
                     @forelse($records as $record)
                         @php($classRoom = $published ? $record->classRoom : $record->exam?->classRoom)
@@ -58,9 +58,10 @@
                             <td class="p-2">{{ $published ? $record->subject?->name : $record->exam?->subject?->name }}</td>
                             <td class="p-2">{{ $record->obtained_marks !== null ? $record->obtained_marks.' / '.($record->total_marks ?? $record->exam?->total_marks) : '—' }}</td>
                             <td class="p-2">{{ $record->grade ?: '—' }}</td>
+                            <td class="p-2"><a class="text-indigo-600 underline" href="{{ route('result-checker.results.card', ['source' => $published ? 'published' : 'marks', 'record' => $record->id]) }}">Open card &amp; analysis</a></td>
                         </tr>
                     @empty
-                        <tr><td colspan="7" class="p-5 text-center text-slate-500">No results match these filters.</td></tr>
+                        <tr><td colspan="8" class="p-5 text-center text-slate-500">No results match these filters.</td></tr>
                     @endforelse
                 </tbody>
             </table>

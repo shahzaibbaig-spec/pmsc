@@ -12,6 +12,11 @@ use Illuminate\View\View;
 
 class ResultCheckerController extends Controller
 {
+    public function card(string $source, int $record, \App\Modules\Results\Services\ResultCheckerCardService $service): View
+    {
+        return view('modules.results.checker-card', $service->build($source, $record));
+    }
+
     public function students(Request $request): JsonResponse
     {
         $data = $request->validate(['q' => ['nullable', 'string', 'max:150']]);

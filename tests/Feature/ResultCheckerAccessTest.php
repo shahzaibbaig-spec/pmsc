@@ -139,4 +139,80 @@ class ResultCheckerAccessTest extends TestCase
         $this->getJson($url.'?q=Nobody')->assertOk()->assertExactJson(['students' => []]);
         $this->getJson($url.'?q='.str_repeat('x', 151))->assertUnprocessable()->assertJsonValidationErrors('q');
     }
+
+    public function test_result_cards_show_scoped_analysis_actual_comments_and_published_snapshots(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('Result Checker');
+        Role::findOrCreate('Teacher', 'web');
+        $author = User::factory()->create(['name' => 'Recorded Teacher']);
+        $author->assignRole('Teacher');
+        $teacher = Teacher::create(['teacher_id' => 'CARD-T', 'user_id' => $author->id]);
+        $class = SchoolClass::create(['name' => '8', 'status' => 'active']);
+        $subject = Subject::create(['name' => 'Card Math', 'code' => 'CARD-M']);
+        $student = Student::create(['name' => 'Card Student', 'student_id' => 'CARD-S', 'class_id' => $class->id, 'status' => 'active']);
+        $other = Student::create(['name' => 'Other Student', 'student_id' => 'CARD-O', 'class_id' => $class->id, 'status' => 'active']);
+        $context = ['class_id' => $class->id, 'subject_id' => $subject->id, 'teacher_id' => $teacher->id,
+            'exam_type' => 'class_test', 'session' => '2026-2027', 'total_marks' => 100, 'marking_mode' => 'numeric', 'exam_date' => '2026-11-01'];
+        $exam = Exam::create($context + ['exam_label' => 'Fractions']);
+        $unrelated = Exam::create($context + ['exam_label' => 'Algebra']);
+        $markData = ['teacher_id' => $teacher->id, 'session' => '2026-2027', 'total_marks' => 100];
+        $mark = Mark::create($markData + ['exam_id' => $exam->id, 'student_id' => $student->id, 'obtained_marks' => 30]);
+        Mark::create($markData + ['exam_id' => $exam->id, 'student_id' => $other->id, 'obtained_marks' => 90]);
+        Mark::create($markData + ['exam_id' => $unrelated->id, 'student_id' => $student->id, 'obtained_marks' => 100]);
+        Schema::create('report_comments', function (Blueprint $table) {
+            $table->id();
+            $table->integer('student_id');
+            $table->integer('generated_by')->nullable();
+            $table->string('session');
+            $table->string('exam_type');
+            $table->text('final_comment')->nullable();
+            $table->boolean('is_edited')->default(false);
+            $table->timestamps();
+        });
+        $comment = \App\Models\ReportComment::create(['student_id' => $student->id, 'session' => '2026-2027',
+            'exam_type' => 'class_test', 'generated_by' => $author->id, 'is_edited' => true,
+            'final_comment' => 'Practise equivalent fractions daily.']);
+        $url = route('result-checker.results.card', ['source' => 'marks', 'record' => $mark->id]);
+        $this->actingAs($user)->get($url)->assertOk()->assertSee('Student Result Card')->assertSee('Teacher comment')
+            ->assertSee('Practise equivalent fractions daily.')->assertSee('Recorded Teacher')->assertSee('Print / Save PDF')
+            ->assertViewHas('rows', fn ($rows) => $rows->count() === 1)
+            ->assertViewHas('overall', 30.0)
+            ->assertViewHas('teaching', fn ($teaching) => $teaching[0]['count'] === 2 && $teaching[0]['average'] === 60.0 && $teaching[0]['pass_rate'] === 50.0);
+        $comment->update(['is_edited' => false]);
+        $this->get($url)->assertOk()->assertSee('Saved automatic comment')->assertDontSee('<h2>Teacher comment</h2>', false);
+        $comment->update(['final_comment' => '   ']);
+        $this->get($url)->assertOk()->assertSee('Automatic comments for teacher review')
+            ->assertSee('The student achieved 30.00%')->assertSee('below the school pass threshold')
+            ->assertSee('average 60.00% and pass rate 50.00% across 2 numeric records')
+            ->assertSee('Suggested teacher action:')->assertViewHas('commentGenerated', true);
+        $this->assertSame('   ', $comment->fresh()->final_comment);
+        $published = StudentResult::create(['student_id' => $student->id, 'class_id' => $class->id, 'exam_id' => $exam->id,
+            'subject_id' => $subject->id, 'session' => '2026-2027', 'exam_name' => 'Class Test', 'grade' => 'A',
+            'obtained_marks' => 88, 'total_marks' => 100]);
+        $this->get(route('result-checker.results.card', ['source' => 'published', 'record' => $published->id]))
+            ->assertOk()->assertSee('Published result snapshot')->assertViewHas('overall', 88.0)
+            ->assertViewHas('teaching', fn ($teaching) => $teaching[0]['average'] === 88.0);
+        $this->get(route('result-checker.results.card', ['source' => 'marks', 'record' => 99999]))->assertNotFound();
+        $this->actingAs($author)->get($url)->assertForbidden();
+    }
+
+    public function test_grade_only_card_generates_cautious_comments_without_inventing_numeric_scores(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('Result Checker');
+        $class = SchoolClass::create(['name' => 'KG', 'status' => 'active']);
+        $subject = Subject::create(['name' => 'Reading', 'code' => 'GRADE-R']);
+        $teacher = Teacher::create(['teacher_id' => 'GRADE-T', 'user_id' => User::factory()->create()->id]);
+        $student = Student::create(['name' => 'Grade Student', 'student_id' => 'GRADE-S', 'class_id' => $class->id, 'status' => 'active']);
+        $exam = Exam::create(['class_id' => $class->id, 'subject_id' => $subject->id, 'teacher_id' => $teacher->id,
+            'exam_type' => 'first_term', 'session' => '2026-2027', 'marking_mode' => 'grade', 'total_marks' => 100]);
+        $mark = Mark::create(['exam_id' => $exam->id, 'student_id' => $student->id, 'teacher_id' => $teacher->id,
+            'session' => '2026-2027', 'grade' => 'A', 'obtained_marks' => null, 'total_marks' => null]);
+        $this->actingAs($user)->get(route('result-checker.results.card', ['source' => 'marks', 'record' => $mark->id]))
+            ->assertOk()->assertViewHas('overall', null)->assertViewHas('numericCount', 0)
+            ->assertSee('Automatic comments for teacher review')->assertSee('Recorded grade A.')
+            ->assertSee('A numeric performance judgement cannot be made')->assertViewHas('commentGenerated', true)
+            ->assertSee('Numeric class outcomes are unavailable');
+    }
 }

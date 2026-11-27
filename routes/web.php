@@ -810,6 +810,8 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
         ->prefix('result-checker')->name('result-checker.')->group(function () {
             Route::get('/results', [\App\Modules\Results\Controllers\ResultCheckerController::class, 'index'])->name('results.index');
             Route::get('/students/search', [\App\Modules\Results\Controllers\ResultCheckerController::class, 'students'])->middleware('throttle:60,1')->name('students.search');
+            Route::get('/results/{source}/{record}/card', [\App\Modules\Results\Controllers\ResultCheckerController::class, 'card'])
+                ->whereIn('source', ['marks', 'published'])->whereNumber('record')->name('results.card');
             Route::get('/class-tests', [ResultSheetController::class, 'classTests'])->name('results.class-tests');
         });
 
