@@ -31,7 +31,7 @@ class ResultSheetController extends Controller
         $classes = $this->classes();
         $sessions = $this->sessionOptions();
         $session = $validated['session'] ?? $sessions[1];
-        if (! $request->user()->hasAnyRole(['Admin', 'Principal', 'Warden'])) {
+        if (! $request->user()->hasAnyRole(['Admin', 'Principal', 'Warden', 'Result Checker'])) {
             $scopes = app(SectionHeadAssignmentService::class)->getObserverScopes($request->user(), $session);
             $rankingService = app(TeacherRankingService::class);
             $classes = $classes->filter(fn (SchoolClass $classRoom) => in_array(
@@ -73,6 +73,7 @@ class ResultSheetController extends Controller
             ? \App\Models\Subject::find($filters['subject_id'])?->name : 'All subjects';
 
         $sheetRoute = match (true) {
+            $request->routeIs('result-checker.results.class-tests') => 'result-checker.results.class-tests',
             $request->routeIs('warden.results.class-tests') => 'warden.results.class-tests',
             $request->routeIs('section-head.results.class-tests') => 'section-head.results.class-tests',
             default => 'principal.results.class-tests',

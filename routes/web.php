@@ -806,6 +806,12 @@ Route::middleware(['auth', 'force-password-change'])->group(function () {
                 ->name('device-declarations.review');
         });
 
+    Route::middleware(['role:Result Checker', 'permission:view_all_student_results'])
+        ->prefix('result-checker')->name('result-checker.')->group(function () {
+            Route::get('/results', [\App\Modules\Results\Controllers\ResultCheckerController::class, 'index'])->name('results.index');
+            Route::get('/class-tests', [ResultSheetController::class, 'classTests'])->name('results.class-tests');
+        });
+
     Route::get('/principal/exams/settings', [\App\Modules\Exams\Controllers\ExamSettingsController::class, 'edit'])
         ->middleware('role:Admin|Principal')->name('principal.exams.settings.edit');
     Route::post('/principal/exams/settings', [\App\Modules\Exams\Controllers\ExamSettingsController::class, 'update'])

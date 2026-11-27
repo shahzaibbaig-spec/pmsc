@@ -17,6 +17,7 @@ class RbacMatrixController extends Controller
     private const MATRIX_ROLES = [
         'Admin',
         'Principal',
+        'Result Checker',
         'Accountant',
         'Teacher',
         'Doctor',
@@ -26,6 +27,7 @@ class RbacMatrixController extends Controller
     ];
 
     private const MATRIX_PERMISSIONS = [
+        'view_all_student_results',
         'manage_users',
         'manage_school_settings',
         'assign_roles',

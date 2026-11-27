@@ -15,6 +15,7 @@ class RolePermissionSeeder extends Seeder
         app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
 
         $permissions = [
+            'view_all_student_results',
             'manage_users',
             'manage_school_settings',
             'assign_roles',
@@ -152,6 +153,9 @@ class RolePermissionSeeder extends Seeder
         $careerCounselor = Role::firstOrCreate(['name' => 'Career Counselor', 'guard_name' => 'web']);
         $sportsTeacher = Role::firstOrCreate(['name' => 'Sports Teacher', 'guard_name' => 'web']);
         $psychiatrist = Role::firstOrCreate(['name' => 'School Psychiatrist', 'guard_name' => 'web']);
+
+        Role::firstOrCreate(['name' => 'Result Checker', 'guard_name' => 'web'])
+            ->syncPermissions(['view_all_student_results']);
 
         $admin->syncPermissions($permissions);
         $principal->syncPermissions([

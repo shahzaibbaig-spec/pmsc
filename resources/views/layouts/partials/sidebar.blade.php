@@ -250,6 +250,13 @@
             $menuItems[] = ['route' => 'principal.kcat.reports.index', 'label' => 'KCAT Reports'];
             $menuItems[] = ['route' => 'principal.kcat.analytics.index', 'label' => 'KCAT Analytics'];
         }
+    } elseif ($sidebarUser?->hasRole('Result Checker')) {
+        if ($sidebarUser->can('view_all_student_results')) {
+            $menuItems = [
+                ['route' => 'result-checker.results.index', 'label' => 'Student Results'],
+                ['route' => 'result-checker.results.class-tests', 'label' => 'Class Test Records'],
+            ];
+        }
     } elseif ($sidebarUser?->hasRole('Career Counselor')) {
         $menuItems = [
             ['route' => 'career-counselor.dashboard', 'label' => 'Dashboard'],
