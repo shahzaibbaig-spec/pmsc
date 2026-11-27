@@ -84,6 +84,9 @@ class ResultCheckerAccessTest extends TestCase
         $this->get($url.'?source=published')->assertOk()->assertSee('Pupil 7')->assertSee('Pupil 10');
         $this->get($url.'?class_id='.$class->id)->assertOk()
             ->assertViewHas('records', fn ($records) => $records->total() === 1);
+        $this->get($url.'?student=Pupil&student_id='.$student->id)->assertOk()
+            ->assertViewHas('records', fn ($records) => $records->total() === 1)
+            ->assertSee('Pupil 10')->assertDontSee('Pupil 7');
         $this->get(route('result-checker.results.class-tests', ['class_id' => '', 'session' => '2026-2027']))
             ->assertOk()->assertViewHas('reports', fn ($reports) => $reports->count() === 2)
             ->assertViewHas('sheetRoute', 'result-checker.results.class-tests');
@@ -107,12 +110,33 @@ class ResultCheckerAccessTest extends TestCase
         Role::findOrCreate('Teacher', 'web');
         $user = User::factory()->create();
         $user->assignRole('Teacher');
-        foreach (['result-checker.results.index', 'result-checker.results.class-tests'] as $route) {
+        foreach (['result-checker.results.index', 'result-checker.results.class-tests', 'result-checker.students.search'] as $route) {
             $this->actingAs($user)->get(route($route))->assertForbidden();
         }
         $user->syncRoles(['Result Checker']);
         Role::findByName('Result Checker', 'web')->revokePermissionTo('view_all_student_results');
         $user->unsetRelation('roles')->unsetRelation('permissions');
         $this->get(route('result-checker.results.index'))->assertForbidden();
+        $this->getJson(route('result-checker.students.search', ['q' => 'Pupil']))->assertForbidden();
+    }
+
+    public function test_ajax_search_matches_names_and_ids_and_limits_returned_student_details(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('Result Checker');
+        $class = SchoolClass::create(['name' => '8', 'section' => 'A', 'status' => 'active']);
+        foreach (range(1, 22) as $index) {
+            Student::create(['name' => 'Same Name', 'student_id' => 'FIND-'.$index,
+                'class_id' => $class->id, 'status' => 'active']);
+        }
+        $url = route('result-checker.students.search');
+        $this->actingAs($user)->getJson($url.'?q=S')->assertOk()->assertExactJson(['students' => []]);
+        $response = $this->getJson($url.'?q=Same')->assertOk()->assertJsonCount(20, 'students');
+        $this->assertSame(['id', 'name', 'student_id', 'class'], array_keys($response->json('students.0')));
+        $this->assertSame('8 A', $response->json('students.0.class'));
+        $this->getJson($url.'?q=FIND-22')->assertOk()->assertJsonCount(1, 'students')
+            ->assertJsonPath('students.0.student_id', 'FIND-22');
+        $this->getJson($url.'?q=Nobody')->assertOk()->assertExactJson(['students' => []]);
+        $this->getJson($url.'?q='.str_repeat('x', 151))->assertUnprocessable()->assertJsonValidationErrors('q');
     }
 }
