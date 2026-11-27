@@ -44,6 +44,9 @@
             </div>
             <div class="flex items-end gap-3"><x-ui.button type="submit">Apply Filters</x-ui.button><a href="{{ route('result-checker.results.index') }}" class="text-sm text-indigo-600">Reset</a></div>
         </form>
+        @if($sheet !== null)
+            @include('modules.results.checker-sheet')
+        @else
         <div class="overflow-x-auto rounded-xl bg-white p-4">
             <table class="w-full text-left text-sm">
                 <thead><tr class="border-b"><th class="p-2">Student</th><th class="p-2">Class</th><th class="p-2">Session</th><th class="p-2">Exam</th><th class="p-2">Subject</th><th class="p-2">Marks</th><th class="p-2">Grade</th><th class="p-2">Result Card</th></tr></thead>
@@ -67,6 +70,7 @@
             </table>
             <div class="mt-4">{{ $records->links() }}</div>
         </div>
+        @endif
     </div>
     <script>
         (() => {

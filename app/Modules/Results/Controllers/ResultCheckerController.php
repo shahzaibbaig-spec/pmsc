@@ -74,7 +74,13 @@ class ResultCheckerController extends Controller
                     ->orWhere('student_id', 'like', '%'.$filters['student'].'%')));
         }
 
+        $sheet = ! empty($filters['exam_type'])
+            ? app(\App\Modules\Results\Services\ResultCheckerSheetService::class)->build(
+                (clone $query)->with(['exam.teacher.user', 'exam.classRoom'])->get(), $published
+            ) : null;
+
         return view('modules.results.checker', [
+            'sheet' => $sheet,
             'filters' => $filters,
             'published' => $published,
             'records' => $query->orderByDesc('id')->paginate(50)->withQueryString(),

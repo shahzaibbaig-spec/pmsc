@@ -215,4 +215,59 @@ class ResultCheckerAccessTest extends TestCase
             ->assertSee('A numeric performance judgement cannot be made')->assertViewHas('commentGenerated', true)
             ->assertSee('Numeric class outcomes are unavailable');
     }
+
+    public function test_consolidated_midterm_sheet_includes_every_subject_and_student_beyond_one_page(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('Result Checker');
+        $class = SchoolClass::create(['name' => '9', 'status' => 'active']);
+        $teacher = Teacher::create(['teacher_id' => 'SHEET-T', 'user_id' => User::factory()->create()->id]);
+        $context = ['class_id' => $class->id, 'teacher_id' => $teacher->id, 'exam_type' => 'first_term',
+            'session' => '2026-2027', 'marking_mode' => 'numeric', 'exam_label' => 'Midterm'];
+        $math = Subject::create(['name' => 'Sheet Math', 'code' => 'SHEET-M']);
+        $english = Subject::create(['name' => 'Sheet English', 'code' => 'SHEET-E']);
+        $mathExam = Exam::create($context + ['subject_id' => $math->id, 'total_marks' => 100]);
+        $englishExam = Exam::create($context + ['subject_id' => $english->id, 'total_marks' => 50]);
+        foreach (range(1, 26) as $index) {
+            $student = Student::create(['name' => 'Sheet Student '.$index, 'student_id' => 'SHEET-'.$index,
+                'class_id' => $class->id, 'status' => 'active']);
+            foreach ([[$mathExam, 60, 100], [$englishExam, 40, 50]] as [$exam, $score, $total]) {
+                Mark::create(['exam_id' => $exam->id, 'student_id' => $student->id, 'teacher_id' => $teacher->id,
+                    'session' => '2026-2027', 'obtained_marks' => $score, 'total_marks' => $total]);
+            }
+        }
+        $otherExam = Exam::create(array_merge($context, ['session' => '2025-2026', 'subject_id' => $math->id, 'total_marks' => 100]));
+        $resit = Exam::create(array_merge($context, ['exam_label' => 'Midterm Resit', 'subject_id' => $math->id, 'total_marks' => 100]));
+        $final = Exam::create(array_merge($context, ['exam_type' => 'final_term', 'exam_label' => 'Final only', 'subject_id' => $math->id, 'total_marks' => 100]));
+        foreach ([$otherExam, $resit, $final] as $exam) {
+            Mark::create(['exam_id' => $exam->id, 'student_id' => $student->id, 'teacher_id' => $teacher->id,
+                'session' => $exam->session, 'obtained_marks' => 99, 'total_marks' => 100]);
+        }
+        $url = route('result-checker.results.index', ['exam_type' => 'first_term']);
+        $this->actingAs($user)->get($url)->assertOk()->assertSee('Consolidated Midterm Results')
+            ->assertSee('Sheet Student 1')->assertSee('Sheet Student 26')->assertDontSee('Final only')
+            ->assertSee('Automatic comments for teacher review')->assertSee('Print / Save PDF')
+            ->assertViewHas('sheet', function ($sheet) {
+                $this->assertCount(3, $sheet);
+                $group = $sheet->first(fn ($item) => $item['cards']->count() === 26);
+                $this->assertCount(2, $group['subjects']);
+                $this->assertSame(100.0, $group['cards'][0]['obtained']);
+                $this->assertSame(150.0, $group['cards'][0]['total']);
+                return true;
+            });
+        $this->get($url.'&session=2026-2027&student_id='.$student->id)->assertOk()
+            ->assertViewHas('sheet', function ($sheet) {
+                $this->assertCount(2, $sheet);
+                $card = $sheet[0]['cards'][0];
+                $this->assertSame(26, $card['teaching'][0]['count']);
+                return true;
+            });
+        foreach ([[$mathExam, $math, 60, 100], [$englishExam, $english, 40, 50]] as [$exam, $subject, $score, $total]) {
+            StudentResult::create(['student_id' => $student->id, 'class_id' => $class->id, 'subject_id' => $subject->id,
+                'exam_id' => $exam->id, 'session' => '2026-2027', 'exam_name' => 'Published Midterm',
+                'obtained_marks' => $score, 'total_marks' => $total, 'grade' => 'B']);
+        }
+        $this->get($url.'&source=published')->assertOk()->assertSee('Published Midterm')
+            ->assertViewHas('sheet', fn ($sheet) => $sheet->count() === 1 && $sheet[0]['cards'][0]['total'] === 150.0);
+    }
 }

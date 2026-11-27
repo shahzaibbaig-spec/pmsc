@@ -5,23 +5,27 @@ namespace App\Modules\Results\Services;
 use App\Models\{Exam, Mark, ReportComment, SchoolSetting, StudentResult};
 use App\Services\FederalBoardGradingService;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Collection;
 
 class ResultCheckerCardService
 {
-    public function build(string $source, int $id): array
+    public function build(string $source, int $id, ?Collection $providedRecords = null, ?Collection $cohortRecords = null, ?Collection $comments = null): array
     {
         $published = $source === 'published';
-        $record = $published
+        $record = $providedRecords?->first() ?? ($published
             ? StudentResult::with(['student', 'classRoom', 'exam'])->findOrFail($id)
-            : Mark::with(['student', 'exam.classRoom'])->findOrFail($id);
+            : Mark::with(['student', 'exam.classRoom'])->findOrFail($id));
         $exam = $record->exam;
         $classRoom = $published ? $record->classRoom : $exam?->classRoom;
         $type = $exam?->exam_type?->value;
 
-        if ($published) {
+        if ($providedRecords !== null) {
+            $records = $providedRecords;
+        } elseif ($published) {
             $records = StudentResult::with(['subject', 'exam.teacher.user'])
                 ->where('student_id', $record->student_id)->where('session', $record->session)
                 ->where('class_id', $record->class_id)->where('exam_name', $record->exam_name)
+                ->when($type, fn ($query) => $query->whereHas('exam', fn ($examQuery) => $examQuery->where('exam_type', $type)))
                 ->when(in_array($type, ['class_test', 'bimonthly_test'], true), fn ($query) => $query->where('exam_id', $record->exam_id))->get();
         } elseif ($exam) {
             // A class test or bimonthly is an individual assessment. Term cards
@@ -53,6 +57,7 @@ class ResultCheckerCardService
             };
             return [
                 'subject' => $subject ?? 'Subject unavailable',
+                'subject_id' => $published ? $row->subject_id : $row->exam?->subject_id,
                 'teacher' => $row->exam?->teacher?->user?->name ?? 'Teacher not recorded',
                 'exam_id' => $row->exam_id,
                 'total' => $numeric ? (float) $total : null,
@@ -73,7 +78,9 @@ class ResultCheckerCardService
         $cohort = $published ? StudentResult::query()->where('session', $record->session)
             ->where('class_id', $record->class_id)->where('exam_name', $record->exam_name)
             : Mark::query()->where('session', $record->session);
-        $outcomes = $cohort->whereIn('exam_id', $examIds)->get()->groupBy('exam_id');
+        $outcomes = ($cohortRecords !== null
+            ? $cohortRecords->whereIn('exam_id', $examIds)->where('session', $record->session)
+            : $cohort->whereIn('exam_id', $examIds)->get())->groupBy('exam_id');
         $teaching = $rows->filter(fn ($row) => $row['exam_id'])->unique('exam_id')->map(function ($row) use ($outcomes, $threshold) {
             $scores = collect($outcomes->get($row['exam_id'], collect()))
                 ->filter(fn ($mark) => $row['percentage'] !== null && $mark->obtained_marks !== null && ($mark->total_marks ?? $row['total']) > 0)
@@ -90,10 +97,12 @@ class ResultCheckerCardService
             ];
         })->values();
 
-        $comment = $type && Schema::hasTable('report_comments')
+        $comment = $comments !== null
+            ? $comments->first(fn ($item) => $item->student_id === $record->student_id && $item->session === $record->session && $item->exam_type === $type)
+            : ($type && Schema::hasTable('report_comments')
             ? ReportComment::with('generatedBy.roles')->where('student_id', $record->student_id)
                 ->where('session', $record->session)->where('exam_type', $type)->first()
-            : null;
+            : null);
         $teacherComment = $comment?->is_edited && $comment->generatedBy?->hasRole('Teacher');
         $savedComment = trim((string) $comment?->final_comment);
         $commentGenerated = $savedComment === '';
