@@ -19,13 +19,25 @@ class ResultCheckerController extends Controller
 
     public function students(Request $request): JsonResponse
     {
-        $data = $request->validate(['q' => ['nullable', 'string', 'max:150']]);
+        $data = $request->validate([
+            'q' => ['nullable', 'string', 'max:150'],
+            'class_id' => ['nullable', 'integer', 'exists:school_classes,id'],
+            'session' => ['nullable', 'string', 'max:20'],
+        ]);
         $term = trim($data['q'] ?? '');
         if (mb_strlen($term) < 2) {
             return response()->json(['students' => []]);
         }
 
         $students = Student::query()->with('classRoom:id,name,section')
+            ->when(! empty($data['class_id']), fn ($query) => $query->where(function ($scope) use ($data) {
+                $scope->where('class_id', $data['class_id'])
+                    ->orWhereHas('marks', fn ($marks) => $marks
+                        ->when(! empty($data['session']), fn ($marks) => $marks->where('session', $data['session']))
+                        ->whereHas('exam', fn ($exam) => $exam->where('class_id', $data['class_id'])))
+                    ->orWhereHas('results', fn ($results) => $results->where('class_id', $data['class_id'])
+                        ->when(! empty($data['session']), fn ($results) => $results->where('session', $data['session'])));
+            }))
             ->where(fn ($query) => $query->where('name', 'like', '%'.$term.'%')
                 ->orWhere('student_id', 'like', '%'.$term.'%'))
             ->orderBy('name')->orderBy('id')->limit(20)
@@ -43,14 +55,24 @@ class ResultCheckerController extends Controller
     public function index(Request $request): View
     {
         $filters = $request->validate([
-            'class_id' => ['nullable', 'integer', 'exists:school_classes,id'],
+            'class_id' => ['required_if:result_scope,class,student', 'nullable', 'integer', 'exists:school_classes,id'],
+            'result_scope' => ['nullable', 'in:global,class,student'],
             'subject_id' => ['nullable', 'integer', 'exists:subjects,id'],
             'session' => ['nullable', 'string', 'max:20'],
             'exam_type' => ['nullable', Rule::in(array_column(ExamType::options(), 'value'))],
             'student' => ['nullable', 'string', 'max:150'],
-            'student_id' => ['nullable', 'integer', 'exists:students,id'],
+            'student_id' => ['required_if:result_scope,student', 'nullable', 'integer', 'exists:students,id'],
             'source' => ['nullable', 'in:marks,published'],
         ]);
+        $filters['result_scope'] ??= ! empty($filters['student_id']) || ! empty($filters['student'])
+            ? 'student' : (! empty($filters['class_id']) ? 'class' : 'global');
+        if ($filters['result_scope'] === 'global') {
+            $filters['class_id'] = null;
+        }
+        if ($filters['result_scope'] !== 'student') {
+            $filters['student_id'] = null;
+            $filters['student'] = null;
+        }
         $published = ($filters['source'] ?? 'marks') === 'published';
         $query = $published
             ? StudentResult::query()->with(['student', 'classRoom', 'subject', 'exam'])

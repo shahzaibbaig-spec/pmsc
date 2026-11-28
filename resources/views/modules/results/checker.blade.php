@@ -1,6 +1,9 @@
 <x-app-layout>
     <x-slot name="header"><h2 class="text-xl font-semibold text-slate-900">Student Results</h2></x-slot>
     <div class="space-y-5">
+        @if($errors->any())
+            <div role="alert" class="rounded-lg bg-rose-50 p-3 text-sm text-rose-700"><ul>@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div>
+        @endif
         <p class="text-sm text-slate-600">Review recorded marks and published results for all students. Select Class Test Records in the sidebar for class test sheets.</p>
         <form method="GET" action="{{ route('result-checker.results.index') }}" class="grid gap-4 rounded-xl bg-white p-5 md:grid-cols-3">
             <label class="text-sm">Records
@@ -41,7 +44,14 @@
                     @endforeach
                 </select>
             </label>
-            <div class="relative" id="checker-student-search" data-url="{{ route('result-checker.students.search') }}">
+            <label class="text-sm">Show results for
+                <select name="result_scope" class="mt-1 block w-full rounded-lg border-slate-300">
+                    <option value="global" @selected($filters['result_scope'] === 'global')>Global — all classes</option>
+                    <option value="class" @selected($filters['result_scope'] === 'class')>Whole class</option>
+                    <option value="student" @selected($filters['result_scope'] === 'student')>Individual student</option>
+                </select>
+            </label>
+            <div class="relative" id="checker-student-search" data-url="{{ route('result-checker.students.search') }}" @if($filters['result_scope'] !== 'student') hidden @endif>
                 <label for="checker-student" class="block text-sm">Student name or ID</label>
                 <input id="checker-student" name="student" value="{{ $filters['student'] ?? '' }}" maxlength="150"
                     autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="checker-student-options"
@@ -87,6 +97,10 @@
             const selected = container.querySelector('[name="student_id"]');
             const options = container.querySelector('ul');
             const status = container.querySelector('[data-search-status]');
+            const form = container.closest('form');
+            const scope = form.querySelector('[name="result_scope"]');
+            const classSelect = form.querySelector('[name="class_id"]');
+            const sessionSelect = form.querySelector('[name="session"]');
             let timer, requestNumber = 0, active = -1, matches = [];
             const close = () => {
                 options.hidden = true;
@@ -94,6 +108,36 @@
                 input.removeAttribute('aria-activedescendant');
                 active = -1;
             };
+            const syncScope = (clearStudent = false) => {
+                ++requestNumber;
+                clearTimeout(timer);
+                close();
+                const individual = scope.value === 'student';
+                const global = scope.value === 'global';
+                container.hidden = !individual;
+                classSelect.disabled = global;
+                classSelect.required = !global;
+                classSelect.options[0].textContent = global ? 'All classes' : 'Select class';
+                if (global) classSelect.value = '';
+                input.disabled = !individual || !classSelect.value;
+                selected.disabled = !individual;
+                if (clearStudent || !individual) {
+                    selected.value = '';
+                    input.value = '';
+                }
+                status.textContent = individual && !classSelect.value ? 'Select a class first, then search for a student.' : '';
+            };
+            scope.addEventListener('change', () => syncScope(true));
+            classSelect.addEventListener('change', () => syncScope(true));
+            sessionSelect.addEventListener('change', () => syncScope(true));
+            form.addEventListener('submit', event => {
+                if (scope.value === 'student' && !selected.value) {
+                    event.preventDefault();
+                    status.textContent = 'Choose a matching student from the search results before applying filters.';
+                    input.focus();
+                }
+            });
+            syncScope();
             const choose = student => {
                 selected.value = student.id;
                 input.value = student.name;
@@ -116,6 +160,8 @@
                     try {
                         const url = new URL(container.dataset.url, window.location.origin);
                         url.searchParams.set('q', term);
+                        if (classSelect.value) url.searchParams.set('class_id', classSelect.value);
+                        if (sessionSelect.value) url.searchParams.set('session', sessionSelect.value);
                         const response = await fetch(url, { headers: { Accept: 'application/json' }, credentials: 'same-origin' });
                         if (!response.ok) throw new Error('Search failed');
                         const data = await response.json();

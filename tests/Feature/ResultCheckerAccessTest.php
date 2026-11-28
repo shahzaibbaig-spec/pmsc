@@ -78,12 +78,29 @@ class ResultCheckerAccessTest extends TestCase
         }
         $url = route('result-checker.results.index');
         $this->actingAs($user)->get($url)->assertOk()->assertSee('Pupil 7')->assertSee('Pupil 10')
-            ->assertViewHas('records', fn ($records) => $records->total() === 2);
+            ->assertViewHas('records', fn ($records) => $records->total() === 2)
+            ->assertViewHas('filters', fn ($filters) => $filters['result_scope'] === 'global');
+        $this->get($url.'?result_scope=global&class_id='.$class->id.'&student_id='.$student->id)
+            ->assertOk()->assertSee('Pupil 7')->assertSee('Pupil 10')
+            ->assertViewHas('records', fn ($records) => $records->total() === 2)
+            ->assertViewHas('filters', fn ($filters) => $filters['class_id'] === null && $filters['student_id'] === null);
+        $this->getJson($url.'?result_scope=class')->assertUnprocessable()->assertJsonValidationErrors('class_id');
         $this->get($url.'?student=RC-10&exam_type=class_test&session=2026-2027')
             ->assertOk()->assertSee('Pupil 10')->assertDontSee('Pupil 7');
         $this->get($url.'?source=published')->assertOk()->assertSee('Pupil 7')->assertSee('Pupil 10');
         $this->get($url.'?class_id='.$class->id)->assertOk()
             ->assertViewHas('records', fn ($records) => $records->total() === 1);
+        $this->get($url.'?result_scope=class&class_id='.$class->id.'&student_id='.Student::first()->id.'&student=Pupil 7')
+            ->assertOk()->assertSee('Pupil 10')->assertDontSee('Pupil 7')
+            ->assertViewHas('filters', fn ($filters) => $filters['student_id'] === null);
+        foreach (['marks', 'published'] as $source) {
+            $this->get($url.'?result_scope=student&class_id='.$class->id.'&student_id='.$student->id.'&source='.$source)
+                ->assertOk()->assertViewHas('records', fn ($records) => $records->total() === 1 && $records[0]->student_id === $student->id);
+        }
+        $this->getJson($url.'?result_scope=student&class_id='.$class->id)->assertUnprocessable()->assertJsonValidationErrors('student_id');
+        $this->getJson($url.'?result_scope=student&student_id='.$student->id)->assertUnprocessable()->assertJsonValidationErrors('class_id');
+        $searchUrl = route('result-checker.students.search', ['q' => 'Pupil', 'class_id' => $class->id, 'session' => '2026-2027']);
+        $this->getJson($searchUrl)->assertOk()->assertJsonCount(1, 'students')->assertJsonPath('students.0.id', $student->id);
         $this->get($url.'?student=Pupil&student_id='.$student->id)->assertOk()
             ->assertViewHas('records', fn ($records) => $records->total() === 1)
             ->assertSee('Pupil 10')->assertDontSee('Pupil 7');
@@ -91,6 +108,8 @@ class ResultCheckerAccessTest extends TestCase
             ->assertOk()->assertViewHas('reports', fn ($reports) => $reports->count() === 2)
             ->assertViewHas('sheetRoute', 'result-checker.results.class-tests');
         $this->get(route('dashboard'))->assertRedirect($url);
+        $student->update(['class_id' => SchoolClass::first()->id]);
+        $this->getJson($searchUrl)->assertOk()->assertJsonCount(1, 'students')->assertJsonPath('students.0.id', $student->id);
     }
 
     public function test_role_is_read_only_and_migration_is_repeatable(): void
