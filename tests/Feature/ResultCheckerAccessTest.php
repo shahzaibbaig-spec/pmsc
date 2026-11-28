@@ -269,5 +269,21 @@ class ResultCheckerAccessTest extends TestCase
         }
         $this->get($url.'&source=published')->assertOk()->assertSee('Published Midterm')
             ->assertViewHas('sheet', fn ($sheet) => $sheet->count() === 1 && $sheet[0]['cards'][0]['total'] === 150.0);
+        $this->get($url.'&subject_id='.$math->id)->assertOk()->assertSee('Subject: Sheet Math')
+            ->assertViewHas('sheet', function ($sheet) use ($math) {
+                foreach ($sheet as $group) {
+                    $this->assertCount(1, $group['subjects']);
+                    $this->assertSame($math->id, $group['subjects'][0]['id']);
+                    $this->assertSame(100.0, $group['cards'][0]['total']);
+                }
+                return true;
+            });
+        $this->get($url.'&source=published&subject_id='.$english->id)->assertOk()
+            ->assertViewHas('sheet', fn ($sheet) => $sheet[0]['cards'][0]['total'] === 50.0 && $sheet[0]['cards'][0]['obtained'] === 40.0);
+        $this->get(route('result-checker.results.index', ['subject_id' => $english->id]))->assertOk()
+            ->assertViewHas('records', fn ($records) => $records->total() === 26 && $records->every(fn ($record) => $record->exam->subject_id === $english->id));
+        $this->get(route('result-checker.results.index', ['source' => 'published', 'subject_id' => $math->id]))->assertOk()
+            ->assertViewHas('records', fn ($records) => $records->total() === 1 && $records[0]->subject_id === $math->id);
+        $this->getJson(route('result-checker.results.index', ['subject_id' => 999999]))->assertUnprocessable();
     }
 }

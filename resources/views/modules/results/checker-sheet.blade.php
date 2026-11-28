@@ -15,6 +15,9 @@
     <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
             <h3 class="text-lg font-semibold">Consolidated {{ \App\Modules\Exams\Enums\ExamType::from($filters['exam_type'])->label() }} Results</h3>
+            @if($subjectLabel)
+                <p class="text-sm font-medium">Subject: {{ $subjectLabel }} — totals and automatic analysis cover this subject only. Saved comments may cover the full assessment.</p>
+            @endif
             <p class="text-sm text-slate-500">{{ $sheet->sum(fn ($group) => $group['cards']->count()) }} student assessment rows · {{ $published ? 'Published snapshots' : 'Recorded marks' }} · All matching results shown</p>
         </div>
         <x-ui.button type="button" onclick="window.print()">Print / Save PDF</x-ui.button>

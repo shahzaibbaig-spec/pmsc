@@ -25,6 +25,14 @@
                     @endforeach
                 </select>
             </label>
+            <label class="text-sm">Subject
+                <select name="subject_id" class="mt-1 block w-full rounded-lg border-slate-300">
+                    <option value="">All subjects</option>
+                    @foreach($subjects as $subject)
+                        <option value="{{ $subject->id }}" @selected((string) ($filters['subject_id'] ?? '') === (string) $subject->id)>{{ $subject->name }}</option>
+                    @endforeach
+                </select>
+            </label>
             <label class="text-sm">Exam type
                 <select name="exam_type" class="mt-1 block w-full rounded-lg border-slate-300">
                     <option value="">All exam types</option>

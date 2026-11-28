@@ -3,7 +3,7 @@
 namespace App\Modules\Results\Controllers;
 
 use App\Http\Controllers\Controller;
-use App\Models\{Mark, SchoolClass, Student, StudentResult};
+use App\Models\{Mark, SchoolClass, Student, StudentResult, Subject};
 use App\Modules\Exams\Enums\ExamType;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -44,6 +44,7 @@ class ResultCheckerController extends Controller
     {
         $filters = $request->validate([
             'class_id' => ['nullable', 'integer', 'exists:school_classes,id'],
+            'subject_id' => ['nullable', 'integer', 'exists:subjects,id'],
             'session' => ['nullable', 'string', 'max:20'],
             'exam_type' => ['nullable', Rule::in(array_column(ExamType::options(), 'value'))],
             'student' => ['nullable', 'string', 'max:150'],
@@ -73,6 +74,11 @@ class ResultCheckerController extends Controller
                 ->where(fn ($search) => $search->where('name', 'like', '%'.$filters['student'].'%')
                     ->orWhere('student_id', 'like', '%'.$filters['student'].'%')));
         }
+        if (! empty($filters['subject_id'])) {
+            $published
+                ? $query->where('subject_id', $filters['subject_id'])
+                : $query->whereHas('exam', fn ($exam) => $exam->where('subject_id', $filters['subject_id']));
+        }
 
         $sheet = ! empty($filters['exam_type'])
             ? app(\App\Modules\Results\Services\ResultCheckerSheetService::class)->build(
@@ -85,6 +91,8 @@ class ResultCheckerController extends Controller
             'published' => $published,
             'records' => $query->orderByDesc('id')->paginate(50)->withQueryString(),
             'classes' => SchoolClass::query()->orderBy('name')->orderBy('section')->get(),
+            'subjects' => Subject::query()->orderBy('name')->get(['id', 'name']),
+            'subjectLabel' => ! empty($filters['subject_id']) ? Subject::find($filters['subject_id'])?->name : null,
             'sessions' => Mark::query()->distinct()->pluck('session')
                 ->merge(StudentResult::query()->distinct()->pluck('session'))
                 ->filter()->unique()->sortDesc()->values(),
